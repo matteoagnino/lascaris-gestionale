@@ -253,7 +253,7 @@ function loadStore(){
   // Try localStorage first for instant load, then ALWAYS sync from Supabase
   let d=null;
   try{const s=localStorage.getItem(STORE);d=s?JSON.parse(s):null;if(d){
-    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
+    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
     const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(d.users||[]).find(x=>x.id===uref.id);if(u)d.currentUser=u}}
   }catch(e){}
   // ALWAYS check Supabase for data (even if localStorage is empty)
@@ -303,7 +303,7 @@ async function loadFromSupabase(){
     console.log('[SUPABASE] Timestamp locale:',localTs||'(nessuno)');
     if(row.updated_at>localTs||!localTs){
       const d=row.data;
-      ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom'].forEach(k=>{if(!d[k])d[k]=[]});
+      ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
       if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
       Object.assign(state,d);
       const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(state.users||[]).find(x=>x.id===uref.id);if(u)state.currentUser=u}
@@ -378,6 +378,8 @@ const DEFAULT_STATE={
   players:[],
   staff:[],
   gruppoLabels:{},
+  notificheDS:[],
+  schedeUpload:[],
   direttivo:[],
   organigramma:[],
   infortuni:[],
@@ -406,9 +408,9 @@ const DEFAULT_STATE={
   incarichiCustom:[],  // Additional staff roles
   profiliPermessi:[
     {id:'prof_admin',nome:'Admin',incarico:'Admin',ruolo:'Amministratore di sistema',descrizione:'Accesso totale al gestionale inclusa gestione utenti',permessi:['all']},
-    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne']},
-    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne']},
-    {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda']},
+    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne']},
+    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne']},
+    {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda']},
     {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','statDesc','rae']}
   ]
 };
@@ -431,7 +433,7 @@ function fmtNumber(n){return (n||0).toLocaleString('it-IT')}
 function groupLabel(cat,gid){
   const gi=state.gruppoLabels[cat+gid];
   if(!gi||!gi.cognome)return cat+'-'+gid;
-  return (gi.iniz+'.'+gi.cognome).toLowerCase();
+  return gi.iniz.toUpperCase()+'.'+gi.cognome.charAt(0).toUpperCase()+gi.cognome.slice(1).toLowerCase();
 }
 function groupLong(cat,gid){
   const gi=state.gruppoLabels[cat+gid];
@@ -546,6 +548,7 @@ const NAV=[
       ['rose','👥','Rose & Giocatori'],
       ['presenze','✓','Presenze Allenamento'],
       ['matchday','⚽','Match Day Live'],
+      ['distinta','📝','Distinta & Referto'],
       ['minutaggi','⏱','Minutaggi & Partite'],
       ['schede','📋','Schede Allenamento'],
       ['osservInterne','📨','Osservazioni Interne']
@@ -677,7 +680,7 @@ VIEWS.dashboard=function(c){
     <div class="vw">
       <div class="vh">
         <div><h1>Dashboard</h1><div class="sb2">Benvenuto ${esc(state.currentUser.name)} · ${tod.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div>
-        <div style="display:flex;gap:6px"><button class="btn btn-s" onclick="forceSyncSupabase()">☁️ Sync</button><button class="btn btn-s" onclick="testSupabaseConnection()">🔍 Test DB</button><button class="btn btn-s" onclick="resetAllData()">Cancella dati</button></div>
+        <div style="display:flex;gap:6px"><button class="btn btn-s" onclick="forceSyncSupabase()">☁️ Sync</button><button class="btn btn-s" onclick="openNotificheDS()" style="position:relative">🔔 DS${(state.notificheDS||[]).filter(n=>!n.letta).length?'<span style="position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:9px;padding:1px 5px;border-radius:10px">'+(state.notificheDS||[]).filter(n=>!n.letta).length+'</span>':''}</button><button class="btn btn-s" onclick="testSupabaseConnection()">🔍 Test DB</button><button class="btn btn-s" onclick="resetAllData()">Cancella dati</button></div>
       </div>
       ${np===0?`<div class="es"><div class="ic">🚀</div><h3>Inizia qui: configura la tua società</h3><p>Il gestionale è vuoto. Per iniziare ti consigliamo:</p><div style="display:flex;flex-direction:column;gap:8px;max-width:380px;margin:0 auto;text-align:left">
         <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g50);border-radius:var(--rs)"><strong style="color:var(--black)">1.</strong> Compila i <a onclick="goto('parametri')" style="color:var(--blue);cursor:pointer;text-decoration:underline">Parametri Società</a></div>
@@ -970,7 +973,7 @@ function delOrg(id){const kids=state.organigramma.filter(o=>o.parent===id);if(ki
 /* =============================================================
    VIEW: UTENTI & PERMESSI
    ============================================================= */
-const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','impianti','parametri','storico','utenti'];
+const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','impianti','parametri','storico','utenti'];
 const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi'};
 function allPerms(){return [...PERMS_BASE,...state.permessiCustom.map(p=>p.code)]}
 function permLabel(code){return PERM_LABELS_BASE[code]||(state.permessiCustom.find(p=>p.code===code)||{}).label||code}
@@ -1395,8 +1398,9 @@ VIEWS.rose=function(c){
     </div>
   `;
 };
+const PLAYER_ROLES=['Portiere','Difensore Centrale','Terzino','Esterno Difensivo','Esterno Offensivo','Centrocampista','Mediano','Regista','Trequartista','Ala','Attaccante','Seconda Punta'];
 function openPlayer(id){
-  const p=id?state.players.find(x=>x.id===id):{id:null,nome:'',cognome:'',nascita:'',nascitaISO:'',comuneNascita:'',cf:'',indirizzo:'',comuneResidenza:'',categoria:state.categories[state.categories.length-1],gruppo:'A',ruolo:'Centrocampista',piede:'Destro',tessera:'',taglia:'M',genitore1:{nome:'',tel:'',email:''},note:'',visitaMedica:{},docIdentita:{}};
+  const p=id?state.players.find(x=>x.id===id):{id:null,nome:'',cognome:'',nascita:'',nascitaISO:'',comuneNascita:'',cf:'',indirizzo:'',comuneResidenza:'',categoria:state.categories[state.categories.length-1],gruppo:'A',ruoli:['Centrocampista'],piede:'Destro',tessera:'',taglia:'M',genitore1:{nome:'',tel:'',email:''},note:'',visitaMedica:{},docIdentita:{}};
   openM(id?`${p.cognome} ${p.nome}`:'Nuovo giocatore',`
     <div class="tabs"><div class="tab on" onclick="pTab(event,'a')">Anagrafica</div><div class="tab" onclick="pTab(event,'f')">Famiglia</div><div class="tab" onclick="pTab(event,'s')">Scadenze</div>${id?'<div class="tab" onclick="pTab(event,\'d\')">📄 Documenti</div><div class="tab" onclick="pTab(event,\'r\')">Rimuovi</div>':''}</div>
     <div class="tc on" id="p-a"><div class="fg">
@@ -1409,7 +1413,7 @@ function openPlayer(id){
       <div class="ff"><label>Comune residenza</label><input id="pl_cr" value="${esc(p.comuneResidenza)}"></div>
       <div class="ff"><label>Categoria *</label><select id="pl_ca" onchange="refreshGruppoSel('pl_gr',this.value)">${state.categories.map(x=>`<option ${p.categoria===x?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="ff"><label>Gruppo *</label><select id="pl_gr">${state.groups.map((g,i)=>`<option value="${g}" ${p.gruppo===g?'selected':''}>${groupLabel(p.categoria,g)}</option>`).join('')}</select></div>
-      <div class="ff"><label>Ruolo</label><select id="pl_ru"><option ${p.ruolo==='Portiere'?'selected':''}>Portiere</option><option ${p.ruolo==='Difensore'?'selected':''}>Difensore</option><option ${p.ruolo==='Centrocampista'?'selected':''}>Centrocampista</option><option ${p.ruolo==='Attaccante'?'selected':''}>Attaccante</option></select></div>
+      <div class="ff full"><label>Ruolo/i</label><div id="pl_ru_box" style="display:flex;flex-wrap:wrap;gap:4px;padding:4px 0">${PLAYER_ROLES.map(r=>{const checked=(p.ruoli||[p.ruolo]||[]).includes(r);return '<label style="font-size:11px;display:flex;align-items:center;gap:2px;background:'+(checked?'var(--blue)':'var(--g100)')+';color:'+(checked?'#fff':'inherit')+';padding:2px 8px;border-radius:12px;cursor:pointer"><input type="checkbox" name="pl_ruoli" value="'+r+'" '+(checked?'checked':'')+' style="display:none" onchange="this.parentElement.style.background=this.checked?\'var(--blue)\':\'var(--g100)\';this.parentElement.style.color=this.checked?\'#fff\':\'inherit\'">'+r+'</label>'}).join('')}</div></div>
       <div class="ff"><label>Piede</label><select id="pl_pi"><option ${p.piede==='Destro'?'selected':''}>Destro</option><option ${p.piede==='Sinistro'?'selected':''}>Sinistro</option><option ${p.piede==='Ambidestro'?'selected':''}>Ambidestro</option></select></div>
       <div class="ff"><label>N° tessera FIGC</label><input id="pl_te" value="${esc(p.tessera)}"></div>
       <div class="ff"><label>Taglia</label><select id="pl_ta"><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option></select></div>
@@ -1456,7 +1460,7 @@ function savePlayer(id){
     comuneResidenza:document.getElementById('pl_cr').value,
     categoria:document.getElementById('pl_ca').value,
     gruppo:document.getElementById('pl_gr').value,
-    ruolo:document.getElementById('pl_ru').value,
+    ruoli:[...document.querySelectorAll('input[name="pl_ruoli"]:checked')].map(c=>c.value),
     piede:document.getElementById('pl_pi').value,
     tessera:document.getElementById('pl_te').value,
     taglia:document.getElementById('pl_ta').value,
@@ -1524,7 +1528,7 @@ function filterAnag(){
 function exportPlayers(fmt){
   const ps=state.players.filter(p=>!p.eliminato);
   if(!ps.length){toast('Nessun dato','w');return}
-  const rows=ps.map(p=>({Cognome:p.cognome,Nome:p.nome,'Data nascita':p.nascita,'Comune nascita':p.comuneNascita||'',CF:p.cf||'',Indirizzo:p.indirizzo||'',Comune:p.comuneResidenza||'',Categoria:p.categoria,Gruppo:groupLabel(p.categoria,p.gruppo),Ruolo:p.ruolo,Piede:p.piede,'Tessera':p.tessera||'',Genitore:p.genitore1.nome,'Tel':p.genitore1.tel,'Email':p.genitore1.email}));
+  const rows=ps.map(p=>({Cognome:p.cognome,Nome:p.nome,'Data nascita':p.nascita,'Comune nascita':p.comuneNascita||'',CF:p.cf||'',Indirizzo:p.indirizzo||'',Comune:p.comuneResidenza||'',Categoria:p.categoria,Gruppo:groupLabel(p.categoria,p.gruppo),Ruolo:(p.ruoli||[p.ruolo]).join(', '),Piede:p.piede,'Tessera':p.tessera||'',Genitore:p.genitore1.nome,'Tel':p.genitore1.tel,'Email':p.genitore1.email}));
   if(fmt==='xlsx'&&window.XLSX){
     const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Anagrafica');XLSX.writeFile(wb,'lascaris_anagrafica_'+today()+'.xlsx');
   }else{
@@ -1777,6 +1781,39 @@ const TIPPS_GK={
   'S · STRUTTURA FISICA':['Statura','Elasticità','Reattività','Equilibrio'],
   'S · VELOCITÀ':['Rapidità piedi','Esplosività','Reazione','Agilità cambi']
 };
+const TIPPS_LEVEL_DESC={
+  'T · TECNICA':[
+    ['Scarso controllo; perde la palla frequentemente anche in situazioni statiche. Movimenti scoordinati.','Controllo accettabile solo in condizioni statiche; difficoltà evidenti sotto pressione avversaria.','Buona padronanza in situazioni standard; qualche difficoltà nei contrasti e nel gioco aereo.','Ottimo controllo anche sotto pressione; fluida relazione corpo-piede-palla; movimenti armonici.','Padronanza totale in qualsiasi condizione di gioco; movimenti sempre efficaci ed armoniosi.'],
+    ['Passaggi imprecisi; forza e direzione spesso errate; tiro inefficace e poco coordinato.','Passaggi corti discreti; difficoltà nel medio-lungo; tiro con scarsa precisione.','Passaggi corti e medi corretti; differenzia la forza; tiro abbastanza preciso.','Ampia gamma di passaggi corretti; ottima differenziazione della forza; tiro preciso.','Passaggi millimetrici a ogni distanza; tiro potente e preciso in qualsiasi situazione.'],
+    ["Non supera l'avversario; perde palla al primo contrasto; esecuzione lenta e prevedibile.",'Supera raramente in situazioni molto favorevoli; manca di velocità e imprevedibilità.','Dribbling efficace in situazioni standard; buon controllo orientato; difficoltà in spazi ridotti.','Supera con continuità; ottima velocità di esecuzione; controllo orientato funzionale.','Dribbling imprevedibile e sempre efficace; rapidità esplosiva; crea superiorità sistematicamente.'],
+    ['Passivo in entrambe le fasi; non si smarca né marca; costantemente fuori posizione.','Qualche tentativo di smarcamento/marcamento; spesso in ritardo o in posizione errata.','Smarcamento e marcamento discreti; mantiene possesso nelle situazioni standard.','Smarcamento efficace; crea opzioni di gioco; marcatura attenta e quasi sempre efficace.','Smarcamento brillante e marcatura soffocante; domina le situazioni 1v1 in entrambe le fasi.']
+  ],
+  'I · INTELLIGENZA':[
+    ['Non legge il gioco; decisioni sempre in ritardo e sbagliate; reagisce solo agli eventi accaduti.','Decisioni corrette solo in situazioni semplici; si blocca in quelle complesse o nuove.','Buona lettura in situazioni note; qualche difficoltà in contesti nuovi o di alta pressione.','Decisioni rapide e quasi sempre corrette; anticipa il gioco anche in situazioni complesse.','Lettura istantanea e sempre corretta; la scelta migliore in ogni contesto; punto di riferimento.'],
+    ['Soluzioni sempre banali e prevedibili; nessuna iniziativa personale; non anticipa mai.','Qualche soluzione non convenzionale; raramente efficace; intuito poco sviluppato.','Soluzioni creative in situazioni favorevoli; buon senso del gioco; controllo orientato funzionale.','Passaggi chiave e controlli orientati spesso imprevedibili ed efficaci; anticipa regolarmente.','Genio tattico; soluzioni sempre creative e risolutive; crea vantaggio dal nulla.'],
+    ['Non si adatta al gioco; comportamento rigido e prevedibile; non reagisce ai cambiamenti.','Si adatta raramente e con ritardo ai cambiamenti del gioco; poca flessibilità tattica.','Adattamento discreto nelle situazioni note; qualche lentezza nei contesti nuovi.','Si adatta rapidamente; modifica posizionamento e comportamento con efficienza.','Adattamento istantaneo; sempre la soluzione più funzionale; letture continue con/senza palla.'],
+    ['Disorientato; non trova la posizione giusta né i tempi corretti; spesso fuori dal gioco.','Orientamento approssimativo; spesso fuori tempo o fuori posizione nelle situazioni dinamiche.','Buon orientamento in situazioni standard; tempi di gioco abbastanza corretti.','Ottimo orientamento; esegue le giocate con i tempi giusti in quasi tutte le situazioni.','Orientamento spaziale eccellente; anticipa e sfrutta ogni spazio; timing perfetto.']
+  ],
+  'P · PERSONALITÀ':[
+    ['Comunicazione assente; non interagisce; si isola nelle situazioni difficili.','Comunicazione sporadica; non ancora punto di riferimento per i compagni.','Comunicazione presente nelle situazioni standard; supporta i compagni occasionalmente.','Costante comunicazione positiva; punto di riferimento stabile per i compagni.','Leader comunicativo naturale; guida e motiva i compagni in ogni momento della partita.'],
+    ["Timoroso; evita le responsabilità; si nasconde sotto pressione; l'errore lo condiziona molto.","Gioca sicuro solo in condizioni favorevoli; si abbatte dopo l'errore; tende a giocare indietro.",'Buona sicurezza nelle situazioni standard; qualche esitazione sotto forte pressione.','Coraggioso e deciso; rischia le giocate anche sotto pressione; non condizionato dall\'errore.','Coraggio esemplare; cerca sempre la giocata migliore in ogni situazione; trascinatore.'],
+    ['Scarso impegno; atteggiamento negativo o irrispettoso; motivazione molto bassa.','Impegno discontinuo; atteggiamento positivo solo in alcuni contesti; scarsa tenacia.','Buon impegno e atteggiamento positivo nella maggior parte dei contesti; discreta tenacia.','Sempre impegnato; atteggiamento leale e rispettoso; grande caparbietà e motivazione.','Esemplare per impegno, tenacia e correttezza; punto di riferimento comportamentale.'],
+    ['Non si propone; si nasconde; non accetta responsabilità; evita le situazioni difficili.','Si propone raramente; preferisce evitare la pressione e le responsabilità in campo.','Si propone nelle situazioni favorevoli; accetta responsabilità quando strettamente necessario.','Si propone costantemente; si assume sempre responsabilità offensive e difensive.','Leader naturale; trascina la squadra; cerca sempre le massime responsabilità con coraggio.']
+  ],
+  'S · STRUTTURA FISICA':[
+    ['Molto immaturo fisicamente rispetto alla categoria; sviluppo molto al di sotto della media.','Sviluppo fisico sotto la media per categoria; necessita ancora di tempo per maturare.','Sviluppo fisico nella media per categoria; maturità adeguata all\'età anagrafica.','Sviluppo fisico sopra la media; buona maturità per l\'età; struttura in ottima progressione.','Fisico già molto maturo; struttura adatta anche per categorie superiori.'],
+    ['Costituzione molto gracile o con sovrappeso evidente; limitante per la performance.','Costituzione leggermente svantaggiosa per il ruolo; qualche limitazione fisica.','Costituzione nella media; adeguata per il ruolo e la categoria.','Buona costituzione; proporzionata e funzionale al ruolo.','Costituzione ottimale per il ruolo; fisico ideale per un calciatore di alto livello.'],
+    ['Movimenti goffi e rigidi; scarsa mobilità articolare; coordinazione molto limitata.','Movimenti sufficienti ma poco fluidi; qualche rigidità articolare; coordinazione di base.','Buona mobilità e coordinazione in situazioni standard; qualche limite nei gesti nuovi.','Movimenti fluidi ed efficienti; ottima coordinazione e mobilità articolare.','Movimenti eccellenti; coordinazione di alto livello; atleticamente completo.'],
+    ['Altezza molto al di sotto della media per categoria e ruolo; svantaggio significativo.','Altezza sotto la media per la categoria; potenziale svantaggio per il ruolo.','Altezza nella media per la categoria e il ruolo.','Altezza sopra la media; vantaggio fisico per il ruolo.','Statura eccellente per il ruolo; vantaggio fisico determinante.'],
+    ['Struttura fisica complessiva molto al di sotto degli standard richiesti per la categoria.','Struttura fisica sotto gli standard; necessita di sviluppo fisico significativo.','Struttura fisica adeguata agli standard della categoria.','Struttura fisica sopra gli standard; buon potenziale di sviluppo futuro.','Struttura fisica eccellente; potenziale di alto livello per categorie superiori.']
+  ],
+  'S · VELOCITÀ / RAPIDITÀ':[
+    ['Ritmo di corsa molto lento; cadenza bassa; non riesce a sostenere ritmi elevati.','Frequenza di passo sotto la media; ritmo di corsa migliorabile.','Buon ritmo di corsa; cadenza nella media per la categoria.','Ottima frequenza di passo; ritmo di corsa elevato e costante.','Frequenza di passo eccellente; ritmo superiore alla media; dominante in termini di velocità.'],
+    ['Accelerazione molto lenta; facilmente raggiunto anche in brevi tratti (~10m).','Accelerazione sotto la media; scatti brevi insufficienti; manca di esplosività.','Buona accelerazione su brevi (~10m) e medie distanze (~20-25m).','Ottima capacità di cambio passo; accelerazione rapida ed efficace in più contesti.','Accelerazione esplosiva; eccezionale su brevi e medie distanze; dominante nelle ripartenze.'],
+    ['Cambi di direzione lenti e scoordinati; difficoltà nella decelerazione e ripartenza.','Cambi di direzione sufficienti ma poco efficienti; qualche rigidità motoria.','Buona agilità; cambi di direzione coordinati e abbastanza rapidi.','Ottima efficienza nei cambi di direzione; decelera e riparte con fluidità.','Agilità eccellente; cambi esplosivi e imprevedibili; dominante in spazi ridotti.'],
+    ['Salto debole; scarsa coordinazione e forza negli arti inferiori; evita le azioni aeree.','Stacco sufficiente ma con potenza e coordinazione limitate; poca efficacia aerea.','Buona coordinazione nello stacco; forza negli arti inferiori nella media.','Ottima potenza di stacco; coordinazione efficace nelle azioni aeree.','Stacco esplosivo e coordinato; forza eccezionale; dominio sistematico nelle azioni aeree.']
+  ]
+};
 VIEWS.tippsInt=function(c){renderTipps(c,'int',false)};
 VIEWS.tippsIntP=function(c){renderTipps(c,'int',true)};
 VIEWS.tippsExt=function(c){renderTipps(c,'ext',false)};
@@ -1874,7 +1911,7 @@ function openTipps(mode,gk,id){
   const t=id?list.find(x=>x.id===id):null;
   if(t)tF.ratings={...t.ratings};
   const fw=gk?TIPPS_GK:TIPPS_STD;
-  const ps=state.players.filter(p=>!p.eliminato&&(gk?p.ruolo==='Portiere':p.ruolo!=='Portiere'));
+  const ps=state.players.filter(p=>!p.eliminato&&(gk?(p.ruoli||[p.ruolo]).includes('Portiere'):!(p.ruoli||[p.ruolo]).includes('Portiere')));
   openM((id?'Modifica':'Nuova')+' scheda TIPPS'+(gk?' Portieri':''),`
     <div class="fg">
       ${mode==='int'?`<div class="ff full"><label>Giocatore *</label><select id="tp_pl">${ps.length?ps.map(p=>`<option value="${p.id}" ${t&&t.playerId===p.id?'selected':''}>${esc(p.cognome)} ${esc(p.nome)} (${p.categoria})</option>`).join(''):'<option value="">Nessun '+(gk?'portiere':'giocatore')+'</option>'}</select></div>`:`
@@ -1888,7 +1925,7 @@ function openTipps(mode,gk,id){
     </div>
     ${Object.entries(fw).map(([area,inds])=>`
       <h3 style="font-size:12px;background:var(--black);color:white;padding:6px 10px;border-radius:var(--rs);margin:12px 0 6px">${area}</h3>
-      ${inds.map((ind,ii)=>{const key=area.replace(/[^a-z]/gi,'')+ii;const cur=tF.ratings[key]||0;return `<div class="rr"><div class="rl">${ind}</div><div class="rl-lvl" data-k="${key}">${[1,2,3,4,5].map(lv=>`<button class="${cur===lv?'on':''}" onclick="setTpp('${key}',${lv},this)">${lv}</button>`).join('')}</div></div>`}).join('')}
+      ${inds.map((ind,ii)=>{const key=area.replace(/[^a-z]/gi,'')+ii;const cur=tF.ratings[key]||0;const descs=TIPPS_LEVEL_DESC[area]&&TIPPS_LEVEL_DESC[area][ii]?TIPPS_LEVEL_DESC[area][ii]:null;return `<div class="rr"><div class="rl">${ind}${descs?'<div class="tipps-desc-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'" style="font-size:9px;color:var(--blue);cursor:pointer;margin-top:2px">ℹ️ Descrizione livelli</div><div class="tipps-descs" style="display:none;font-size:9px;color:var(--g500);margin-top:4px;line-height:1.4">'+(descs.map((d,di)=>'<div style="margin-bottom:2px"><strong>'+['①','②','③','④','⑤'][di]+'</strong> '+d+'</div>').join(''))+'</div>':''}</div><div class="rl-lvl" data-k="${key}">${[1,2,3,4,5].map(lv=>`<button class="${cur===lv?'on':''}" onclick="setTpp('${key}',${lv},this)">${lv}</button>`).join('')}</div></div>`}).join('')}
     `).join('')}
     <div class="fg" style="margin-top:12px">
       <div class="ff full"><label>Punti di forza</label><textarea id="tp_n1" rows="2">${esc(t?.forze||'')}</textarea></div>
@@ -1978,6 +2015,24 @@ function chartMenu(chartId,title,data){
 /* =============================================================
    VIEW: MATCH DAY LIVE
    ============================================================= */
+/* =============================================================
+   VIEW: DISTINTA & REFERTO GARA (placeholder)
+   ============================================================= */
+VIEWS.distinta=function(c){
+  c.innerHTML=`
+    <div class="vw">
+      <div class="vh"><div><h1>Distinta & Referto Gara</h1><div class="sb2">Compilazione distinta di gara e referto post-partita</div></div></div>
+      <div class="es"><div class="ic">📝</div><h3>In fase di sviluppo</h3>
+        <p style="max-width:500px;margin:0 auto;color:var(--g500);font-size:13px">Questa sezione permetterà di compilare la distinta di gara ufficiale (formazione, panchina, dirigenti) e il referto gara post-partita con eventi, cambi e note arbitrali.</p>
+        <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:400px;margin-left:auto;margin-right:auto">
+          <div style="padding:12px;background:var(--g50);border-radius:var(--rs);text-align:left"><strong style="font-size:12px">📋 Distinta Gara</strong><p style="font-size:11px;color:var(--g500);margin-top:4px">Formazione titolare, panchina, dirigenti accompagnatori, delegati</p></div>
+          <div style="padding:12px;background:var(--g50);border-radius:var(--rs);text-align:left"><strong style="font-size:12px">📊 Referto Gara</strong><p style="font-size:11px;color:var(--g500);margin-top:4px">Risultato, marcatori, ammonizioni, espulsioni, note arbitro</p></div>
+        </div>
+        <button class="btn btn-p" style="margin-top:16px" onclick="goto('matchday')">⚽ Vai a Match Day Live</button>
+      </div>
+    </div>
+  `;
+};
 let mdS={live:false,t:0,period:1,nPeriods:2,perDur:30,home:0,away:0,roster:[],events:[],opp:[],sede:'casa',clockInt:null,configured:false,matchId:null,cat:'',grp:'',tipo:'Campionato',avv:'',impiantoId:'',impiantoLibero:''};
 VIEWS.matchday=function(c){
   const imp=state.impianti.find(i=>i.id===mdS.impiantoId);
@@ -2484,7 +2539,7 @@ VIEWS.schede=function(c){
     <div class="vw">
       <div class="vh"><div><h1>Schede Allenamento</h1><div class="sb2">Template 4 fasi · archivio condiviso · obiettivi di programmazione</div></div></div>
       <div class="tabs"><div class="tab ${schedaTab==='arc'?'on':''}" onclick="schedaTab='arc';renderView()">Archivio (${state.schede.length})</div><div class="tab ${schedaTab==='cmp'?'on':''}" onclick="schedaTab='cmp';schedaForm={};renderView()">+ Compila scheda</div>${isAdmin?`<div class="tab ${schedaTab==='obj'?'on':''}" onclick="schedaTab='obj';renderView()">🎯 Obiettivi programmazione</div>`:''}</div>
-      ${schedaTab==='arc'?renderSchedeArc():schedaTab==='cmp'?renderSchedeCmp():renderObiettivi()}
+      ${schedaTab==='arc'?renderSchedeArc()+renderSchedeUpload():schedaTab==='cmp'?renderSchedeCmp():renderObiettivi()}
     </div>
   `;
 };
@@ -2551,7 +2606,7 @@ function renderSchedeCmp(){
       <div style="background:#000;color:#fff;padding:6px 12px;font-size:11px;font-weight:700;text-transform:uppercase;margin-top:8px">BRIEFING FINALE · CONFRONTO CON LA SQUADRA · 5&#39;</div>
       <div style="padding:6px;border:1px solid #000;background:repeating-linear-gradient(transparent,transparent 22px,#e0e0e0 22px,#e0e0e0 23px);min-height:50px"><textarea id="sc_brF" rows="2" style="width:100%;border:none;background:transparent;resize:none;font-size:11px" placeholder="Confronto conclusivo con la squadra">${esc(s.briefFin||'')}</textarea></div>
       <div class="ff full" style="margin-top:10px"><label>Note</label><textarea id="sc_no" rows="2">${esc(s.note||'')}</textarea></div>
-      <div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-s" onclick="schedaForm={};schedaTab='arc';renderView()">Annulla</button><button class="btn btn-p" onclick="saveScheda()">💾 Salva in archivio</button><button class="btn btn-s" onclick="exportSchedaXLSX()">📊 Export Excel</button></div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px"><button class="btn btn-s" onclick="schedaForm={};schedaTab='arc';renderView()">Annulla</button><button class="btn btn-p" onclick="saveScheda()">💾 Salva in archivio</button><button class="btn btn-s" onclick="exportSchedaXLSX()">📊 Export Excel</button><button class="btn btn-s" onclick="inviaSchedaDS()" style="background:#059669;color:#fff">📨 Invia al DS</button><label class="btn btn-s" style="cursor:pointer">📷 Carica scheda<input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png" capture="environment" style="display:none" onchange="uploadSchedaFile(event)"></label></div>
     </div>
   </div>`;
 }
@@ -2855,28 +2910,105 @@ function exportSchedaXLSX(){
   const wb=XLSX.read(SCHEDA_TEMPLATE_B64,{type:'base64'});
   const ws=wb.Sheets[wb.SheetNames[0]];
   const setC=(addr,val)=>{if(!ws[addr])ws[addr]={};ws[addr].v=val;ws[addr].t='s'};
+  // Tecnico
   setC('E6',s.tecnico||'');
+  // Categoria - mark selected with X
   const catMap={U6:'P6',U7:'R6',U8:'T6',U9:'V6',U10:'X6',U11:'Z6',U12:'AB6',U13:'AD6'};
-  Object.entries(catMap).forEach(([cat,addr])=>{if(s.categoria===cat)setC(addr,'['+cat+']')});
+  Object.entries(catMap).forEach(([cat,addr])=>{if(s.categoria===cat)setC(addr,'X '+cat);else setC(addr,cat)});
+  // Anno
   setC('AI6',s.anno||'');
+  // Stagione
   setC('E8',state.societa?.stagione||'2025/2026');
+  // Data
   setC('E9',s.data?fmtIt(s.data):'');
+  // Giorno - mark selected
   const ggC=['E10','F10','G10','H10','I10','J10'],ggL=['L','M','M','G','V','S'];
-  ggL.forEach((g,i)=>{if(i===s.giorno)setC(ggC[i],'['+g+']')});
+  ggL.forEach((g,i)=>{setC(ggC[i],i===s.giorno?'> '+g:g)});
+  // Seduta - mark selected
   const sedC=['E11','G11','I11'];
-  [1,2,3].forEach((n,i)=>{if(n===+(s.seduta||0))setC(sedC[i],'['+n+']')});
+  [1,2,3].forEach((n,i)=>{setC(sedC[i],n===+(s.seduta||0)?'> '+n:String(n))});
+  // MdG
   setC('E12',s.mdg||'');
+  // Meteo - mark selected
+  const meteoMap={'Sole':'☀️','Nuvoloso':'☁️','Pioggia':'🌧️'};
   const metC={Sole:'E13',Nuvoloso:'G13',Pioggia:'I13'};
-  if(s.meteo&&metC[s.meteo])setC(metC[s.meteo],'['+s.meteo+']');
-  setC('V8',s.obj0||'');setC('V9',s.obj1||'');setC('V10',s.obj2||'');
-  setC('V11',s.obj3||'');setC('V12',s.obj4||'');setC('V13',s.obj5||'');
-  if(s.briefIni)setC('B15',"BRIEFING INIZIALE | CONDIVISIONE DEGLI OBIETTIVI - 5' --- "+s.briefIni);
+  Object.entries(metC).forEach(([k,addr])=>{
+    const icon=meteoMap[k]||k;
+    setC(addr,s.meteo===k?'> '+icon:'   '+icon);
+  });
+  // Obiettivi - fill into the right-side merged cells (V column area)
+  setC('V8',s.obj0||'');  // Psicologico-Emotivo
+  setC('V9',s.obj1||'');  // Motorio-Coordinativo
+  setC('V10',s.obj2||''); // Tecnico
+  setC('V11',s.obj3||''); // Principio di gioco
+  setC('V12',s.obj4||''); // Sotto-principio
+  setC('V13',s.obj5||''); // Sotto-sotto-principio
+  // Briefing iniziale
+  if(s.briefIni)setC('B16',s.briefIni);
+  // Fasi - description in B area (left side), details in R area (right side)
   const fR=[[18,25],[28,35],[38,45],[48,55]];
-  for(let i=0;i<4;i++){const f=s['f'+(i+1)]||{};const[rs]=fR[i];setC('R'+rs,(f.durata?"Durata: "+f.durata+"' | ":'')+(f.contenuti||''))}
-  if(s.briefFin)setC('B57',"BRIEFING FINALE | CONFRONTO CON LA SQUADRA - 5' --- "+s.briefFin);
+  for(let i=0;i<4;i++){
+    const f=s['f'+(i+1)]||{};
+    // Durata in right-side header
+    if(f.durata)setC('R'+fR[i][0],"Durata: "+f.durata+"'");
+    // Contenuti in left area (B) and also right side rows
+    if(f.contenuti){
+      setC('B'+fR[i][0],f.contenuti);
+      // Split long content across multiple right-side rows
+      const lines=f.contenuti.split('\n');
+      lines.forEach((line,li)=>{
+        if(li<7){setC('R'+(fR[i][0]+1+li),line)}
+      });
+    }
+  }
+  // Briefing finale
+  if(s.briefFin)setC('B56',s.briefFin);
+  // Note
   if(s.note)setC('R56',s.note);
   XLSX.writeFile(wb,'scheda_allenamento_'+(s.data||today())+'.xlsx');
   toast('Excel scheda scaricato','s');
+}
+function inviaSchedaDS(){
+  captureSchedaFormState();const s=schedaForm;
+  if(!s.tecnico&&!state.currentUser.name){toast('Compila almeno il tecnico','e');return}
+  const notifica={id:uid(),tipo:'scheda_allenamento',data:today(),tecnico:s.tecnico||state.currentUser.name,categoria:s.categoria||'',schedata:s.data||today(),letta:false,timestamp:new Date().toISOString(),riepilogo:'Categoria: '+(s.categoria||'—')+' | Data: '+(s.data?fmtIt(s.data):'—')+' | Seduta: '+(s.seduta||'1')};
+  if(!state.notificheDS)state.notificheDS=[];
+  state.notificheDS.push(notifica);
+  saveStore();toast('Scheda inviata al Direttore Sportivo!','s');
+}
+function openNotificheDS(){
+  const nots=(state.notificheDS||[]).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
+  openM('Notifiche Direttore Sportivo',nots.length?`
+    <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:var(--g500)">${nots.filter(n=>!n.letta).length} non lette</span><button class="btn btn-sm btn-s" onclick="state.notificheDS.forEach(n=>n.letta=true);saveStore();openNotificheDS()">✓ Segna tutte lette</button></div>
+    ${nots.map(n=>`<div style="padding:8px 10px;margin-bottom:4px;border-radius:var(--rs);background:${n.letta?'var(--g50)':'#dbeafe'};border-left:3px solid ${n.letta?'var(--g300)':'var(--blue)'}">
+      <div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:12px">📋 Scheda da ${esc(n.tecnico)}</strong><span style="font-size:10px;color:var(--g500)">${fmtIt(n.data)}</span></div>
+      <div style="font-size:11px;color:var(--g600);margin-top:2px">${esc(n.riepilogo)}</div>
+      ${!n.letta?'<button class="btn btn-sm btn-s" style="margin-top:4px;font-size:10px" onclick="state.notificheDS.find(x=>x.id===\''+n.id+'\').letta=true;saveStore();openNotificheDS()">✓ Segna letta</button>':''}
+    </div>`).join('')}
+  `:`<div class="es"><div class="ic">🔔</div><h3>Nessuna notifica</h3><p>Le schede inviate dai tecnici appariranno qui.</p></div>`,
+  `<button class="btn btn-s" onclick="closeM()">Chiudi</button>`);
+}
+function uploadSchedaFile(ev){
+  const file=ev.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const upload={id:uid(),filename:file.name,type:file.type,size:file.size,data:e.target.result,uploadedBy:state.currentUser?.name||'',uploadDate:today(),categoria:schedaForm.categoria||'',dataScheda:schedaForm.data||today()};
+    if(!state.schedeUpload)state.schedeUpload=[];
+    state.schedeUpload.push(upload);
+    saveStore();renderView();toast('Scheda caricata!','s');
+  };
+  reader.readAsDataURL(file);
+}
+function renderSchedeUpload(){
+  const uploads=state.schedeUpload||[];
+  if(!uploads.length)return '';
+  return `<div class="card" style="margin-top:14px"><h3 style="font-size:13px;margin-bottom:8px">📎 Schede caricate (foto/file)</h3>
+    <div class="tw"><table><thead><tr><th>File</th><th>Categoria</th><th>Data scheda</th><th>Caricato da</th><th>Data caricamento</th><th>Azioni</th></tr></thead>
+    <tbody>${uploads.map(u=>`<tr>
+      <td><a href="${u.data}" download="${esc(u.filename)}" style="color:var(--blue)">${u.type.startsWith('image')?'📸':'📄'} ${esc(u.filename)}</a></td>
+      <td>${esc(u.categoria)}</td><td>${fmtIt(u.dataScheda)}</td><td>${esc(u.uploadedBy)}</td><td>${fmtIt(u.uploadDate)}</td>
+      <td><button class="btn btn-sm btn-s" onclick="window.open('${u.data}','_blank')">👁</button> <button class="btn btn-sm btn-d" onclick="if(confirm('Eliminare?')){state.schedeUpload=state.schedeUpload.filter(x=>x.id!=='${u.id}');saveStore();renderView()}">🗑</button></td>
+    </tr>`).join('')}</tbody></table></div></div>`;
 }
 function renderObiettivi(){return `<div class="card">
   <h2 style="font-size:14px;margin-bottom:10px">Obiettivi mensili / programmazione annuale</h2>
@@ -2941,10 +3073,11 @@ VIEWS.statDesc=function(c){
   // Presenze medie per categoria — real data from presenze records
   const presByCat=state.categories.map(cat=>{const cp=ps.filter(p=>p.categoria===cat);if(!cp.length)return 0;const catSess=state.presenze.filter(r=>r.cat===cat);if(!catSess.length)return 0;const vals=cp.map(p=>{let pr=0;catSess.forEach(r=>{const s=r.marks[p.id]||'Presente';if(s==='Presente'||s==='Ritardo')pr++});return catSess.length?pr/catSess.length*100:0});return vals.reduce((s,v)=>s+v,0)/vals.length});
   renderChart('sd5',{type:'bar',data:{labels:state.categories,datasets:[{label:'% presenza media',data:presByCat,backgroundColor:'#000'}]},options:{scales:{y:{min:0,max:100}},plugins:{legend:{display:false}}}});
-  const ruoli=['Portiere','Difensore','Centrocampista','Attaccante'];
-  renderChart('sd6',{type:'doughnut',data:{labels:ruoli,datasets:[{data:ruoli.map(r=>ps.filter(p=>p.ruolo===r).length),backgroundColor:['#eab308','#2563eb','#16a34a','#dc2626']}]},options:{plugins:{legend:{position:'right'}}}});
+  const ruoliGruppi=['Portiere','Difensore','Centrocampista','Attaccante','Altro'];
+  const ruoliMap={'Portiere':['Portiere'],'Difensore':['Difensore Centrale','Terzino','Esterno Difensivo'],'Centrocampista':['Centrocampista','Mediano','Regista','Trequartista','Esterno Offensivo'],'Attaccante':['Attaccante','Seconda Punta','Ala']};
+  renderChart('sd6',{type:'doughnut',data:{labels:ruoliGruppi,datasets:[{data:ruoliGruppi.map(rg=>{const match=ruoliMap[rg]||[];return ps.filter(p=>{const pr=p.ruoli||[p.ruolo];return rg==='Altro'?!pr.some(r=>Object.values(ruoliMap).flat().includes(r)):pr.some(r=>match.includes(r))}).length}),backgroundColor:['#eab308','#2563eb','#16a34a','#dc2626','#8b5cf6']}]},options:{plugins:{legend:{position:'right'}}}});
 };
-function exportStatDescXLSX(){const ps=state.players.filter(p=>!p.eliminato);if(!ps.length){toast('Nessun dato','w');return}const _m={};state.matches.forEach(m=>m.roster.forEach(r=>{_m[r.pid]=(_m[r.pid]||0)+r.minutes}));const rows=ps.map(p=>{const tp=state.tippsInt.find(t=>t.playerId===p.id);const catSess=state.presenze.filter(r=>r.cat===p.categoria&&r.grp===p.gruppo);let pr=0;catSess.forEach(r=>{const s=r.marks[p.id]||'Presente';if(s==='Presente'||s==='Ritardo')pr++});return{Cognome:p.cognome,Nome:p.nome,Cat:p.categoria,Gruppo:groupLabel(p.categoria,p.gruppo),Ruolo:p.ruolo,'TIPPS media':tp?tp.media:'—','Presenze %':catSess.length?Math.round(pr/catSess.length*100):0,'Minuti':_m[p.id]||0}});exportChartXLSX(rows,'statistiche_descrittive','StatDesc')}
+function exportStatDescXLSX(){const ps=state.players.filter(p=>!p.eliminato);if(!ps.length){toast('Nessun dato','w');return}const _m={};state.matches.forEach(m=>m.roster.forEach(r=>{_m[r.pid]=(_m[r.pid]||0)+r.minutes}));const rows=ps.map(p=>{const tp=state.tippsInt.find(t=>t.playerId===p.id);const catSess=state.presenze.filter(r=>r.cat===p.categoria&&r.grp===p.gruppo);let pr=0;catSess.forEach(r=>{const s=r.marks[p.id]||'Presente';if(s==='Presente'||s==='Ritardo')pr++});return{Cognome:p.cognome,Nome:p.nome,Cat:p.categoria,Gruppo:groupLabel(p.categoria,p.gruppo),Ruolo:(p.ruoli||[p.ruolo]).join(', '),'TIPPS media':tp?tp.media:'—','Presenze %':catSess.length?Math.round(pr/catSess.length*100):0,'Minuti':_m[p.id]||0}});exportChartXLSX(rows,'statistiche_descrittive','StatDesc')}
 
 /* =============================================================
    VIEW: ANALISI INFERENZIALI (5 analisi avanzate)
