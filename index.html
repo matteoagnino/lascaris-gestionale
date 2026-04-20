@@ -1375,7 +1375,7 @@ VIEWS.rose=function(c){
   c.innerHTML=`
     <div class="vw">
       <div class="vh"><div><h1>Rose &amp; Giocatori</h1><div class="sb2">${attivi.length} tesserati · ordine U13 → U6</div></div>
-        <button class="btn btn-p" onclick="openPlayer('')">+ Giocatore</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-s" onclick="downloadPlayerTemplate()">📥 Template Excel</button><label class="btn btn-s" style="cursor:pointer">📤 Importa Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importPlayersXlsx(event)"></label><button class="btn btn-p" onclick="openPlayer('')">+ Giocatore</button></div>
       </div>
       ${!attivi.length?`<div class="es"><div class="ic">👥</div><h3>Nessun giocatore</h3><p>Aggiungi il primo giocatore alla rosa con tutti i dati anagrafici.</p><button class="btn btn-p" onclick="openPlayer('')">+ Primo giocatore</button></div>`:cats.map(cat=>{
         const cp=attivi.filter(p=>p.categoria===cat);
@@ -1543,6 +1543,73 @@ function exportPlayers(fmt){
     const b=new Blob([csv],{type:'text/csv'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='lascaris_anagrafica_'+today()+'.csv';a.click();URL.revokeObjectURL(u);
   }
   toast(ps.length+' giocatori esportati','s');
+}
+function downloadPlayerTemplate(){
+  if(!window.XLSX){toast('Libreria Excel non caricata','e');return}
+  const headers=['Cognome','Nome','Data nascita (GG/MM/AAAA)','Comune nascita','Codice Fiscale','Indirizzo residenza','Comune residenza','Categoria','Gruppo','Ruolo principale','Piede','Tessera FIGC','Taglia','Genitore riferimento','Telefono genitore','Email genitore','Tipo visita medica','Scadenza visita medica (GG/MM/AAAA)','Tipo documento','Scadenza documento (GG/MM/AAAA)','Note'];
+  const example=['Rossi','Marco','15/03/2015','Torino','RSSMRC15C15L219X','Via Roma 1','Pianezza','U10','A','Centrocampista','Destro','12345','M','Luca Rossi','3331234567','luca.rossi@email.com','Non agonistica','30/09/2026','Carta Identità','31/12/2028',''];
+  const ws=XLSX.utils.aoa_to_sheet([headers,example]);
+  // Larghezza colonne
+  ws['!cols']=headers.map(h=>({wch:Math.max(h.length,14)}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Template Anagrafica');
+  // Foglio istruzioni ruoli
+  const ruoliSheet=XLSX.utils.aoa_to_sheet([['Ruoli disponibili'],['(Inserire esattamente uno di questi nella colonna "Ruolo principale")'],...PLAYER_ROLES.map(r=>[r]),[''],['Categorie disponibili'],...state.categories.map(c=>[c]),[''],['Gruppi disponibili'],...state.groups.map(g=>[g]),[''],['Piede'],['Destro'],['Sinistro'],['Ambidestro'],[''],['Taglie'],['XS'],['S'],['M'],['L'],['XL']]);
+  XLSX.utils.book_append_sheet(wb,ruoliSheet,'Valori ammessi');
+  XLSX.writeFile(wb,'lascaris_template_anagrafica.xlsx');
+  toast('Template scaricato','s');
+}
+function importPlayersXlsx(ev){
+  const file=ev.target.files[0];if(!file||!window.XLSX){toast('Libreria Excel non caricata','e');return}
+  const reader=new FileReader();reader.onload=function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false});
+      if(rows.length<2){toast('File vuoto o senza dati','e');return}
+      const hdr=rows[0].map(h=>String(h||'').trim().toLowerCase());
+      const ci=k=>hdr.findIndex(h=>h.includes(k));
+      const iCo=ci('cognome'),iNm=ci('nome'),iNa=ci('nascita'),iCn=ci('comune nas'),iCf=ci('codice fis')===-1?ci('cf'):ci('codice fis'),iIn=ci('indirizzo'),iCr=ci('comune res'),iCat=ci('categoria'),iGr=ci('gruppo'),iRu=ci('ruolo'),iPi=ci('piede'),iTe=ci('tessera'),iTa=ci('taglia'),iGe=ci('genitore'),iTl=ci('telefono'),iEm=ci('email gen')===-1?ci('email'):ci('email gen'),iVt=ci('tipo visita'),iVs=ci('scadenza visita'),iDt=ci('tipo doc'),iDs=ci('scadenza doc'),iNo=ci('note');
+      if(iCo<0||iNm<0){toast('Colonne Cognome e Nome obbligatorie','e');return}
+      let added=0,updated=0,skipped=0;
+      for(let r=1;r<rows.length;r++){
+        const row=rows[r];if(!row||!row.length)continue;
+        const cognome=String(row[iCo]||'').trim();
+        const nome=String(row[iNm]||'').trim();
+        if(!cognome||!nome){skipped++;continue}
+        const nascitaRaw=String(row[iNa>=0?iNa:-1]||'').trim();
+        let nascitaISO='',nascita='';
+        if(nascitaRaw){
+          if(nascitaRaw.includes('/')){const p=nascitaRaw.split('/');if(p.length===3){nascitaISO=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');nascita=nascitaRaw}}
+          else if(nascitaRaw.includes('-')){nascitaISO=nascitaRaw;const p=nascitaRaw.split('-');nascita=p[2]+'/'+p[1]+'/'+p[0]}
+        }
+        const ruoloPrinc=String(row[iRu>=0?iRu:-1]||'').trim();
+        const ruoli=ruoloPrinc&&PLAYER_ROLES.includes(ruoloPrinc)?[ruoloPrinc]:['Centrocampista'];
+        const data={nome,cognome,nascita,nascitaISO,
+          comuneNascita:iCn>=0?String(row[iCn]||'').trim():'',
+          cf:iCf>=0?String(row[iCf]||'').trim().toUpperCase():'',
+          indirizzo:iIn>=0?String(row[iIn]||'').trim():'',
+          comuneResidenza:iCr>=0?String(row[iCr]||'').trim():'',
+          categoria:iCat>=0?String(row[iCat]||'').trim():(state.categories[state.categories.length-1]),
+          gruppo:iGr>=0?String(row[iGr]||'').trim():'A',
+          ruoli,
+          piede:iPi>=0?String(row[iPi]||'').trim():'Destro',
+          tessera:iTe>=0?String(row[iTe]||'').trim():'',
+          taglia:iTa>=0?String(row[iTa]||'').trim():'M',
+          genitore1:{nome:iGe>=0?String(row[iGe]||'').trim():'',tel:iTl>=0?String(row[iTl]||'').trim():'',email:iEm>=0?String(row[iEm]||'').trim():''},
+          note:iNo>=0?String(row[iNo]||'').trim():'',
+          visitaMedica:{tipo:iVt>=0?String(row[iVt]||'').trim():'Non agonistica',scad:iVs>=0?String(row[iVs]||'').trim():''},
+          docIdentita:{tipo:iDt>=0?String(row[iDt]||'').trim():'Carta Identità',scad:iDs>=0?String(row[iDs]||'').trim():''}
+        };
+        // Cerca duplicato (cognome+nome+data nascita)
+        const existing=state.players.find(p=>p.cognome.toLowerCase()===cognome.toLowerCase()&&p.nome.toLowerCase()===nome.toLowerCase()&&p.nascitaISO===nascitaISO);
+        if(existing){Object.assign(existing,data);updated++}
+        else{state.players.push({id:uid(),...data,eliminato:false});added++}
+      }
+      saveStore();renderView();
+      toast('Importati: '+added+' nuovi, '+updated+' aggiornati'+(skipped?' ('+skipped+' saltati)':''),'s');
+    }catch(err){toast('Errore lettura file: '+err.message,'e')}
+  };reader.readAsArrayBuffer(file);
+  ev.target.value='';
 }
 
 /* =============================================================
