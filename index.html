@@ -2116,13 +2116,27 @@ function exportChartXLSX(data,fname,sheetName){
 function exportViewPDF(viewTitle,chartIds){
   if(!window.jspdf){toast('Libreria PDF non caricata','e');return}
   const {jsPDF}=window.jspdf;const doc=new jsPDF();pdfHeader(doc,viewTitle);
-  let y=50;
-  chartIds.forEach((cid,idx)=>{
+  let y=50;let found=0;
+  // Titoli grafici per reference
+  const chartTitles={'sd1':'Radar TIPPS squadra vs benchmark','sd2':'Trend evolutivo TIPPS individuale','sd3':'Scatter: talent vs performance','sd4':'Distribuzione TIPPS per categoria','sd5':'Presenze medie per categoria','sd6':'Top ruoli & minutaggi','si1':'Equità d\'impiego (ANOVA)','si2':'Correlazione TIPPS-minutaggi','si3':'Confronto portieri vs giocatori','si4':'Trend stagionale','si5':'Analisi cluster'};
+  // Aggiungi KPI in cima
+  const ps=state.players.filter(p=>!p.eliminato);
+  const tippsAll=[...state.tippsInt,...state.tippsExt];
+  doc.setFontSize(10);doc.setFont(undefined,'normal');
+  doc.text('Giocatori: '+ps.length+' | TIPPS compilate: '+tippsAll.length+' | Media TIPPS: '+(tippsAll.length?(tippsAll.reduce((s,t)=>s+parseFloat(t.media||0),0)/tippsAll.length).toFixed(1):'—')+' | Attività: '+state.attivita.length,15,y);
+  y+=10;
+  chartIds.forEach((cid)=>{
     const c=document.getElementById(cid);if(!c)return;
-    if(y>200){doc.addPage();pdfHeader(doc,viewTitle);y=50}
-    doc.addImage(c.toDataURL('image/png'),'PNG',15,y,180,70);y+=80;
+    try{
+      if(y>210){doc.addPage();pdfHeader(doc,viewTitle);y=50}
+      const title=chartTitles[cid]||cid;
+      doc.setFontSize(10);doc.setFont(undefined,'bold');doc.text(title,15,y);y+=4;
+      doc.addImage(c.toDataURL('image/png'),'PNG',15,y,180,70);y+=78;
+      found++;
+    }catch(e){console.warn('Chart export error:',cid,e)}
   });
-  doc.save(viewTitle.replace(/[^a-z0-9]/gi,'_')+'_'+today()+'.pdf');toast('PDF vista scaricato','s');
+  if(!found){doc.setFontSize(12);doc.text('Nessun grafico disponibile. Servono almeno 3 giocatori e 10 osservazioni TIPPS.',15,y);y+=10}
+  doc.save(viewTitle.replace(/[^a-z0-9]/gi,'_')+'_'+today()+'.pdf');toast('PDF '+(found?found+' grafici esportati':'vuoto — dati insufficienti'),'s');
 }
 // Chart export dropdown trigger
 function chartMenu(chartId,title,data){
