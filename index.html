@@ -1357,10 +1357,9 @@ function recalcGruppoLabels(){
   state.staff.forEach(s=>{
     const incs=s.incarichi||(s.ruolo?[{ruolo:s.ruolo,categoria:s.categoria,gruppo:s.gruppo}]:[]);
     incs.forEach(inc=>{
-      if(inc.ruolo==='Tecnico'&&inc.categoria&&inc.gruppo&&s.nome){
-        const parts=s.nome.trim().split(/\s+/);
-        const cognome=parts.length>1?parts[parts.length-1]:parts[0];
-        const iniz=parts[0][0]||'';
+      if(inc.ruolo==='Tecnico'&&inc.categoria&&inc.gruppo&&(s.cognome||s.nome)){
+        const cognome=s.cognome||s.nome||'';
+        const iniz=s.nome?s.nome[0]:'';
         state.gruppoLabels[inc.categoria+inc.gruppo]={cognome,iniz};
       }
     });
