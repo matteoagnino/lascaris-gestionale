@@ -1275,7 +1275,7 @@ VIEWS.staff=function(c){
   c.innerHTML=`
     <div class="vw">
       <div class="vh"><div><h1>Staff Tecnico</h1><div class="sb2">Tecnici · Preparatori · Allenatori portieri · Scout · Dirigenti</div></div>
-        <button class="btn btn-p" onclick="openStaff('')">+ Membro</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-s" onclick="downloadStaffTemplate()">📥 Template Excel</button><label class="btn btn-s" style="cursor:pointer">📤 Importa Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importStaffXlsx(event)"></label><button class="btn btn-p" onclick="openStaff('')">+ Membro</button></div>
       </div>
       <div class="fb" style="gap:4px">
         <button class="btn btn-sm ${filter==='all'?'btn-p':'btn-s'}" onclick="state._staffFilter='all';saveStore();renderView()">Tutti (${counts.all})</button>
@@ -1352,6 +1352,51 @@ function saveStaff(id){
   saveStore();closeM();renderView();toast('Staff salvato · '+incarichi.length+' incarichi','s');
 }
 function delStaff(id){if(!confirm('Rimuovere?'))return;state.staff=state.staff.filter(x=>x.id!==id);recalcGruppoLabels();saveStore();renderView();toast('Rimosso','s')}
+function downloadStaffTemplate(){
+  if(!window.XLSX){toast('Libreria Excel non caricata','e');return}
+  const headers=['Cognome','Nome','Telefono','Email','Ruolo incarico','Categoria','Gruppo'];
+  const example=['Rossi','Marco','3331234567','marco.rossi@email.com','Tecnico','U12','A'];
+  const ws=XLSX.utils.aoa_to_sheet([headers,example]);
+  ws['!cols']=headers.map(h=>({wch:Math.max(h.length,14)}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Template Staff');
+  const valori=XLSX.utils.aoa_to_sheet([['Ruoli disponibili'],...[...state.staffRoles,...state.incarichiCustom].map(r=>[r]),[''],['Categorie disponibili'],...state.categories.map(c=>[c]),[''],['Gruppi disponibili'],...state.groups.map(g=>[g])]);
+  XLSX.utils.book_append_sheet(wb,valori,'Valori ammessi');
+  XLSX.writeFile(wb,'lascaris_template_staff.xlsx');
+  toast('Template staff scaricato','s');
+}
+function importStaffXlsx(ev){
+  const file=ev.target.files[0];if(!file||!window.XLSX){toast('Libreria Excel non caricata','e');return}
+  const reader=new FileReader();reader.onload=function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false});
+      if(rows.length<2){toast('File vuoto o senza dati','e');return}
+      const hdr=rows[0].map(h=>String(h||'').trim().toLowerCase());
+      const ci=k=>hdr.findIndex(h=>h.includes(k));
+      const iCo=ci('cognome'),iNm=ci('nome'),iTl=ci('telefono'),iEm=ci('email'),iRu=ci('ruolo'),iCat=ci('categoria'),iGr=ci('gruppo');
+      if(iCo<0||iNm<0){toast('Colonne Cognome e Nome obbligatorie','e');return}
+      let added=0,updated=0,skipped=0;
+      for(let r=1;r<rows.length;r++){
+        const row=rows[r];if(!row||!row.length)continue;
+        const cognome=String(row[iCo]||'').trim();
+        const nome=String(row[iNm]||'').trim();
+        if(!cognome||!nome){skipped++;continue}
+        const ruolo=iRu>=0?String(row[iRu]||'').trim():'Tecnico';
+        const categoria=iCat>=0?String(row[iCat]||'').trim():'';
+        const gruppo=iGr>=0?String(row[iGr]||'').trim():'';
+        const incarichi=[{ruolo,categoria,gruppo}];
+        const data={nome,cognome,incarichi,ruolo:incarichi[0].ruolo,categoria:incarichi[0].categoria,gruppo:incarichi[0].gruppo,tel:iTl>=0?String(row[iTl]||'').trim():'',email:iEm>=0?String(row[iEm]||'').trim():''};
+        const existing=state.staff.find(s=>s.cognome&&s.cognome.toLowerCase()===cognome.toLowerCase()&&s.nome.toLowerCase()===nome.toLowerCase());
+        if(existing){Object.assign(existing,data);updated++}
+        else{state.staff.push({id:uid(),...data});added++}
+      }
+      recalcGruppoLabels();saveStore();renderView();
+      toast('Staff importato: '+added+' nuovi, '+updated+' aggiornati'+(skipped?' ('+skipped+' saltati)':''),'s');
+    }catch(err){toast('Errore lettura file: '+err.message,'e')}
+  };reader.readAsArrayBuffer(file);
+  ev.target.value='';
+}
 function recalcGruppoLabels(){
   state.gruppoLabels={};
   state.staff.forEach(s=>{
