@@ -1402,9 +1402,12 @@ const ROLE_MACRO={Portiere:'P','Difensore Centrale':'D',Terzino:'D','Esterno Dif
 const ROLE_COLORS={P:'#ea580c',D:'#dc2626',C:'#2563eb',A:'#16a34a'};
 function playerMacro(p){const ruoli=p.ruoli||[p.ruolo];const primo=ruoli[0]||'';return ROLE_MACRO[primo]||'?'}
 function playerColor(p){return ROLE_COLORS[playerMacro(p)]||'var(--black)'}
-function updateRuoliUI(){const checks=[...document.querySelectorAll('input[name="pl_ruoli"]')];const selected=checks.filter(c=>c.checked).map(c=>c.value);checks.forEach(c=>{const l=c.parentElement;const mc=ROLE_MACRO[c.value]||'?';const col=ROLE_COLORS[mc]||'var(--g400)';const isPrimary=selected.length>0&&selected[0]===c.value;if(isPrimary){l.style.background=col;l.style.color='#fff';l.style.border='2px solid '+col}else if(c.checked){l.style.background='var(--g700)';l.style.color='#fff';l.style.border='2px solid transparent'}else{l.style.background='var(--g100)';l.style.color='inherit';l.style.border='2px solid transparent'}})}
+let _ruoliOrder=[];
+function initRuoliOrder(ruoli){_ruoliOrder=[...(ruoli||[])]}
+function updateRuoliUI(){const checks=[...document.querySelectorAll('input[name="pl_ruoli"]')];const nowChecked=checks.filter(c=>c.checked).map(c=>c.value);const added=nowChecked.filter(r=>!_ruoliOrder.includes(r));const removed=_ruoliOrder.filter(r=>!nowChecked.includes(r));_ruoliOrder=_ruoliOrder.filter(r=>!removed.includes(r));added.forEach(r=>_ruoliOrder.push(r));checks.forEach(c=>{const l=c.parentElement;const mc=ROLE_MACRO[c.value]||'?';const col=ROLE_COLORS[mc]||'var(--g400)';const isPrimary=_ruoliOrder.length>0&&_ruoliOrder[0]===c.value;if(isPrimary){l.style.background=col;l.style.color='#fff';l.style.border='2px solid '+col}else if(c.checked){l.style.background='var(--g700)';l.style.color='#fff';l.style.border='2px solid transparent'}else{l.style.background='var(--g100)';l.style.color='inherit';l.style.border='2px solid transparent'}})}
 function openPlayer(id){
   const p=id?state.players.find(x=>x.id===id):{id:null,nome:'',cognome:'',nascita:'',nascitaISO:'',comuneNascita:'',cf:'',indirizzo:'',comuneResidenza:'',categoria:state.categories[state.categories.length-1],gruppo:'A',ruoli:['Centrocampista'],piede:'Destro',tessera:'',taglia:'M',genitore1:{nome:'',tel:'',email:''},note:'',visitaMedica:{},docIdentita:{}};
+  initRuoliOrder(p.ruoli||[p.ruolo]);
   openM(id?`${p.cognome} ${p.nome}`:'Nuovo giocatore',`
     <div class="tabs"><div class="tab on" onclick="pTab(event,'a')">Anagrafica</div><div class="tab" onclick="pTab(event,'f')">Famiglia</div><div class="tab" onclick="pTab(event,'s')">Scadenze</div>${id?'<div class="tab" onclick="pTab(event,\'d\')">📄 Documenti</div><div class="tab" onclick="pTab(event,\'r\')">Rimuovi</div>':''}</div>
     <div class="tc on" id="p-a"><div class="fg">
@@ -1464,7 +1467,7 @@ function savePlayer(id){
     comuneResidenza:document.getElementById('pl_cr').value,
     categoria:document.getElementById('pl_ca').value,
     gruppo:document.getElementById('pl_gr').value,
-    ruoli:[...document.querySelectorAll('input[name="pl_ruoli"]:checked')].map(c=>c.value),
+    ruoli:_ruoliOrder.length?[..._ruoliOrder]:[...document.querySelectorAll('input[name="pl_ruoli"]:checked')].map(c=>c.value),
     piede:document.getElementById('pl_pi').value,
     tessera:document.getElementById('pl_te').value,
     taglia:document.getElementById('pl_ta').value,
