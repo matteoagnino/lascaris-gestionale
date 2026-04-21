@@ -2173,6 +2173,7 @@ VIEWS.distinta=function(c){
   `;
 };
 let mdS={live:false,t:0,period:1,nPeriods:2,perDur:30,home:0,away:0,roster:[],events:[],opp:[],sede:'casa',clockInt:null,configured:false,matchId:null,cat:'',grp:'',tipo:'Campionato',avv:'',impiantoId:'',impiantoLibero:''};
+let _mdExp=null;
 VIEWS.matchday=function(c){
   const imp=state.impianti.find(i=>i.id===mdS.impiantoId);
   c.innerHTML=`
@@ -2205,9 +2206,21 @@ VIEWS.matchday=function(c){
         </div>
       </div>
 
-      <div class="grid g2">
-        <div class="card"><div class="card-h"><h2 style="font-size:14px">🟦 In campo <span class="pl" id="mdInN">0</span></h2></div><div id="mdIn" style="display:flex;flex-direction:column;gap:4px"></div></div>
-        <div class="card"><div class="card-h"><h2 style="font-size:14px">⚪ Panchina <span class="pl" id="mdBnN">0</span></h2></div><div id="mdBn" style="display:flex;flex-direction:column;gap:4px"></div></div>
+      <div class="card" style="padding:8px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:700">Tempo:</span>
+        <select id="mdPerSel" onchange="mdS.period=+this.value;document.getElementById('mdPer').textContent='Tempo '+mdS.period+' di '+mdS.nPeriods" style="font-size:15px;padding:6px 14px;font-weight:700;border-radius:6px;border:2px solid var(--blue)">
+          ${Array.from({length:mdS.nPeriods},(_,i)=>`<option value="${i+1}" ${mdS.period===i+1?'selected':''}>T${i+1}</option>`).join('')}
+        </select>
+        <span style="font-size:10px;color:var(--g500)">Tap giocatore → registra eventi</span>
+      </div>
+
+      <div class="card" style="margin-bottom:8px">
+        <div class="card-h"><h2 style="font-size:14px">🟦 In campo <span class="pl" id="mdInN">0</span></h2></div>
+        <div id="mdIn"></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2 style="font-size:14px">⚪ Panchina <span class="pl" id="mdBnN">0</span></h2></div>
+        <div id="mdBn"></div>
       </div>
 
       <div class="card">
@@ -2371,7 +2384,7 @@ function mdConfirmRoster(){
   closeM();renderView();
   toast('Formazione confermata ('+roster.filter(r=>r.starter).length+' titolari, '+roster.filter(r=>!r.starter).length+' panchina)','s');
 }
-function mdReset(){if(mdS.configured&&!confirm('Resettare la partita corrente?'))return;clearInterval(mdS.clockInt);mdS={live:false,t:0,period:1,nPeriods:2,perDur:30,home:0,away:0,roster:[],events:[],opp:[],sede:'casa',clockInt:null,configured:false,matchId:null,cat:'',grp:'',tipo:'Campionato',avv:'',impiantoId:'',impiantoLibero:''};renderView()}
+function mdReset(){if(mdS.configured&&!confirm('Resettare la partita corrente?'))return;clearInterval(mdS.clockInt);mdS={live:false,t:0,period:1,nPeriods:2,perDur:30,home:0,away:0,roster:[],events:[],opp:[],sede:'casa',clockInt:null,configured:false,matchId:null,cat:'',grp:'',tipo:'Campionato',avv:'',impiantoId:'',impiantoLibero:''};_mdExp=null;renderView()}
 function mdToggleClock(){if(mdS.live){clearInterval(mdS.clockInt);mdS.live=false;document.getElementById('mdP').textContent='▶'}else{mdS.live=true;document.getElementById('mdP').textContent='⏸';mdS.clockInt=setInterval(()=>{mdS.t++;const e=document.getElementById('mdCl');if(e)e.textContent=pad(Math.floor(mdS.t/60))+':'+pad(mdS.t%60)},1000)}}
 function mdNext(){if(mdS.period<mdS.nPeriods){mdS.period++;document.getElementById('mdPer').textContent='T '+mdS.period+'/'+mdS.nPeriods;mdAddEv('▶ Inizio tempo '+mdS.period)}else toast('Già all\'ultimo tempo','w')}
 function mdPrev(){if(mdS.period>1){mdS.period--;document.getElementById('mdPer').textContent='T '+mdS.period+'/'+mdS.nPeriods;mdAddEv('◀ Ripreso tempo '+mdS.period)}else toast('Primo tempo','w')}
@@ -2380,21 +2393,56 @@ function mdRenderRoster(){
   const bn=mdS.roster.filter(r=>r.status!=='in');
   document.getElementById('mdInN').textContent=inf.length;
   document.getElementById('mdBnN').textContent=bn.length;
-  const row=(r,inField)=>`<div style="padding:8px;background:${inField?'#dbeafe':'var(--g50)'};border-radius:var(--rs);margin-bottom:4px"><div style="display:flex;gap:6px;align-items:center"><div style="width:22px;height:22px;border-radius:50%;background:${inField?'var(--blue)':'var(--g300)'};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px">${r.num}</div><div style="flex:1;min-width:0;font-size:12px"><strong>${esc(r.name)}</strong><span style="font-size:10px;color:var(--g500);margin-left:4px">· ${r.ruolo} · ${r.minutes}'${r.stats.gol?' ⚽'+r.stats.gol:''}</span></div><button class="btn btn-sm btn-s" style="background:#eab308;color:black;padding:3px 6px" onclick="event.stopPropagation();mdInternalObs('${r.pid}')" title="Osservazione interna">📨 DS</button><button class="btn btn-sm ${inField?'btn-d':'btn-g'}" style="padding:3px 8px" onclick="event.stopPropagation();${inField?'mdSubOut':'mdSubIn'}('${r.pid}')">${inField?'Esci':(r.status==='out'?'Rientra':'Entra')}</button></div>${inField?`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-top:6px">
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-g" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','gol','⚽ Gol')" title="+1 Gol">⚽ ${r.stats.gol||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','gol')" title="−1 Gol">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-s md-stat" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','assist','🅰 Assist')" title="+1 Assist">🅰 ${r.stats.assist||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','assist')">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-s md-stat" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','tiri','🎯 Tiro')" title="+1 Tiro totale">🎯 ${r.stats.tiri||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','tiri')">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-s md-stat" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','tiriP','Porta')" title="+1 Tiro in porta">◎ ${r.stats.tiriP||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','tiriP')">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-s md-stat" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','drT','DribbT')" title="+1 Dribbling tentato">↻ ${r.stats.drT||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','drT')">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-g" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','drR','DribbR')" title="+1 Dribbling riuscito">↻✓ ${r.stats.drR||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','drR')">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-s md-stat" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','passT','PassT')" title="+1 Passaggio tentato">→ ${r.stats.passT||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','passT')">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-g" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','passC','PassC')" title="+1 Passaggio completato">→✓ ${r.stats.passC||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','passC')">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-d" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','amm','🟨 Amm.')" title="+1 Ammonizione">🟨 ${r.stats.amm||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','amm')">−</button></div>
-  <div style="display:flex;gap:1px"><button class="btn btn-sm btn-d" style="font-size:10px;padding:2px;flex:1" onclick="mdEvAdd('${r.pid}','esp','🟥 Esp.')" title="+1 Espulsione">🟥 ${r.stats.esp||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdEvDel('${r.pid}','esp')">−</button></div>
-</div>`:''}</div>`;
-  document.getElementById('mdIn').innerHTML=inf.map(r=>row(r,true)).join('')||'<p style="color:var(--g500);font-size:12px">Nessun giocatore in campo</p>';
-  document.getElementById('mdBn').innerHTML=bn.map(r=>row(r,false)).join('')||'<p style="color:var(--g500);font-size:12px">Panchina vuota</p>';
+  const _rc={Portiere:'#ea580c','Difensore Centrale':'#dc2626',Terzino:'#dc2626','Esterno Difensivo':'#dc2626',Difensore:'#dc2626','Esterno Offensivo':'#2563eb',Centrocampista:'#2563eb',Mediano:'#2563eb',Regista:'#2563eb',Trequartista:'#2563eb',Ala:'#16a34a',Attaccante:'#16a34a','Seconda Punta':'#16a34a'};
+  const rc=r=>_rc[r]||'var(--g400)';
+  const compactRow=(r,inField)=>{
+    const ex=_mdExp===r.pid&&inField;const s=r.stats;
+    const tf=(s.tiri||0)-(s.tiriP||0),pf=(s.passT||0)-(s.passC||0),df=(s.drT||0)-(s.drR||0);
+    let h=`<div style="border-left:4px solid ${rc(r.ruolo)};border:2px solid ${ex?'var(--blue)':'transparent'};border-left:4px solid ${rc(r.ruolo)};border-radius:8px;margin-bottom:3px;overflow:hidden">`;
+    h+=`<div style="display:flex;align-items:center;gap:6px;padding:7px 8px;cursor:pointer;background:${ex?'#dbeafe':'var(--g50)'};-webkit-tap-highlight-color:transparent" onclick="_mdExp=_mdExp==='${r.pid}'?null:'${r.pid}';mdRenderRoster()">`;
+    h+=`<div style="width:24px;height:24px;border-radius:50%;background:${inField?rc(r.ruolo):'var(--g300)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${r.num}</div>`;
+    h+=`<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.name)}</div>`;
+    if(inField)h+=`<div style="font-size:9px;color:var(--g500);font-variant-numeric:tabular-nums">G${s.gol||0} A${s.assist||0} T${s.tiriP||0}/${s.tiri||0} P${s.passC||0}/${s.passT||0} D${s.drR||0}/${s.drT||0}</div>`;
+    h+=`</div>`;
+    if(inField)h+=`<button style="padding:4px 8px;font-size:10px;background:#dc2626;color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();mdSubOut('${r.pid}')">⬇ Esci</button>`;
+    else h+=`<button style="padding:4px 8px;font-size:10px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();mdSubIn('${r.pid}')">${r.status==='out'?'↺ Rientra':'⬆ Entra'}</button>`;
+    h+=`</div>`;
+    if(ex){
+      const bigBtn=(bg,icon,label,count,oc)=>`<button style="flex:1;padding:10px 4px;border:none;border-radius:8px;background:${bg};color:#fff;font-size:12px;font-weight:700;cursor:pointer;min-height:52px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px" onclick="${oc}"><span>${icon} ${label}</span><span style="font-size:20px">${count}</span></button>`;
+      h+=`<div style="padding:8px;background:#f0f7ff;border-top:2px solid var(--blue)">`;
+      // TIRI
+      h+=`<div style="display:flex;gap:4px;margin-bottom:6px"><div style="width:52px;font-size:10px;font-weight:800;display:flex;align-items:center;color:var(--g600)">TIRI</div>`;
+      h+=bigBtn('#16a34a','✅','In porta',s.tiriP||0,`mdStatPlus('${r.pid}','tiriP','🎯 Tiro in porta')`);
+      h+=bigBtn('#dc2626','❌','Fuori',tf,`mdStatPlus('${r.pid}','tiriF','🎯 Tiro fuori')`);
+      h+=`</div>`;
+      // PASSAGGI
+      h+=`<div style="display:flex;gap:4px;margin-bottom:6px"><div style="width:52px;font-size:10px;font-weight:800;display:flex;align-items:center;color:var(--g600)">PASS</div>`;
+      h+=bigBtn('#16a34a','✅','Giusto',s.passC||0,`mdStatPlus('${r.pid}','passC','→ Passaggio riuscito')`);
+      h+=bigBtn('#dc2626','❌','Sbagliato',pf,`mdStatPlus('${r.pid}','passF','→ Passaggio sbagliato')`);
+      h+=`</div>`;
+      // DRIBBLING
+      h+=`<div style="display:flex;gap:4px;margin-bottom:6px"><div style="width:52px;font-size:10px;font-weight:800;display:flex;align-items:center;color:var(--g600)">DRIBB</div>`;
+      h+=bigBtn('#16a34a','✅','Riuscito',s.drR||0,`mdStatPlus('${r.pid}','drR','↻ Dribbling riuscito')`);
+      h+=bigBtn('#dc2626','❌','Perso',df,`mdStatPlus('${r.pid}','drF','↻ Dribbling perso')`);
+      h+=`</div>`;
+      // GOL
+      h+=`<div style="display:flex;gap:4px;margin-bottom:6px;align-items:center"><div style="width:52px;font-size:10px;font-weight:800;color:var(--g600)">GOL</div>`;
+      h+=`<button style="flex:1;padding:12px;border:none;border-radius:8px;background:#16a34a;color:#fff;font-size:18px;font-weight:900;cursor:pointer;min-height:48px;touch-action:manipulation" onclick="mdStatPlus('${r.pid}','gol','⚽ Gol')">⚽ +1</button>`;
+      h+=`<button style="width:44px;padding:12px;border:none;border-radius:8px;background:var(--g200);color:#000;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;touch-action:manipulation" onclick="mdEvDel('${r.pid}','gol')">−1</button>`;
+      h+=`<span style="font-size:24px;font-weight:900;min-width:32px;text-align:center">${s.gol||0}</span></div>`;
+      // ASSIST
+      h+=`<div style="display:flex;gap:4px;align-items:center"><div style="width:52px;font-size:10px;font-weight:800;color:var(--g600)">ASSIST</div>`;
+      h+=`<button style="flex:1;padding:12px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-size:18px;font-weight:900;cursor:pointer;min-height:48px;touch-action:manipulation" onclick="mdStatPlus('${r.pid}','assist','🅰 Assist')">🅰 +1</button>`;
+      h+=`<button style="width:44px;padding:12px;border:none;border-radius:8px;background:var(--g200);color:#000;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;touch-action:manipulation" onclick="mdEvDel('${r.pid}','assist')">−1</button>`;
+      h+=`<span style="font-size:24px;font-weight:900;min-width:32px;text-align:center">${s.assist||0}</span></div>`;
+      h+=`</div>`;
+    }
+    h+=`</div>`;return h;
+  };
+  document.getElementById('mdIn').innerHTML=inf.map(r=>compactRow(r,true)).join('')||'<p style="color:var(--g500);font-size:12px">Nessuno in campo</p>';
+  document.getElementById('mdBn').innerHTML=bn.map(r=>compactRow(r,false)).join('')||'<p style="color:var(--g500);font-size:12px">Panchina vuota</p>';
 }
+function mdStatPlus(pid,k,lbl){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;if(k==='tiriP'){r.stats.tiriP=(r.stats.tiriP||0)+1;r.stats.tiri=(r.stats.tiri||0)+1}else if(k==='tiriF'){r.stats.tiri=(r.stats.tiri||0)+1}else if(k==='passC'){r.stats.passC=(r.stats.passC||0)+1;r.stats.passT=(r.stats.passT||0)+1}else if(k==='passF'){r.stats.passT=(r.stats.passT||0)+1}else if(k==='drR'){r.stats.drR=(r.stats.drR||0)+1;r.stats.drT=(r.stats.drT||0)+1}else if(k==='drF'){r.stats.drT=(r.stats.drT||0)+1}else{r.stats[k]=(r.stats[k]||0)+1}mdAddEv(lbl+' · '+r.name);mdRenderRoster()}
 function mdSubIn(pid){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;const max={'U6':3,'U7':3,'U8':5,'U9':5,'U10':7,'U11':7,'U12':9,'U13':9}[mdS.cat]||9;if(mdS.roster.filter(x=>x.status==='in').length>=max){toast('Campo pieno','w');return}const re=r.status==='out';r.status='in';r.enteredAt=mdS.t;mdAddEv((re?'↺ Rientra ':'↗ Entra ')+r.name);mdRenderRoster()}
 function mdSubOut(pid){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;r.status='out';r.minutes+=Math.max(0,Math.floor((mdS.t-(r.enteredAt||0))/60));mdAddEv('↙ Esce '+r.name+' ('+r.minutes+"')");mdRenderRoster()}
 function mdAddEv(txt){mdS.events.unshift({t:mdS.t,period:mdS.period,txt});mdRenderEv()}
