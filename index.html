@@ -733,15 +733,15 @@ VIEWS.dashboard=function(c){
                 <div style="font-size:9px;font-weight:700;text-transform:uppercase">${g.label.split(' ')[0]}</div>
                 <div style="font-size:14px;font-weight:700;margin:2px 0">${g.label.split(' ')[1]||''}</div>
                 <div style="font-size:8px">${g.label.split(' ')[2]||''}</div>
-                ${acts.length?`<div style="margin-top:3px">${acts.map(a=>`<div style="width:6px;height:6px;border-radius:50%;background:${hasMatch?'var(--blue)':'#16a34a'};display:inline-block;margin:1px"></div>`).join('')}</div>`:''}
+                ${acts.length?`<div style="margin-top:3px">${acts.map(a=>`<div style="width:6px;height:6px;border-radius:50%;background:${actColor(a.tipo)};display:inline-block;margin:1px"></div>`).join('')}</div>`:''}
               </div>`}).join('')}
             </div>
             <!-- Activity list for the week -->
             <div style="font-size:11px;font-weight:700;color:var(--g600);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Attività prossimi 7 giorni</div>
-            ${attNext7.length?attNext7.slice(0,8).map(a=>{const isMatch=['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo);return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--g50);border-radius:var(--rs);margin-bottom:4px;font-size:12px">
-              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${isMatch?'var(--blue)':'#16a34a'}"></span>
+            ${attNext7.length?attNext7.slice(0,8).map(a=>{const ac=actColor(a.tipo);return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--g50);border-radius:var(--rs);margin-bottom:4px;font-size:12px">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ac}"></span>
               <span style="font-weight:700;min-width:50px">${fmtIt(a.data)}</span>
-              <span style="background:${isMatch?'#dbeafe':'#dcfce7'};color:${isMatch?'var(--blue)':'#166534'};padding:1px 6px;border-radius:3px;font-size:10px">${esc(a.tipo)}</span>
+              <span style="background:${ac}22;color:${ac};padding:1px 6px;border-radius:3px;font-size:10px">${esc(a.tipo)}</span>
               <span style="flex:1">${esc(a.categoria)||''} ${a.gruppo?groupLabel(a.categoria,a.gruppo):''}</span>
               <span style="color:var(--g500);font-size:10px">${esc(a.ora)||''}</span>
             </div>`}).join(''):'<div style="color:var(--g400);font-size:12px;padding:8px">Nessuna attività in programma</div>'}
@@ -1210,8 +1210,7 @@ function renderImpDay(){
           const slotEnd=Math.min(endSlot,22*60);
           const span=Math.max(1,Math.floor((slotEnd-slotStart)/FRAC));
           rendered[act.id+'_'+campo.id]=true;
-          const isMatch=['Partita','Campionato','Torneo','Amichevole','Test match'].includes(act.tipo);
-          const bg=isMatch?'#2563eb':'#000';
+          const bg=actColor(act.tipo);
           h+=`<td rowspan="${span}" style="background:${bg};color:#fff;padding:3px 5px;border-radius:3px;vertical-align:top;cursor:pointer;font-size:10px" onclick="openAttivita('${act.id}')"><strong>${esc(act.categoria)} ${groupLabel(act.categoria,act.gruppo)}</strong><br>${esc(act.tipo)} ${act.ora}-${pad(Math.floor(endSlot/60))+':'+pad(endSlot%60)}${act.spogliatoio?'<br>🚿 '+esc(act.spogliatoio):''}</td>`;
         }else if(!act){
           h+=`<td style="padding:1px;cursor:pointer;border-right:1px solid #f0f0f0" onclick="openAttivita('','${impDay}','${imp.id}','')"></td>`;
@@ -1680,7 +1679,7 @@ VIEWS.calendario=function(c){
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--g200)">
           ${Array.from({length:42},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);const iso=isoL(d);const other=d.getMonth()!==calView.m;const evts=state.attivita.filter(a=>a.data===iso);return `<div style="background:${other?'var(--g50)':iso===todayISO?'#fff7d6':'white'};min-height:80px;padding:4px;cursor:pointer;font-size:11px" onclick="showDay('${iso}')">
             <div style="font-weight:700;${other?'color:var(--g300)':''}">${d.getDate()}</div>
-            ${evts.slice(0,3).map(e=>`<div style="background:${e.tipo==='Partita'?'var(--red)':'var(--blue)'};color:white;font-size:10px;padding:1px 4px;border-radius:3px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.categoria)} ${groupLabel(e.categoria,e.gruppo)}</div>`).join('')}
+            ${evts.slice(0,3).map(e=>`<div style="background:${actColor(e.tipo)};color:white;font-size:10px;padding:1px 4px;border-radius:3px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.categoria)} ${groupLabel(e.categoria,e.gruppo)}</div>`).join('')}
             ${evts.length>3?`<div style="font-size:9px;color:var(--g500)">+${evts.length-3}</div>`:''}
           </div>`}).join('')}
         </div>
@@ -1693,19 +1692,26 @@ function showDay(iso){
   const evts=state.attivita.filter(a=>a.data===iso);
   const d=new Date(iso);
   if(!evts.length){openAttivita('',iso);return}
-  openM(d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}),evts.map(e=>`<div style="padding:10px;border-left:4px solid ${e.tipo==='Partita'?'var(--red)':'var(--blue)'};background:var(--g50);border-radius:var(--rs);margin-bottom:6px;cursor:pointer" onclick="closeM();openAttivita('${e.id}')"><strong>${esc(e.tipo)} · ${esc(e.categoria)} ${groupLabel(e.categoria,e.gruppo)}</strong>${e.avversario?' vs '+esc(e.avversario):''}<br><small>${esc(e.ora)||''} ${e.impiantoId?'· '+esc((state.impianti.find(i=>i.id===e.impiantoId)||{}).nome||''):''}</small></div>`).join(''),`<button class="btn btn-s" onclick="closeM()">Chiudi</button><button class="btn btn-p" onclick="closeM();openAttivita('','${iso}')">+ Aggiungi</button>`);
+  openM(d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}),evts.map(e=>`<div style="padding:10px;border-left:4px solid ${actColor(e.tipo)};background:var(--g50);border-radius:var(--rs);margin-bottom:6px;cursor:pointer" onclick="closeM();openAttivita('${e.id}')"><strong>${esc(e.tipo)} · ${esc(e.categoria)} ${groupLabel(e.categoria,e.gruppo)}</strong>${e.avversario?' vs '+esc(e.avversario):''}<br><small>${esc(e.ora)||''} ${e.impiantoId?'· '+esc((state.impianti.find(i=>i.id===e.impiantoId)||{}).nome||''):''}</small></div>`).join(''),`<button class="btn btn-s" onclick="closeM()">Chiudi</button><button class="btn btn-p" onclick="closeM();openAttivita('','${iso}')">+ Aggiungi</button>`);
 }
+function calcOraFine(ora,durata){if(!ora||!durata)return '';const[h,m]=(ora+'').split(':').map(Number);const tot=h*60+m+(+durata||0);return pad(Math.floor(tot/60)%24)+':'+pad(tot%60)}
+function calcFascia(){const ora=document.getElementById('at_or')?.value;const dur=+document.getElementById('at_du')?.value;if(!ora||!dur)return;const fine=calcOraFine(ora,dur);document.getElementById('at_fi').value=fine;document.getElementById('at_fa').value=ora+'-'+fine}
+function calcDurataFromFine(){const ora=document.getElementById('at_or')?.value;const fine=document.getElementById('at_fi')?.value;if(!ora||!fine)return;const[h1,m1]=ora.split(':').map(Number);const[h2,m2]=fine.split(':').map(Number);let diff=(h2*60+m2)-(h1*60+m1);if(diff<0)diff+=1440;document.getElementById('at_du').value=diff;document.getElementById('at_fa').value=ora+'-'+fine}
+const ACTIVITY_COLORS={Allenamento:'#000000',Campionato:'#2563eb',Torneo:'#7c3aed',Amichevole:'#0d9488','Test match':'#ea580c'};
+function actColor(tipo){return ACTIVITY_COLORS[tipo]||'#000'}
 function openAttivita(id,dataIso,impId,fascia){
   const a=id?state.attivita.find(x=>x.id===id):{id:null,tipo:'Allenamento',data:dataIso||today(),ora:'18:00',durata:90,categoria:state.categories[state.categories.length-1],gruppo:'A',impiantoId:impId||(state.impianti[0]?.id||''),fascia:fascia||'',avversario:'',note:'',tempiGioco:2,durataTempo:20,spogliatoio:''};
   openM(id?'Modifica attività':'Nuova attività',`<div class="fg">
-    <div class="ff"><label>Tipo *</label><select id="at_ti" onchange="document.getElementById('atMatchFields').style.display=['Partita','Campionato','Torneo','Amichevole','Test match'].includes(this.value)?'flex':'none'"><option ${a.tipo==='Allenamento'?'selected':''}>Allenamento</option><option ${a.tipo==='Partita'?'selected':''}>Partita</option><option ${a.tipo==='Campionato'?'selected':''}>Campionato</option><option ${a.tipo==='Torneo'?'selected':''}>Torneo</option><option ${a.tipo==='Test match'?'selected':''}>Test match</option><option ${a.tipo==='Amichevole'?'selected':''}>Amichevole</option></select></div>
+    <div class="ff"><label>Tipo *</label><select id="at_ti" onchange="document.getElementById('atMatchFields').style.display=['Campionato','Torneo','Amichevole','Test match'].includes(this.value)?'flex':'none'"><option ${a.tipo==='Allenamento'?'selected':''}>Allenamento</option><option ${a.tipo==='Campionato'?'selected':''}>Campionato</option><option ${a.tipo==='Torneo'?'selected':''}>Torneo</option><option ${a.tipo==='Test match'?'selected':''}>Test match</option><option ${a.tipo==='Amichevole'?'selected':''}>Amichevole</option></select></div>
     <div class="ff"><label>Data *</label><input type="date" id="at_da" value="${a.data}"></div>
-    <div class="ff"><label>Ora</label><input type="time" id="at_or" value="${a.ora}"></div>
-    <div class="ff"><label>Durata (min)</label><input type="number" id="at_du" value="${a.durata}"></div>
+    <div class="ff"><label>Ora inizio</label><input type="time" id="at_or" value="${a.ora}" onchange="calcFascia()"></div>
+    <div class="ff"><label>Durata (min)</label><input type="number" id="at_du" value="${a.durata}" onchange="calcFascia()"></div>
+    <div class="ff"><label>Ora fine</label><input type="time" id="at_fi" value="${calcOraFine(a.ora,a.durata)}" onchange="calcDurataFromFine()"></div>
     <div class="ff"><label>Categoria *</label><select id="at_ca" onchange="refreshGruppoSel('at_gr',this.value)">${state.categories.map(x=>`<option ${a.categoria===x?'selected':''}>${x}</option>`).join('')}</select></div>
     <div class="ff"><label>Gruppo *</label><select id="at_gr">${state.groups.map((g,i)=>`<option value="${g}" ${a.gruppo===g?'selected':''}>${groupLabel(a.categoria,g)}</option>`).join('')}</select></div>
     <div class="ff"><label>Sede</label><select id="at_sd" onchange="toggleSedeFields()"><option value="casa" ${a.sede==='trasferta'?'':'selected'}>Casa</option><option value="trasferta" ${a.sede==='trasferta'?'selected':''}>Trasferta</option></select></div><div class="ff" id="atImpBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Impianto</label><select id="at_im"><option value="">—</option>${state.impianti.map(i=>`<option value="${i.id}" ${a.impiantoId===i.id?'selected':''}>${esc(i.nome)}</option>`).join('')}</select></div><div id="atTrasBox" style="${a.sede==='trasferta'?'':'display:none'};display:${a.sede==='trasferta'?'flex':'none'};flex-wrap:wrap;gap:10px;width:100%"><div class="ff"><label>Impianto esterno</label><input id="at_ie" list="impEstList" value="${esc(a.impiantoEsterno||'')}" placeholder="Nome stadio/campo" oninput="autoFillImpEst()"><datalist id="impEstList">${(state.impiantiEsterni||[]).map(ie=>`<option value="${esc(ie.nome)}">`).join('')}</datalist></div><div class="ff"><label>Indirizzo</label><input id="at_il" value="${esc(a.luogoLibero||'')}" placeholder="Via, Città (Provincia)"></div></div>
-    <div class="ff"><label>Fascia oraria</label><input id="at_fa" value="${a.fascia}" placeholder="es. 18:00-19:30"></div>
+    <div class="ff"><label>Fascia oraria</label><input id="at_fa" value="${a.fascia||(a.ora&&a.durata?a.ora+'-'+calcOraFine(a.ora,a.durata):''
+)}" readonly style="background:var(--g100);cursor:default" placeholder="auto"></div>
     <div class="ff full"><label>Avversario</label><input id="at_av" value="${esc(a.avversario)}"></div>
     <div id="atMatchFields" style="display:${['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)?'flex':'none'};flex-wrap:wrap;gap:10px;width:100%">
       <div class="ff"><label>N. tempi di gioco</label><input type="number" id="at_tg" value="${a.tempiGioco||2}" min="1" max="6"></div>
@@ -2651,7 +2657,7 @@ VIEWS.programma=function(c){
       <div class="fb">
         <select id="pr_ca" onchange="state._progFc=this.value;saveStore();renderView()"><option value="">Tutte categorie</option>${state.categories.map(x=>`<option ${state._progFc===x?'selected':''}>${x}</option>`).join('')}</select>
         <select id="pr_gr" onchange="state._progFg=this.value;saveStore();renderView()" ${!state._progFc?'disabled':''} title="${!state._progFc?'Seleziona prima una categoria':''}"><option value="">Tutti gruppi</option>${state._progFc?state.groups.map(g=>`<option value="${g}" ${state._progFg===g?'selected':''}>${groupLabel(state._progFc,g)}</option>`).join(''):''}</select>
-        <select id="pr_ti" onchange="state._progFt=this.value;saveStore();renderView()"><option value="">Tutti tipi</option><option ${state._progFt==='Allenamento'?'selected':''}>Allenamento</option><option ${state._progFt==='Partita'?'selected':''}>Partita</option><option ${state._progFt==='Campionato'?'selected':''}>Campionato</option><option ${state._progFt==='Torneo'?'selected':''}>Torneo</option><option ${state._progFt==='Amichevole'?'selected':''}>Amichevole</option></select>
+        <select id="pr_ti" onchange="state._progFt=this.value;saveStore();renderView()"><option value="">Tutti tipi</option><option ${state._progFt==='Allenamento'?'selected':''}>Allenamento</option><option ${state._progFt==='Campionato'?'selected':''}>Campionato</option><option ${state._progFt==='Torneo'?'selected':''}>Torneo</option><option ${state._progFt==='Test match'?'selected':''}>Test match</option><option ${state._progFt==='Amichevole'?'selected':''}>Amichevole</option></select>
       </div>
       ${!teams.length?`<div class="es"><div class="ic">📆</div><h3>Nessuna attività / squadra</h3><p>Aggiungi giocatori e attività per popolare il programma.</p></div>`:teams.map(t=>{
         const ft2=state._progFt||"";const weekAct=state.attivita.filter(a=>a.categoria===t.cat&&a.gruppo===t.g&&isoDays.includes(a.data)&&(!ft2||a.tipo===ft2));
