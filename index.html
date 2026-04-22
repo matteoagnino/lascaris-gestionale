@@ -653,7 +653,7 @@ const VIEWS={};
 VIEWS.dashboard=function(c){
   const np=state.players.filter(p=>!p.eliminato).length;
   const ns=state.staff.length;
-  const ni=state.infortuni.filter(i=>{if(!i.dataRientro)return true;const dr=new Date(i.dataRientro),tod=new Date(isoL(new Date()));return dr>tod}).length;
+  const ni=state.infortuni.filter(i=>{if(!i.dataRientro)return true;return i.dataRientro>=isoL(new Date())}).length;
   const nu=state.users.filter(u=>u.attivo).length;
   const tod=new Date();const todIso=isoL(tod);
   // Next 7 days activities
@@ -665,7 +665,7 @@ VIEWS.dashboard=function(c){
   // Recent results (last 5 matches)
   const recentRes=state.matches.slice().sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,5);
   // Injured players
-  const injured=state.infortuni.filter(i=>{if(!i.dataRientro)return true;return new Date(i.dataRientro)>tod});
+  const injured=state.infortuni.filter(i=>{if(!i.dataRientro)return true;return i.dataRientro>=todIso});
   // Scadenze docs (within 30 days)
   const soon30=new Date(tod);soon30.setDate(soon30.getDate()+30);const soon30Iso=isoL(soon30);
   const docScad=[];
@@ -1844,10 +1844,10 @@ VIEWS.infortuni=function(c){
       </div>
       ${!state.infortuni.length?`<div class="es"><div class="ic">🩹</div><h3>Nessun infortunio</h3><p>Tieni traccia degli infortuni per monitorare rientri e tipologie.</p><button class="btn btn-p" onclick="openInf('')">+ Primo</button></div>`:`
         <div class="grid g4" style="margin-bottom:14px">
-          <div class="kpi d"><div class="l">In corso</div><div class="v">${state.infortuni.filter(i=>!i.dataRientro||new Date(i.dataRientro)>new Date(isoL(new Date()))).length}</div></div>
+          <div class="kpi d"><div class="l">In corso</div><div class="v">${state.infortuni.filter(i=>!i.dataRientro||i.dataRientro>=isoL(new Date())).length}</div></div>
           <div class="kpi"><div class="l">Totali</div><div class="v">${state.infortuni.length}</div></div>
           <div class="kpi w"><div class="l">Recidivi</div><div class="v">${state.infortuni.filter(i=>i.recidiva).length}</div></div>
-          <div class="kpi o"><div class="l">Risolti</div><div class="v">${state.infortuni.filter(i=>i.dataRientro&&new Date(i.dataRientro)<=new Date(isoL(new Date()))).length}</div></div>
+          <div class="kpi o"><div class="l">Risolti</div><div class="v">${state.infortuni.filter(i=>i.dataRientro&&i.dataRientro<isoL(new Date())).length}</div></div>
         </div>
         <div class="card"><div class="tw"><table>
           <thead><tr><th>Giocatore</th><th>Squadra</th><th>Tipo</th><th>Sede</th><th>Gravità</th><th>Data</th><th>Rientro</th><th>Stato</th><th>Azioni</th></tr></thead>
@@ -1858,8 +1858,8 @@ VIEWS.infortuni=function(c){
             <td>${esc(i.sede)}</td>
             <td><span class="bdg ${i.grav.includes('Severe')?'bdg-r':i.grav.includes('Moderate')?'bdg-y':'bdg-gray'}">${esc(i.grav)}</span></td>
             <td>${fmtIt(i.data)}</td>
-            <td>${(()=>{if(!i.dataRientro)return '<em>in corso</em>';const dr=new Date(i.dataRientro),to=new Date(isoL(new Date()));return dr>to?fmtIt(i.dataRientro)+' <span style="font-size:10px;color:var(--g500)">(previsto)</span>':fmtIt(i.dataRientro)})()}</td>
-            <td>${(()=>{if(!i.dataRientro)return '<span class="bdg bdg-r">In corso</span>';const dr=new Date(i.dataRientro),to=new Date(isoL(new Date()));return dr>to?'<span class="bdg bdg-y">In corso</span>':'<span class="bdg bdg-g">Risolto</span>'})()}</td>
+            <td>${(()=>{if(!i.dataRientro)return '<em>in corso</em>';return i.dataRientro>=isoL(new Date())?fmtIt(i.dataRientro)+' <span style="font-size:10px;color:var(--g500)">(previsto)</span>':fmtIt(i.dataRientro)})()}</td>
+            <td>${(()=>{if(!i.dataRientro)return '<span class="bdg bdg-r">In corso</span>';return i.dataRientro>=isoL(new Date())?'<span class="bdg bdg-y">In corso</span>':'<span class="bdg bdg-g">Risolto</span>'})()}</td>
             <td><button class="btn btn-sm btn-s" onclick="openInf('${i.id}')">✎</button> <button class="btn btn-sm btn-d" onclick="delInf('${i.id}')">🗑</button></td>
           </tr>`}).join('')}</tbody>
         </table></div></div>`}
