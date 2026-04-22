@@ -1176,15 +1176,25 @@ function renderImpDay(){
   // Map activities to campo slots
   const occupancy={};// key: campoId_HH:MM → activity
   acts.forEach(a=>{
-    const campoId=a.campoId||campi[0].id;
+    let cIds=a.campoIds&&a.campoIds.length?a.campoIds:(a.campoId?[a.campoId]:[]);
+    if(!cIds.length)cIds=[campi[0].id];
+    // Both 11h halves selected → remap to parent 11 campo
+    const halfIds=cIds.filter(id=>{const c=campi.find(x=>x.id===id);return c&&c.tipo==='11h'});
+    const allHalves=campi.filter(c=>c.tipo==='11h');
+    if(halfIds.length>=2&&allHalves.length>=2&&halfIds.length>=allHalves.length){
+      const parent11=campi.find(c=>c.tipo==='11');
+      if(parent11){cIds=cIds.filter(id=>!halfIds.includes(id));if(!cIds.includes(parent11.id))cIds.push(parent11.id)}
+    }
     if(!a.ora)return;
     const[sh,sm]=a.ora.split(':').map(Number);
     const dur=a.durata||60;
     const endMin=sh*60+sm+dur;
-    for(let t=sh*60+sm;t<endMin;t+=FRAC){
-      const hh=Math.floor(t/60),mm=t%60;
-      if(hh>=8&&hh<22){const k=campoId+'_'+pad(hh)+':'+pad(mm);occupancy[k]=a}
-    }
+    cIds.forEach(cid=>{
+      for(let t=sh*60+sm;t<endMin;t+=FRAC){
+        const hh=Math.floor(t/60),mm=t%60;
+        if(hh>=8&&hh<22){const k=cid+'_'+pad(hh)+':'+pad(mm);occupancy[k]=a}
+      }
+    });
   });
   let h='<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr><th style="width:50px;background:#000;color:#fff;padding:4px;position:sticky;left:0;z-index:2">Ora</th>';
   campi.forEach(campo=>{h+=`<th style="background:#000;color:#fff;padding:4px;text-align:center;min-width:120px">${esc(campo.nome)}<br><span style="font-size:9px;opacity:.7">${campo.tipo==='11'?'11v11':campo.tipo==='7'?'7v7':campo.tipo==='11h'?'Metà 11':'Campo'}</span></th>`});
@@ -1211,7 +1221,7 @@ function renderImpDay(){
           const span=Math.max(1,Math.floor((slotEnd-slotStart)/FRAC));
           rendered[act.id+'_'+campo.id]=true;
           const bg=actColor(act.tipo);
-          h+=`<td rowspan="${span}" style="background:${bg};color:#fff;padding:3px 5px;border-radius:3px;vertical-align:top;cursor:pointer;font-size:10px" onclick="openAttivita('${act.id}')"><strong>${esc(act.categoria)} ${groupLabel(act.categoria,act.gruppo)}</strong><br>${esc(act.tipo)} ${act.ora}-${pad(Math.floor(endSlot/60))+':'+pad(endSlot%60)}${act.spogliatoio?'<br>🚿 '+esc(act.spogliatoio):''}</td>`;
+          h+=`<td rowspan="${span}" style="background:${bg};color:#fff;padding:3px 5px;border-radius:3px;vertical-align:top;cursor:pointer;font-size:10px" onclick="openAttivita('${act.id}')"><strong>${esc(act.categoria)} ${groupLabel(act.categoria,act.gruppo)}</strong><br>${esc(act.tipo)}${act.modalita?' ('+esc(act.modalita)+')':''} ${act.ora}-${pad(Math.floor(endSlot/60))+':'+pad(endSlot%60)}${act.spogliatoio?'<br>🚿 '+esc(act.spogliatoio):''}</td>`;
         }else if(!act){
           h+=`<td style="padding:1px;cursor:pointer;border-right:1px solid #f0f0f0" onclick="openAttivita('','${impDay}','${imp.id}','')"></td>`;
         }
@@ -1744,12 +1754,13 @@ function openAttivita(id,dataIso,impId,fascia){
     <div class="ff"><label>Ora inizio</label><input type="time" id="at_or" value="${a.ora}" onchange="calcFascia()"></div>
     <div class="ff"><label>Durata (min)</label><input type="number" id="at_du" value="${a.durata}" onchange="calcFascia()"></div>
     <div class="ff"><label>Ora fine</label><input type="time" id="at_fi" value="${calcOraFine(a.ora,a.durata)}" onchange="calcDurataFromFine()"></div>
-    <div class="ff"><label>Categoria *</label><select id="at_ca" onchange="refreshGruppoSel('at_gr',this.value)">${state.categories.map(x=>`<option ${a.categoria===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="ff"><label>Categoria *</label><select id="at_ca" onchange="refreshGruppoSel('at_gr',this.value);atUpdateModalita()">${state.categories.map(x=>`<option ${a.categoria===x?'selected':''}>${x}</option>`).join('')}</select></div>
     <div class="ff"><label>Gruppo *</label><select id="at_gr">${state.groups.map((g,i)=>`<option value="${g}" ${a.gruppo===g?'selected':''}>${groupLabel(a.categoria,g)}</option>`).join('')}</select></div>
-    <div class="ff"><label>Sede</label><select id="at_sd" onchange="toggleSedeFields()"><option value="casa" ${a.sede==='trasferta'?'':'selected'}>Casa</option><option value="trasferta" ${a.sede==='trasferta'?'selected':''}>Trasferta</option></select></div><div class="ff" id="atImpBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Impianto</label><select id="at_im" onchange="atUpdateCampi()"><option value="">—</option>${state.impianti.map(i=>`<option value="${i.id}" ${a.impiantoId===i.id?'selected':''}>${esc(i.nome)}</option>`).join('')}</select></div><div class="ff" id="atCampoBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Zona di campo</label><select id="at_cp"><option value="">— Qualsiasi —</option>${(()=>{const imp=state.impianti.find(i=>i.id===a.impiantoId);return imp?(imp.campi||[]).map(c=>`<option value="${c.id}" ${a.campoId===c.id?'selected':''}>${esc(c.nome)} (${c.tipo})</option>`).join(''):''})()}</select></div><div id="atTrasBox" style="${a.sede==='trasferta'?'':'display:none'};display:${a.sede==='trasferta'?'flex':'none'};flex-wrap:wrap;gap:10px;width:100%"><div class="ff"><label>Impianto esterno</label><input id="at_ie" list="impEstList" value="${esc(a.impiantoEsterno||'')}" placeholder="Nome stadio/campo" oninput="autoFillImpEst()"><datalist id="impEstList">${(state.impiantiEsterni||[]).map(ie=>`<option value="${esc(ie.nome)}">`).join('')}</datalist></div><div class="ff"><label>Indirizzo</label><input id="at_il" value="${esc(a.luogoLibero||'')}" placeholder="Via, Città (Provincia)"></div></div>
+    <div class="ff"><label>Sede</label><select id="at_sd" onchange="toggleSedeFields()"><option value="casa" ${a.sede==='trasferta'?'':'selected'}>Casa</option><option value="trasferta" ${a.sede==='trasferta'?'selected':''}>Trasferta</option></select></div><div class="ff" id="atImpBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Impianto</label><select id="at_im" onchange="atUpdateCampi()"><option value="">—</option>${state.impianti.map(i=>`<option value="${i.id}" ${a.impiantoId===i.id?'selected':''}>${esc(i.nome)}</option>`).join('')}</select></div><div class="ff full" id="atCampoBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Zona di campo</label><div id="at_cp_list" style="display:flex;flex-wrap:wrap;gap:6px">${(()=>{const imp=state.impianti.find(i=>i.id===a.impiantoId);const cIds=a.campoIds||(a.campoId?[a.campoId]:[]);return imp?(imp.campi||[]).map(c=>'<label style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--g200);border-radius:6px;font-size:11px;cursor:pointer;background:var(--g50)"><input type=checkbox class=at_cp_chk value='+c.id+(cIds.includes(c.id)?' checked':'')+'>'+esc(c.nome)+'</label>').join(''):''})()}</div></div><div id="atTrasBox" style="${a.sede==='trasferta'?'':'display:none'};display:${a.sede==='trasferta'?'flex':'none'};flex-wrap:wrap;gap:10px;width:100%"><div class="ff"><label>Impianto esterno</label><input id="at_ie" list="impEstList" value="${esc(a.impiantoEsterno||'')}" placeholder="Nome stadio/campo" oninput="autoFillImpEst()"><datalist id="impEstList">${(state.impiantiEsterni||[]).map(ie=>`<option value="${esc(ie.nome)}">`).join('')}</datalist></div><div class="ff"><label>Indirizzo</label><input id="at_il" value="${esc(a.luogoLibero||'')}" placeholder="Via, Città (Provincia)"></div></div>
     <div class="ff"><label>Fascia oraria</label><input id="at_fa" value="${a.fascia||(a.ora&&a.durata?a.ora+'-'+calcOraFine(a.ora,a.durata):''
 )}" readonly style="background:var(--g100);cursor:default" placeholder="auto"></div>
     <div class="ff full"><label>Avversario</label><input id="at_av" value="${esc(a.avversario)}"></div>
+    <div class="ff"><label>Modalità</label><input id="at_mo" value="${a.modalita||state.modalitaGioco[a.categoria]||''}" placeholder="es. 9c9"></div>
     <div id="atMatchFields" style="display:${['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)?'flex':'none'};flex-wrap:wrap;gap:10px;width:100%">
       <div class="ff"><label>N. tempi di gioco</label><input type="number" id="at_tg" value="${a.tempiGioco||2}" min="1" max="6"></div>
       <div class="ff"><label>Durata tempo (min)</label><input type="number" id="at_dt" value="${a.durataTempo||20}" min="5" max="45"></div>
@@ -1759,10 +1770,11 @@ function openAttivita(id,dataIso,impId,fascia){
   </div>`,`<button class="btn btn-s" onclick="closeM()">Annulla</button>${id?`<button class="btn btn-d" onclick="delAttivita('${id}')">🗑</button>`:''}<button class="btn btn-p" onclick="saveAttivita('${id||''}')">Salva</button>`);
 }
 function toggleSedeFields(){const v=document.getElementById('at_sd').value;document.getElementById('atImpBox').style.display=v==='trasferta'?'none':'';const cb=document.getElementById('atCampoBox');if(cb)cb.style.display=v==='trasferta'?'none':'';const tb=document.getElementById('atTrasBox');if(tb)tb.style.display=v==='trasferta'?'flex':'none';if(v==='casa')atUpdateCampi()}
-function atUpdateCampi(){const impId=document.getElementById('at_im')?.value;const sel=document.getElementById('at_cp');if(!sel)return;const imp=state.impianti.find(i=>i.id===impId);sel.innerHTML='<option value="">— Qualsiasi —</option>'+(imp?(imp.campi||[]).map(c=>`<option value="${c.id}">${esc(c.nome)} (${c.tipo})</option>`).join(''):'')}
+function atUpdateCampi(){const impId=document.getElementById('at_im')?.value;const box=document.getElementById('at_cp_list');if(!box)return;const imp=state.impianti.find(i=>i.id===impId);box.innerHTML=imp?(imp.campi||[]).map(c=>'<label style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--g200);border-radius:6px;font-size:11px;cursor:pointer;background:var(--g50)"><input type=checkbox class=at_cp_chk value='+c.id+'>'+esc(c.nome)+'</label>').join(''):''}
+function atUpdateModalita(){const cat=document.getElementById('at_ca')?.value;const mo=document.getElementById('at_mo');if(mo&&cat)mo.value=state.modalitaGioco[cat]||''}
 function autoFillImpEst(){const nm=(document.getElementById('at_ie')?.value||'').trim();const found=(state.impiantiEsterni||[]).find(ie=>ie.nome.toLowerCase()===nm.toLowerCase());if(found){const il=document.getElementById('at_il');if(il&&!il.value)il.value=found.indirizzo||''}}
 function saveAttivita(id){
-  const sede=document.getElementById('at_sd')?.value||'casa';const impEst=(document.getElementById('at_ie')?.value||'').trim();const luogoLib=(document.getElementById('at_il')?.value||'').trim();const tipo=document.getElementById('at_ti').value;const isMatch=['Partita','Campionato','Torneo','Amichevole','Test match'].includes(tipo);const data={tipo,data:document.getElementById('at_da').value,ora:document.getElementById('at_or').value,durata:+document.getElementById('at_du').value,categoria:document.getElementById('at_ca').value,gruppo:document.getElementById('at_gr').value,sede,impiantoId:sede==='casa'?(document.getElementById('at_im')?.value||''):'',campoId:sede==='casa'?(document.getElementById('at_cp')?.value||''):'',impiantoEsterno:sede==='trasferta'?impEst:'',luogoLibero:sede==='trasferta'?luogoLib:'',fascia:document.getElementById('at_fa').value,avversario:document.getElementById('at_av').value,tempiGioco:isMatch?+(document.getElementById('at_tg')?.value||2):undefined,durataTempo:isMatch?+(document.getElementById('at_dt')?.value||20):undefined,spogliatoio:(document.getElementById('at_sp')?.value||'').trim(),note:document.getElementById('at_no').value};
+  const sede=document.getElementById('at_sd')?.value||'casa';const impEst=(document.getElementById('at_ie')?.value||'').trim();const luogoLib=(document.getElementById('at_il')?.value||'').trim();const tipo=document.getElementById('at_ti').value;const isMatch=['Partita','Campionato','Torneo','Amichevole','Test match'].includes(tipo);const data={tipo,data:document.getElementById('at_da').value,ora:document.getElementById('at_or').value,durata:+document.getElementById('at_du').value,categoria:document.getElementById('at_ca').value,gruppo:document.getElementById('at_gr').value,sede,impiantoId:sede==='casa'?(document.getElementById('at_im')?.value||''):'',campoIds:sede==='casa'?[...document.querySelectorAll('.at_cp_chk:checked')].map(c=>c.value):[],modalita:(document.getElementById('at_mo')?.value||'').trim(),impiantoEsterno:sede==='trasferta'?impEst:'',luogoLibero:sede==='trasferta'?luogoLib:'',fascia:document.getElementById('at_fa').value,avversario:document.getElementById('at_av').value,tempiGioco:isMatch?+(document.getElementById('at_tg')?.value||2):undefined,durataTempo:isMatch?+(document.getElementById('at_dt')?.value||20):undefined,spogliatoio:(document.getElementById('at_sp')?.value||'').trim(),note:document.getElementById('at_no').value};
   if(!data.data||!data.categoria){toast('Data e Categoria obbligatorie','e');return}
   // Salva nell'archivio impianti esterni se trasferta con nome impianto
   if(sede==='trasferta'&&impEst){if(!state.impiantiEsterni)state.impiantiEsterni=[];const existing=state.impiantiEsterni.find(ie=>ie.nome.toLowerCase()===impEst.toLowerCase());if(!existing)state.impiantiEsterni.push({id:uid(),nome:impEst,indirizzo:luogoLib});else if(luogoLib&&!existing.indirizzo)existing.indirizzo=luogoLib}
