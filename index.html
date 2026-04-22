@@ -2174,6 +2174,9 @@ VIEWS.distinta=function(c){
 };
 let mdS={live:false,t:0,period:1,nPeriods:2,perDur:30,home:0,away:0,roster:[],events:[],opp:[],sede:'casa',clockInt:null,configured:false,matchId:null,cat:'',grp:'',tipo:'Campionato',avv:'',impiantoId:'',impiantoLibero:''};
 let _mdExp=null;
+let _mdArmed='tiriP';
+let _mdCorr=false;
+const MD_EV={tiriP:{lbl:'✅ Tiro',log:'🎯 Tiro in porta',bg:'#16a34a'},passC:{lbl:'✅ Pass',log:'→ Pass riuscito',bg:'#16a34a'},drR:{lbl:'✅ Dribb',log:'↻ Dribb riuscito',bg:'#16a34a'},gol:{lbl:'⚽ Gol',log:'⚽ Gol',bg:'#16a34a'},assist:{lbl:'🅰 Assist',log:'🅰 Assist',bg:'#2563eb'},tiriF:{lbl:'❌ Tiro',log:'🎯 Tiro fuori',bg:'#dc2626'},passF:{lbl:'❌ Pass',log:'→ Pass sbagliato',bg:'#dc2626'},drF:{lbl:'❌ Dribb',log:'↻ Dribb perso',bg:'#dc2626'}};
 VIEWS.matchday=function(c){
   const imp=state.impianti.find(i=>i.id===mdS.impiantoId);
   c.innerHTML=`
@@ -2206,22 +2209,32 @@ VIEWS.matchday=function(c){
         </div>
       </div>
 
-      <div class="card" style="padding:8px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-        <span style="font-size:12px;font-weight:700">Tempo:</span>
-        <select id="mdPerSel" onchange="mdS.period=+this.value;document.getElementById('mdPer').textContent='Tempo '+mdS.period+' di '+mdS.nPeriods" style="font-size:15px;padding:6px 14px;font-weight:700;border-radius:6px;border:2px solid var(--blue)">
-          ${Array.from({length:mdS.nPeriods},(_,i)=>`<option value="${i+1}" ${mdS.period===i+1?'selected':''}>T${i+1}</option>`).join('')}
-        </select>
-        <span style="font-size:10px;color:var(--g500)">Tap giocatore → registra eventi</span>
+      <div style="background:#fff;border-radius:10px;padding:8px;margin-bottom:8px;border:2px solid var(--g200)">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <select id="mdPerSel" onchange="mdS.period=+this.value;document.getElementById('mdPer').textContent='Tempo '+mdS.period+' di '+mdS.nPeriods" style="font-size:13px;padding:4px 10px;font-weight:700;border-radius:6px;border:2px solid var(--blue)">
+            ${Array.from({length:mdS.nPeriods},(_,i)=>`<option value="${i+1}" ${mdS.period===i+1?'selected':''}>T${i+1}</option>`).join('')}
+          </select>
+          <span id="mdArmedLbl" style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;color:#fff;background:#16a34a">✅ Tiro</span>
+          <div style="flex:1"></div>
+          <button id="mdCorrBtn" style="padding:4px 10px;border:2px solid var(--g300);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;background:var(--g50);color:var(--g600);touch-action:manipulation" onclick="_mdCorr=!_mdCorr;mdRenderEvBar();mdRenderRoster()">↩ Correggi</button>
+          <button style="padding:4px 10px;border:2px solid var(--g300);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;background:var(--g50);color:var(--g600);touch-action:manipulation" onclick="mdSubModal()">🔄 Sost.</button>
+        </div>
+        <div id="mdEvBar"></div>
       </div>
 
-      <div class="card" style="margin-bottom:8px">
-        <div class="card-h"><h2 style="font-size:14px">🟦 In campo <span class="pl" id="mdInN">0</span></h2></div>
+      <div style="background:#fff;border-radius:10px;padding:8px;margin-bottom:8px;border:2px solid var(--g200)">
+        <div style="display:flex;align-items:center;margin-bottom:6px">
+          <h2 style="font-size:13px;margin:0">🟦 In campo <span class="pl" id="mdInN">0</span></h2>
+        </div>
         <div id="mdIn"></div>
       </div>
-      <div class="card">
-        <div class="card-h"><h2 style="font-size:14px">⚪ Panchina <span class="pl" id="mdBnN">0</span></h2></div>
-        <div id="mdBn"></div>
-      </div>
+
+      <details style="background:#fff;border-radius:10px;margin-bottom:8px;border:2px solid var(--g200)">
+        <summary style="padding:10px;font-size:13px;font-weight:700;cursor:pointer">⚪ Panchina <span class="pl" id="mdBnN">0</span></summary>
+        <div id="mdBn" style="padding:8px"></div>
+      </details>
+
+      <div id="mdLastStrip" style="background:#111;color:#fff;border-radius:10px;padding:8px;margin-bottom:8px;font-size:11px"></div>
 
       <div class="card">
         <div class="card-h"><h2 style="font-size:14px">🔴 Distinta avversaria</h2>
@@ -2237,7 +2250,7 @@ VIEWS.matchday=function(c){
       `:`<div class="es"><div class="ic">⚽</div><h3>Configura la partita</h3><p>Compila il tipo, la categoria, l'avversario e l'impianto, poi clicca "Conferma e carica rosa".</p></div>`}
     </div>
   `;
-  if(mdS.configured){mdRenderRoster();mdRenderOpp();mdRenderEv()}
+  if(mdS.configured){mdRenderEvBar();mdRenderRoster();mdRenderOpp();mdRenderEv()}
 };
 function mdConfigure(){
   if(!mdS.cat)mdS.cat=document.getElementById('md_ca').value;
@@ -2384,70 +2397,64 @@ function mdConfirmRoster(){
   closeM();renderView();
   toast('Formazione confermata ('+roster.filter(r=>r.starter).length+' titolari, '+roster.filter(r=>!r.starter).length+' panchina)','s');
 }
-function mdReset(){if(mdS.configured&&!confirm('Resettare la partita corrente?'))return;clearInterval(mdS.clockInt);mdS={live:false,t:0,period:1,nPeriods:2,perDur:30,home:0,away:0,roster:[],events:[],opp:[],sede:'casa',clockInt:null,configured:false,matchId:null,cat:'',grp:'',tipo:'Campionato',avv:'',impiantoId:'',impiantoLibero:''};_mdExp=null;renderView()}
+function mdReset(){if(mdS.configured&&!confirm('Resettare la partita corrente?'))return;clearInterval(mdS.clockInt);mdS={live:false,t:0,period:1,nPeriods:2,perDur:30,home:0,away:0,roster:[],events:[],opp:[],sede:'casa',clockInt:null,configured:false,matchId:null,cat:'',grp:'',tipo:'Campionato',avv:'',impiantoId:'',impiantoLibero:''};_mdExp=null;_mdArmed='tiriP';_mdCorr=false;renderView()}
 function mdToggleClock(){if(mdS.live){clearInterval(mdS.clockInt);mdS.live=false;document.getElementById('mdP').textContent='▶'}else{mdS.live=true;document.getElementById('mdP').textContent='⏸';mdS.clockInt=setInterval(()=>{mdS.t++;const e=document.getElementById('mdCl');if(e)e.textContent=pad(Math.floor(mdS.t/60))+':'+pad(mdS.t%60)},1000)}}
 function mdNext(){if(mdS.period<mdS.nPeriods){mdS.period++;document.getElementById('mdPer').textContent='T '+mdS.period+'/'+mdS.nPeriods;mdAddEv('▶ Inizio tempo '+mdS.period)}else toast('Già all\'ultimo tempo','w')}
 function mdPrev(){if(mdS.period>1){mdS.period--;document.getElementById('mdPer').textContent='T '+mdS.period+'/'+mdS.nPeriods;mdAddEv('◀ Ripreso tempo '+mdS.period)}else toast('Primo tempo','w')}
+function mdRenderEvBar(){
+  const el=document.getElementById('mdEvBar');if(!el)return;
+  const keys0=['tiriP','passC','drR','gol','assist'];
+  const keys1=['tiriF','passF','drF'];
+  const btn=k=>{const e=MD_EV[k];const sel=_mdArmed===k;return `<button style="flex:1;padding:8px 2px;border:${sel?'3px solid #fff':'2px solid transparent'};border-radius:6px;background:${sel?e.bg:e.bg+'33'};color:${sel?'#fff':e.bg};font-size:11px;font-weight:700;cursor:pointer;outline:${sel?'3px solid '+e.bg:'none'};touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:38px" onclick="mdArm('${k}')">${e.lbl}</button>`};
+  el.innerHTML=`<div style="display:flex;gap:3px;margin-bottom:3px">${keys0.map(btn).join('')}</div><div style="display:flex;gap:3px">${keys1.map(btn).join('')}</div>`;
+  const lbl=document.getElementById('mdArmedLbl');
+  if(lbl){const e=MD_EV[_mdArmed];lbl.textContent=(_mdCorr?'↩ −1 ':'')+(e?e.lbl:_mdArmed);lbl.style.background=_mdCorr?'#6b7280':e.bg}
+  const cb=document.getElementById('mdCorrBtn');
+  if(cb){cb.style.background=_mdCorr?'#dc2626':'var(--g50)';cb.style.color=_mdCorr?'#fff':'var(--g600)';cb.style.borderColor=_mdCorr?'#dc2626':'var(--g300)'}
+}
+function mdArm(k){_mdArmed=k;mdRenderEvBar();mdRenderRoster()}
+function mdTapPlayer(pid){
+  const ev=MD_EV[_mdArmed];if(!ev)return;
+  if(_mdCorr){mdStatDel(pid,_mdArmed);return}
+  mdStatPlus(pid,_mdArmed,ev.log);
+  const el=document.getElementById('mdC_'+pid);
+  if(el){el.style.transform='scale(1.15)';el.style.boxShadow='0 0 14px rgba(0,0,0,.5)';setTimeout(()=>{if(el){el.style.transform='';el.style.boxShadow=''}},200)}
+}
+function mdSubModal(){
+  const roster=mdS.roster;if(!roster.length){toast('Configura prima la rosa','w');return}
+  const _rc={Portiere:'#ea580c','Difensore Centrale':'#dc2626',Terzino:'#dc2626','Esterno Difensivo':'#dc2626',Difensore:'#dc2626','Esterno Offensivo':'#2563eb',Centrocampista:'#2563eb',Mediano:'#2563eb',Regista:'#2563eb',Trequartista:'#2563eb',Ala:'#16a34a',Attaccante:'#16a34a','Seconda Punta':'#16a34a'};
+  const rc=r=>_rc[r]||'#6b7280';
+  let h='<div style="max-height:60vh;overflow-y:auto">';
+  h+='<div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;margin-bottom:4px">IN CAMPO</div>';
+  roster.filter(r=>r.status==='in').forEach(r=>{h+=`<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--g100)"><div style="width:24px;height:24px;border-radius:50%;background:${rc(r.ruolo)};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${r.num}</div><span style="flex:1;font-size:12px;font-weight:600">${esc(r.name)}</span><button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;padding:5px 12px;border-radius:4px" onclick="mdSubOut('${r.pid}');closeM();setTimeout(()=>mdSubModal(),100)">⬇ Esci</button></div>`});
+  h+='<div style="font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;margin:10px 0 4px">PANCHINA</div>';
+  roster.filter(r=>r.status!=='in').forEach(r=>{h+=`<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--g100)"><div style="width:24px;height:24px;border-radius:50%;background:var(--g300);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${r.num}</div><span style="flex:1;font-size:12px;font-weight:600">${esc(r.name)}</span><button class="btn btn-sm" style="background:#16a34a;color:#fff;border:none;padding:5px 12px;border-radius:4px" onclick="mdSubIn('${r.pid}');closeM();setTimeout(()=>mdSubModal(),100)">⬆ Entra</button></div>`});
+  h+='</div>';
+  openM('🔄 Sostituzioni',h,'<button class="btn btn-p" onclick="closeM()">Chiudi</button>');
+}
+function mdRenderLastEv(){
+  const el=document.getElementById('mdLastStrip');if(!el)return;
+  const last=mdS.events.slice(0,3);
+  el.innerHTML=last.length?last.map(e=>`<div style="padding:2px 0;opacity:.9"><span style="opacity:.5;font-size:10px">T${e.period} ${Math.floor(e.t/60)}'</span> ${esc(e.txt)}</div>`).join(''):'<div style="opacity:.4">Nessun evento registrato</div>';
+}
 function mdRenderRoster(){
   const inf=mdS.roster.filter(r=>r.status==='in');
   const bn=mdS.roster.filter(r=>r.status!=='in');
-  document.getElementById('mdInN').textContent=inf.length;
-  document.getElementById('mdBnN').textContent=bn.length;
+  const inN=document.getElementById('mdInN');if(inN)inN.textContent=inf.length;
+  const bnN=document.getElementById('mdBnN');if(bnN)bnN.textContent=bn.length;
   const _rc={Portiere:'#ea580c','Difensore Centrale':'#dc2626',Terzino:'#dc2626','Esterno Difensivo':'#dc2626',Difensore:'#dc2626','Esterno Offensivo':'#2563eb',Centrocampista:'#2563eb',Mediano:'#2563eb',Regista:'#2563eb',Trequartista:'#2563eb',Ala:'#16a34a',Attaccante:'#16a34a','Seconda Punta':'#16a34a'};
-  const rc=r=>_rc[r]||'var(--g400)';
-  const compactRow=(r,inField)=>{
-    const ex=_mdExp===r.pid&&inField;const s=r.stats;
-    const tf=(s.tiri||0)-(s.tiriP||0),pf=(s.passT||0)-(s.passC||0),df=(s.drT||0)-(s.drR||0);
-    let h=`<div style="border-left:4px solid ${rc(r.ruolo)};border:2px solid ${ex?'var(--blue)':'transparent'};border-left:4px solid ${rc(r.ruolo)};border-radius:8px;margin-bottom:3px;overflow:hidden">`;
-    h+=`<div style="display:flex;align-items:center;gap:6px;padding:7px 8px;cursor:pointer;background:${ex?'#dbeafe':'var(--g50)'};-webkit-tap-highlight-color:transparent" onclick="_mdExp=_mdExp==='${r.pid}'?null:'${r.pid}';mdRenderRoster()">`;
-    h+=`<div style="width:24px;height:24px;border-radius:50%;background:${inField?rc(r.ruolo):'var(--g300)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${r.num}</div>`;
-    h+=`<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.name)}</div>`;
-    if(inField)h+=`<div style="font-size:9px;color:var(--g500);font-variant-numeric:tabular-nums">G${s.gol||0} A${s.assist||0} T${s.tiriP||0}/${s.tiri||0} P${s.passC||0}/${s.passT||0} D${s.drR||0}/${s.drT||0}</div>`;
-    h+=`</div>`;
-    if(inField)h+=`<button style="padding:4px 8px;font-size:10px;background:#dc2626;color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();mdSubOut('${r.pid}')">⬇ Esci</button>`;
-    else h+=`<button style="padding:4px 8px;font-size:10px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();mdSubIn('${r.pid}')">${r.status==='out'?'↺ Rientra':'⬆ Entra'}</button>`;
-    h+=`</div>`;
-    if(ex){
-      const bigBtn=(bg,icon,label,count,oc)=>`<button style="flex:1;padding:10px 4px;border:none;border-radius:8px;background:${bg};color:#fff;font-size:12px;font-weight:700;cursor:pointer;min-height:52px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px" onclick="${oc}"><span>${icon} ${label}</span><span style="font-size:20px">${count}</span></button>`;
-      const minBtn=(oc)=>`<button style="width:36px;padding:4px;border:none;border-radius:6px;background:var(--g200);color:#000;font-size:13px;font-weight:700;cursor:pointer;min-height:52px;touch-action:manipulation;display:flex;align-items:center;justify-content:center" onclick="${oc}">−1</button>`;
-      h+=`<div style="padding:8px;background:#f0f7ff;border-top:2px solid var(--blue)">`;
-      // TIRI
-      h+=`<div style="display:flex;gap:3px;margin-bottom:6px"><div style="width:48px;font-size:10px;font-weight:800;display:flex;align-items:center;color:var(--g600)">TIRI</div>`;
-      h+=bigBtn('#16a34a','✅','Porta',s.tiriP||0,`mdStatPlus('${r.pid}','tiriP','🎯 Tiro in porta')`);
-      h+=minBtn(`mdStatDel('${r.pid}','tiriP')`);
-      h+=bigBtn('#dc2626','❌','Fuori',tf,`mdStatPlus('${r.pid}','tiriF','🎯 Tiro fuori')`);
-      h+=minBtn(`mdStatDel('${r.pid}','tiriF')`);
-      h+=`</div>`;
-      // PASSAGGI
-      h+=`<div style="display:flex;gap:3px;margin-bottom:6px"><div style="width:48px;font-size:10px;font-weight:800;display:flex;align-items:center;color:var(--g600)">PASS</div>`;
-      h+=bigBtn('#16a34a','✅','Giusto',s.passC||0,`mdStatPlus('${r.pid}','passC','→ Passaggio riuscito')`);
-      h+=minBtn(`mdStatDel('${r.pid}','passC')`);
-      h+=bigBtn('#dc2626','❌','Sbagliato',pf,`mdStatPlus('${r.pid}','passF','→ Passaggio sbagliato')`);
-      h+=minBtn(`mdStatDel('${r.pid}','passF')`);
-      h+=`</div>`;
-      // DRIBBLING
-      h+=`<div style="display:flex;gap:3px;margin-bottom:6px"><div style="width:48px;font-size:10px;font-weight:800;display:flex;align-items:center;color:var(--g600)">DRIBB</div>`;
-      h+=bigBtn('#16a34a','✅','Riuscito',s.drR||0,`mdStatPlus('${r.pid}','drR','↻ Dribbling riuscito')`);
-      h+=minBtn(`mdStatDel('${r.pid}','drR')`);
-      h+=bigBtn('#dc2626','❌','Perso',df,`mdStatPlus('${r.pid}','drF','↻ Dribbling perso')`);
-      h+=minBtn(`mdStatDel('${r.pid}','drF')`);
-      h+=`</div>`;
-      // GOL
-      h+=`<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center"><div style="width:48px;font-size:10px;font-weight:800;color:var(--g600)">GOL</div>`;
-      h+=`<button style="flex:1;padding:12px;border:none;border-radius:8px;background:#16a34a;color:#fff;font-size:18px;font-weight:900;cursor:pointer;min-height:48px;touch-action:manipulation" onclick="mdStatPlus('${r.pid}','gol','⚽ Gol')">⚽ +1</button>`;
-      h+=`<button style="width:44px;padding:12px;border:none;border-radius:8px;background:var(--g200);color:#000;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;touch-action:manipulation" onclick="mdEvDel('${r.pid}','gol')">−1</button>`;
-      h+=`<span style="font-size:24px;font-weight:900;min-width:32px;text-align:center">${s.gol||0}</span></div>`;
-      // ASSIST
-      h+=`<div style="display:flex;gap:3px;align-items:center"><div style="width:48px;font-size:10px;font-weight:800;color:var(--g600)">ASSIST</div>`;
-      h+=`<button style="flex:1;padding:12px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-size:18px;font-weight:900;cursor:pointer;min-height:48px;touch-action:manipulation" onclick="mdStatPlus('${r.pid}','assist','🅰 Assist')">🅰 +1</button>`;
-      h+=`<button style="width:44px;padding:12px;border:none;border-radius:8px;background:var(--g200);color:#000;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;touch-action:manipulation" onclick="mdEvDel('${r.pid}','assist')">−1</button>`;
-      h+=`<span style="font-size:24px;font-weight:900;min-width:32px;text-align:center">${s.assist||0}</span></div>`;
-      h+=`</div>`;
-    }
-    h+=`</div>`;return h;
-  };
-  document.getElementById('mdIn').innerHTML=inf.map(r=>compactRow(r,true)).join('')||'<p style="color:var(--g500);font-size:12px">Nessuno in campo</p>';
-  document.getElementById('mdBn').innerHTML=bn.map(r=>compactRow(r,false)).join('')||'<p style="color:var(--g500);font-size:12px">Panchina vuota</p>';
+  const rc=r=>_rc[r]||'#6b7280';
+  const bdg=r=>{const s=r.stats;const m={tiriP:s.tiriP||0,tiriF:(s.tiri||0)-(s.tiriP||0),passC:s.passC||0,passF:(s.passT||0)-(s.passC||0),drR:s.drR||0,drF:(s.drT||0)-(s.drR||0),gol:s.gol||0,assist:s.assist||0};return m[_mdArmed]||0};
+  const inEl=document.getElementById('mdIn');
+  if(inEl){
+    inEl.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px';
+    inEl.innerHTML=inf.map(r=>{const b=bdg(r);const s=r.stats;const tot='G'+((s.gol||0))+' A'+((s.assist||0));return `<div id="mdC_${r.pid}" style="text-align:center;padding:10px 2px 6px;border-radius:10px;background:${_mdCorr?'#6b7280':rc(r.ruolo)};color:#fff;cursor:pointer;position:relative;transition:transform .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent;user-select:none;${_mdCorr?'opacity:.85':''}" onclick="mdTapPlayer('${r.pid}')"><div style="font-size:22px;font-weight:900;line-height:1">${r.num}</div><div style="font-size:9px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px">${esc(r.name)}</div><div style="font-size:8px;opacity:.7;margin-top:1px">${tot}</div>${b?`<div style="position:absolute;top:-6px;right:-4px;background:#fff;color:#000;border-radius:50%;min-width:20px;height:20px;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.3);padding:0 3px">${b}</div>`:''}</div>`}).join('')||'<p style="color:var(--g500);font-size:12px;grid-column:1/-1">Nessuno in campo</p>';
+  }
+  const bnEl=document.getElementById('mdBn');
+  if(bnEl){
+    bnEl.innerHTML=bn.map(r=>`<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid var(--g100)"><div style="width:22px;height:22px;border-radius:50%;background:var(--g300);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px">${r.num}</div><span style="flex:1;font-size:12px;font-weight:600">${esc(r.name)}</span><button style="padding:4px 10px;font-size:10px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="mdSubIn('${r.pid}')">${r.status==='out'?'↺ Rientra':'⬆ Entra'}</button></div>`).join('')||'<p style="color:var(--g500);font-size:12px;padding:6px">Panchina vuota</p>';
+  }
+  mdRenderLastEv();
 }
 function mdStatPlus(pid,k,lbl){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;if(k==='tiriP'){r.stats.tiriP=(r.stats.tiriP||0)+1;r.stats.tiri=(r.stats.tiri||0)+1}else if(k==='tiriF'){r.stats.tiri=(r.stats.tiri||0)+1}else if(k==='passC'){r.stats.passC=(r.stats.passC||0)+1;r.stats.passT=(r.stats.passT||0)+1}else if(k==='passF'){r.stats.passT=(r.stats.passT||0)+1}else if(k==='drR'){r.stats.drR=(r.stats.drR||0)+1;r.stats.drT=(r.stats.drT||0)+1}else if(k==='drF'){r.stats.drT=(r.stats.drT||0)+1}else{r.stats[k]=(r.stats[k]||0)+1}mdAddEv(lbl+' · '+r.name);mdRenderRoster()}
 function mdStatDel(pid,k){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;const s=r.stats;if(k==='tiriP'){if((s.tiriP||0)>0){s.tiriP--;s.tiri=Math.max(0,(s.tiri||0)-1);mdAddEv('↩ −1 Tiro porta · '+r.name)}else{toast('Nessun tiro in porta','w');return}}else if(k==='tiriF'){const tf=(s.tiri||0)-(s.tiriP||0);if(tf>0){s.tiri=Math.max(0,(s.tiri||0)-1);mdAddEv('↩ −1 Tiro fuori · '+r.name)}else{toast('Nessun tiro fuori','w');return}}else if(k==='passC'){if((s.passC||0)>0){s.passC--;s.passT=Math.max(0,(s.passT||0)-1);mdAddEv('↩ −1 Pass riuscito · '+r.name)}else{toast('Nessun passaggio riuscito','w');return}}else if(k==='passF'){const pf=(s.passT||0)-(s.passC||0);if(pf>0){s.passT=Math.max(0,(s.passT||0)-1);mdAddEv('↩ −1 Pass sbagliato · '+r.name)}else{toast('Nessun passaggio sbagliato','w');return}}else if(k==='drR'){if((s.drR||0)>0){s.drR--;s.drT=Math.max(0,(s.drT||0)-1);mdAddEv('↩ −1 Dribb riuscito · '+r.name)}else{toast('Nessun dribbling riuscito','w');return}}else if(k==='drF'){const df=(s.drT||0)-(s.drR||0);if(df>0){s.drT=Math.max(0,(s.drT||0)-1);mdAddEv('↩ −1 Dribb perso · '+r.name)}else{toast('Nessun dribbling perso','w');return}}mdRenderRoster()}
