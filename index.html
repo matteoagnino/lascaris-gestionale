@@ -2872,9 +2872,10 @@ function downloadMatchPDF(id){
   doc.save('scheda_'+m.categoria+'_'+m.data+'.pdf');toast('PDF scaricato','s');
 }
 function mdBlankPDFPicker(){
+  const defCat=state.categories[0]||'U6';
   let h='<p style="font-size:12px;color:var(--g500);margin-bottom:8px">Seleziona la categoria e il gruppo per generare la scheda cartacea vuota.</p>';
-  h+=`<div class="fg"><div class="ff"><label>Categoria</label><select id="bp_ca">${state.categories.map(c=>`<option>${c}</option>`).join('')}</select></div>`;
-  h+=`<div class="ff"><label>Gruppo</label><select id="bp_gr">${state.groups.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div>`;
+  h+=`<div class="fg"><div class="ff"><label>Categoria</label><select id="bp_ca" onchange="var c=this.value;document.getElementById('bp_gr').innerHTML=state.groups.map(function(g){return '<option value=\\''+g+'\\'>'+groupLabel(c,g)+'</option>'}).join('')">${state.categories.map(c=>`<option>${c}</option>`).join('')}</select></div>`;
+  h+=`<div class="ff"><label>Gruppo</label><select id="bp_gr">${state.groups.map(g=>`<option value="${g}">${groupLabel(defCat,g)}</option>`).join('')}</select></div></div>`;
   openM('📄 Scarica scheda vuota',h,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="downloadBlankMatchPDF(document.getElementById('bp_ca').value,document.getElementById('bp_gr').value);closeM()">📄 Scarica PDF</button>`);
 }
 function downloadBlankMatchPDF(cat,grp){
