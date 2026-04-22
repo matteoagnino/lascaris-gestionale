@@ -2259,27 +2259,43 @@ VIEWS.matchday=function(c){
   `;
   if(mdS.configured){mdRenderEvBar();mdRenderRoster();mdRenderOpp();mdRenderEv()}
 };
+function mdGetLastMatch(cat){
+  return state.matches.filter(m=>m.categoria===cat).sort((a,b)=>(b.data||'').localeCompare(a.data||''))[0]||null;
+}
 function mdConfigure(){
   if(!mdS.cat)mdS.cat=document.getElementById('md_ca').value;
   if(!mdS.grp)mdS.grp=document.getElementById('md_gr').value;
   mdS.tipo=document.getElementById('md_ti').value;
   mdS.avv=document.getElementById('md_av').value;
   if(mdS.sede==='casa'&&state.impianti.length&&document.getElementById('md_im'))mdS.impiantoId=document.getElementById('md_im').value;
-  // Show selection popup: all players from the category (all groups)
   const allPs=state.players.filter(p=>!p.eliminato&&p.categoria===mdS.cat);
   if(!allPs.length){toast('Nessun giocatore per '+mdS.cat,'w');return}
-  const ROLE_ORDER={Portiere:0,Difensore:1,Centrocampista:2,Attaccante:3};
-  const sortByRole=(arr)=>arr.slice().sort((a,b)=>(ROLE_ORDER[a.ruolo]??9)-(ROLE_ORDER[b.ruolo]??9)||(a.cognome||'').localeCompare(b.cognome||''));
-  const grpPs=sortByRole(allPs.filter(p=>p.gruppo===mdS.grp));
-  const otherPs=sortByRole(allPs.filter(p=>p.gruppo!==mdS.grp));
-  const ROLE_COLORS={Portiere:'#eab308',Difensore:'#2563eb',Centrocampista:'#16a34a',Attaccante:'#dc2626'};
-  let html=`<p style="font-size:12px;color:var(--g500);margin-bottom:10px">Seleziona i giocatori e assegna i numeri di maglia. Ordinati per ruolo: POR → DIF → CC → ATT. I giocatori del gruppo ${groupLabel(mdS.cat,mdS.grp)} sono pre-selezionati.</p>`;
+  // Find last match for this category to pre-fill
+  const lastMatch=mdGetLastMatch(mdS.cat);
+  mdS._lastMatch=lastMatch;
+  const lastRoster=lastMatch?lastMatch.roster||[]:[];
+  const lastPids=new Set(lastRoster.map(r=>r.pid));
+  const lastNumByPid={};lastRoster.forEach(r=>{lastNumByPid[r.pid]=r.num});
+  // Macro-role grouping
+  const MACRO_LBL={P:'PORTIERI',D:'DIFENSORI',C:'CENTROCAMPISTI',A:'ATTACCANTI'};
+  const MACRO_CLR={P:'#ea580c',D:'#dc2626',C:'#2563eb',A:'#16a34a'};
+  const MACRO_ORDER={P:0,D:1,C:2,A:3};
+  const pMacro=p=>{const r=(p.ruoli&&p.ruoli[0])||p.ruolo||'';return ROLE_MACRO[r]||'C'};
+  const sorted=allPs.slice().sort((a,b)=>(MACRO_ORDER[pMacro(a)]??9)-(MACRO_ORDER[pMacro(b)]??9)||(a.cognome||'').localeCompare(b.cognome||''));
+  // Determine pre-checked: if last match exists, check those who played; otherwise check same-group players
+  const hasLast=lastRoster.length>0;
+  let html=`<p style="font-size:12px;color:var(--g500);margin-bottom:10px">Seleziona i giocatori e assegna i numeri di maglia. Raggruppati per ruolo: POR → DIF → CC → ATT.${hasLast?' <strong>Pre-selezionati dalla partita precedente</strong> ('+esc(lastMatch.avversario||'')+' '+lastMatch.home+'-'+lastMatch.away+').':' I giocatori del gruppo '+groupLabel(mdS.cat,mdS.grp)+' sono pre-selezionati.'}</p>`;
   html+=`<div style="display:flex;gap:6px;margin-bottom:10px"><button class="btn btn-s btn-sm" onclick="mdSelAll(true)">Seleziona tutti</button><button class="btn btn-s btn-sm" onclick="mdSelAll(false)">Deseleziona tutti</button></div>`;
   html+=`<div style="max-height:400px;overflow-y:auto">`;
-  const renderP=(p,checked)=>`<div style="padding:6px 8px;border:1px solid var(--g200);border-radius:var(--rs);margin-bottom:4px;display:flex;align-items:center;gap:8px;border-left:3px solid ${ROLE_COLORS[p.ruolo]||'var(--g300)'}"><input type="checkbox" class="md_sel" data-pid="${p.id}" ${checked?'checked':''}><input type="number" class="md_num" data-pid="${p.id}" value="${p.numero||''}" min="1" max="99" style="width:50px;padding:4px;border:1px solid var(--g300);border-radius:4px;text-align:center" placeholder="#"><span style="flex:1;font-size:12px"><strong>${esc(p.cognome)} ${esc(p.nome)}</strong> <span style="color:${ROLE_COLORS[p.ruolo]||'var(--g500)'};font-size:10px;font-weight:600">${esc(p.ruolo)}</span> <span style="color:var(--g400);font-size:10px">${groupLabel(p.categoria,p.gruppo)}</span></span></div>`;
-  const renderRoleGroup=(ps,checked)=>{let lastRole='';let h='';ps.forEach(p=>{if(p.ruolo!==lastRole){lastRole=p.ruolo;h+=`<div style="font-size:10px;font-weight:700;color:${ROLE_COLORS[p.ruolo]||'var(--g500)'};text-transform:uppercase;padding:4px 0;margin-top:${h?'8':'0'}px;border-bottom:1px solid var(--g200)">${esc(p.ruolo)} (${ps.filter(x=>x.ruolo===p.ruolo).length})</div>`}h+=renderP(p,checked)});return h};
-  if(grpPs.length){html+=`<h4 style="font-size:11px;color:var(--g500);margin:8px 0 4px">Gruppo ${groupLabel(mdS.cat,mdS.grp)}</h4>`;html+=renderRoleGroup(grpPs,true)}
-  if(otherPs.length){html+=`<h4 style="font-size:11px;color:var(--g500);margin:12px 0 4px">Altri gruppi</h4>`;html+=renderRoleGroup(otherPs,false)}
+  let curMacro='';
+  sorted.forEach(p=>{
+    const mc=pMacro(p);
+    if(mc!==curMacro){curMacro=mc;html+=`<div style="font-size:10px;font-weight:700;color:${MACRO_CLR[mc]};text-transform:uppercase;padding:6px 0 4px;margin-top:${curMacro?'10':'0'}px;border-bottom:2px solid ${MACRO_CLR[mc]}">${MACRO_LBL[mc]} (${sorted.filter(x=>pMacro(x)===mc).length})</div>`}
+    const checked=hasLast?lastPids.has(p.id):(p.gruppo===mdS.grp);
+    const numVal=lastNumByPid[p.id]||p.numero||'';
+    const ruoloLbl=(p.ruoli&&p.ruoli[0])||p.ruolo||'';
+    html+=`<div style="padding:6px 8px;border:1px solid var(--g200);border-radius:var(--rs);margin-bottom:4px;display:flex;align-items:center;gap:8px;border-left:3px solid ${MACRO_CLR[mc]}"><input type="checkbox" class="md_sel" data-pid="${p.id}" ${checked?'checked':''}><input type="number" class="md_num" data-pid="${p.id}" value="${numVal}" min="1" max="99" style="width:50px;padding:4px;border:1px solid var(--g300);border-radius:4px;text-align:center" placeholder="#"><span style="flex:1;font-size:12px"><strong>${esc(p.cognome)} ${esc(p.nome)}</strong> <span style="color:${MACRO_CLR[mc]};font-size:10px;font-weight:600">${esc(ruoloLbl)}</span> <span style="color:var(--g400);font-size:10px">${groupLabel(p.categoria,p.gruppo)}</span></span></div>`;
+  });
   html+=`</div>`;
   openM('1/2 · Seleziona convocati · '+mdS.cat,html,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="mdConfirmConvocati()">Avanti: formazione ▶</button>`);
 }
@@ -2298,15 +2314,26 @@ function mdConfirmConvocati(){
   const checked=document.querySelectorAll('.md_sel:checked');
   if(!checked.length){toast('Seleziona almeno un giocatore','e');return}
   const convocati=[];let idx=0;
+  const lastMatch=mdS._lastMatch;
+  const lastRoster=lastMatch?lastMatch.roster||[]:[];
+  const lastStarterPids=new Set(lastRoster.filter(r=>r.starter).map(r=>r.pid));
+  const lastNumByPid={};lastRoster.forEach(r=>{lastNumByPid[r.pid]=r.num});
   checked.forEach(cb=>{
     const pid=cb.dataset.pid;const numEl=document.querySelector(`.md_num[data-pid="${pid}"]`);
     const num=numEl?+numEl.value:0;const p=state.players.find(x=>x.id===pid);if(!p)return;
-    convocati.push({pid:p.id,name:p.cognome+' '+p.nome[0]+'.',fullName:p.cognome+' '+p.nome,num:num||(p.numero?+p.numero:idx+1),ruolo:(p.ruoli&&p.ruoli[0])||p.ruolo||'Centrocampista'});
+    convocati.push({pid:p.id,name:p.cognome+' '+p.nome[0]+'.',fullName:p.cognome+' '+p.nome,num:num||(p.numero?+p.numero:idx+1),ruolo:(p.ruoli&&p.ruoli[0])||p.ruolo||'Centrocampista',_wasStarter:lastStarterPids.has(p.id)});
     idx++;
   });
   mdS._convocati=convocati;
-  mdFormState.mdg=mdFormState.mdg||DEFAULT_MDG[mdS.cat]||'9c9';
-  mdFormState.modIdx=0;
+  // Recover module from last match if available
+  if(lastMatch&&lastMatch._mdg){
+    mdFormState.mdg=lastMatch._mdg;
+    const fData=FORMAZIONI[lastMatch._mdg];
+    if(fData&&typeof lastMatch._modIdx==='number'){mdFormState.modIdx=lastMatch._modIdx}else{mdFormState.modIdx=0}
+  }else{
+    mdFormState.mdg=mdFormState.mdg||DEFAULT_MDG[mdS.cat]||'9c9';
+    mdFormState.modIdx=0;
+  }
   mdOpenFormation();
 }
 function mdOpenFormation(){
@@ -2314,16 +2341,23 @@ function mdOpenFormation(){
   const mdg=mdFormState.mdg;const fData=FORMAZIONI[mdg];
   const inField=fData.tit;const hasPor=fData.por;
   const modulo=fData.moduli[mdFormState.modIdx]||fData.moduli[0];
-  const ROLE_ORDER={Portiere:0,Difensore:1,Centrocampista:2,Attaccante:3};
-  const ROLE_COLORS={Portiere:'#eab308',Difensore:'#2563eb',Centrocampista:'#16a34a',Attaccante:'#dc2626'};
-  const sorted=conv.slice().sort((a,b)=>(ROLE_ORDER[a.ruolo]??9)-(ROLE_ORDER[b.ruolo]??9));
+  const MACRO_ORDER={P:0,D:1,C:2,A:3};
+  const MACRO_LBL={P:'PORTIERI',D:'DIFENSORI',C:'CENTROCAMPISTI',A:'ATTACCANTI'};
+  const MACRO_CLR={P:'#ea580c',D:'#dc2626',C:'#2563eb',A:'#16a34a'};
+  const cMacro=c=>{return ROLE_MACRO[c.ruolo]||'C'};
+  const sorted=conv.slice().sort((a,b)=>(MACRO_ORDER[cMacro(a)]??9)-(MACRO_ORDER[cMacro(b)]??9));
   mdS._convocati=sorted;
+  // Determine who is titolare: from last match if available, otherwise nobody pre-selected
+  const lastMatch=mdS._lastMatch;
+  const lastRoster=lastMatch?lastMatch.roster||[]:[];
+  const lastStarterPids=new Set(lastRoster.filter(r=>r.starter).map(r=>r.pid));
+  const hasLastStarters=lastStarterPids.size>0;
   let html=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
     <div style="font-size:11px;font-weight:700">MdG:</div>
     <select id="md_mdg" onchange="mdFormState.mdg=this.value;mdFormState.modIdx=0;mdOpenFormation()" style="font-size:12px;padding:4px 8px">${Object.keys(FORMAZIONI).map(k=>`<option value="${k}" ${k===mdg?'selected':''}>${k}</option>`).join('')}</select>
     <div style="font-size:11px;font-weight:700;margin-left:8px">Modulo:</div>
     <select id="md_mod" onchange="mdFormState.modIdx=+this.value;mdOpenFormation()" style="font-size:12px;padding:4px 8px">${fData.moduli.map((m,i)=>`<option value="${i}" ${i===mdFormState.modIdx?'selected':''}>${m.nome}</option>`).join('')}</select>
-    <div style="font-size:10px;color:var(--g500);margin-left:auto">Titolari: ${inField} ${hasPor?'(con portiere)':'(senza portiere)'}</div>
+    <div style="font-size:10px;color:var(--g500);margin-left:auto">Titolari: ${inField} ${hasPor?'(con portiere)':'(senza portiere)'}${hasLastStarters?' · <em>da partita prec.</em>':''}</div>
   </div>`;
   html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">`;
   html+=`<div style="position:relative;background:#2d6a3f;border-radius:8px;overflow:hidden;aspect-ratio:3/4;border:3px solid #000" id="mdField">
@@ -2337,14 +2371,16 @@ function mdOpenFormation(){
     <div id="mdFieldPlayers" style="position:absolute;top:0;left:0;width:100%;height:100%"></div>
   </div>`;
   html+=`<div style="max-height:420px;overflow-y:auto">`;
-  html+=`<div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;margin-bottom:4px">TITOLARI (seleziona ${inField})</div>`;
+  let curMacro='';
   sorted.forEach((p,i)=>{
-    const isTit=i<inField;
-    html+=`<div style="padding:5px 8px;border:1px solid ${isTit?'#16a34a':'var(--g200)'};border-left:3px solid ${ROLE_COLORS[p.ruolo]||'var(--g300)'};border-radius:var(--rs);margin-bottom:3px;display:flex;align-items:center;gap:6px;cursor:pointer;background:${isTit?'#dcfce7':'var(--g50)'}" onclick="mdToggleTit(${i})">
+    const mc=cMacro(p);
+    if(mc!==curMacro){curMacro=mc;const cnt=sorted.filter(x=>cMacro(x)===mc).length;html+=`<div style="font-size:10px;font-weight:700;color:${MACRO_CLR[mc]};text-transform:uppercase;padding:4px 0;margin-top:${curMacro?'8':'0'}px;border-bottom:2px solid ${MACRO_CLR[mc]}">${MACRO_LBL[mc]} (${cnt})</div>`}
+    const isTit=hasLastStarters?lastStarterPids.has(p.pid):false;
+    html+=`<div style="padding:5px 8px;border:1px solid ${isTit?'#16a34a':'var(--g200)'};border-left:3px solid ${MACRO_CLR[mc]};border-radius:var(--rs);margin-bottom:3px;display:flex;align-items:center;gap:6px;cursor:pointer;background:${isTit?'#dcfce7':'var(--g50)'}" onclick="mdToggleTit(${i})">
       <input type="checkbox" class="md_tit" data-idx="${i}" ${isTit?'checked':''} onclick="event.stopPropagation();mdToggleTit(${i})">
-      <span style="width:20px;height:20px;border-radius:50%;background:${ROLE_COLORS[p.ruolo]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700">${p.num}</span>
+      <span style="width:20px;height:20px;border-radius:50%;background:${MACRO_CLR[mc]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700">${p.num}</span>
       <span style="flex:1;font-size:11px"><strong>${esc(p.name)}</strong></span>
-      <span style="font-size:9px;font-weight:700;color:${ROLE_COLORS[p.ruolo]}">${{Portiere:'POR',Difensore:'DIF',Centrocampista:'CC',Attaccante:'ATT'}[p.ruolo]||''}</span>
+      <span style="font-size:9px;font-weight:700;color:${MACRO_CLR[mc]}">${{P:'POR',D:'DIF',C:'CC',A:'ATT'}[mc]||''}</span>
     </div>`;
   });
   html+=`</div></div>`;
@@ -2364,10 +2400,11 @@ function mdRenderField(){
   const el=document.getElementById('mdFieldPlayers');if(!el)return;
   const boxes=document.querySelectorAll('.md_tit');
   const tits=[];boxes.forEach((b,i)=>{if(b.checked&&mdS._convocati[i])tits.push(mdS._convocati[i])});
-  const ROLE_COLORS={Portiere:'#eab308',Difensore:'#2563eb',Centrocampista:'#16a34a',Attaccante:'#dc2626'};
+  const MACRO_CLR={P:'#ea580c',D:'#dc2626',C:'#2563eb',A:'#16a34a'};
+  const cMacro=c=>{return ROLE_MACRO[c.ruolo]||'C'};
   const positions=mdAutoPositions(tits);
-  el.innerHTML=positions.map((pos,i)=>{const p=tits[i];if(!p)return '';return `<div style="position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);text-align:center;cursor:default">
-    <div style="width:28px;height:28px;border-radius:50%;background:${ROLE_COLORS[p.ruolo]||'#000'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.3);margin:0 auto">${p.num}</div>
+  el.innerHTML=positions.map((pos,i)=>{const p=tits[i];if(!p)return '';const mc=cMacro(p);return `<div style="position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);text-align:center;cursor:default">
+    <div style="width:28px;height:28px;border-radius:50%;background:${MACRO_CLR[mc]||'#000'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.3);margin:0 auto">${p.num}</div>
     <div style="font-size:8px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.7);font-weight:700;white-space:nowrap;margin-top:1px">${esc(p.name)}</div>
   </div>`}).join('');
 }
@@ -2378,17 +2415,13 @@ function mdAutoPositions(tits){
   const pos=[];
   const spread=(count,yPct)=>{for(let j=0;j<count;j++){pos.push({x:count===1?50:(15+j*(70/(Math.max(count-1,1)))),y:yPct})}};
   if(!hasPor){
-    // 3c3: no keeper, all players in a single area
     const nLinee=linee.length;
     linee.forEach((count,li)=>{const y=nLinee===1?50:(75-li*(50/(Math.max(nLinee-1,1))));spread(count,y)});
   }else{
-    // Keeper at bottom
     spread(1,90);
-    // Distribute lines from defense (75%) to attack (15%)
     const nLinee=linee.length;
     linee.forEach((count,li)=>{const y=nLinee===1?50:(75-li*(60/(Math.max(nLinee-1,1))));spread(count,y)});
   }
-  // Map positions to tits (fill as many as available)
   return tits.map((t,i)=>pos[i]||{x:50,y:50});
 }
 function mdConfirmRoster(){
@@ -2625,7 +2658,7 @@ function mdArchive(){
   if(mdS.sede==='casa'){const imp=state.impianti.find(i=>i.id===mdS.impiantoId);if(imp){impNome=imp.nome;impIndirizzo=imp.indirizzo||''}}else{impNome=mdS.impiantoLibero||'';const ie=(state.impiantiEsterni||[]).find(x=>x.nome.toLowerCase()===(impNome||'').toLowerCase());impIndirizzo=ie?ie.indirizzo||'':''}
   // Add to impiantiEsterni archive if trasferta
   if(mdS.sede==='trasferta'&&impNome){if(!state.impiantiEsterni)state.impiantiEsterni=[];const ex=state.impiantiEsterni.find(ie=>ie.nome.toLowerCase()===impNome.toLowerCase());if(!ex)state.impiantiEsterni.push({id:uid(),nome:impNome,indirizzo:impIndirizzo})}
-  const matchData={categoria:mdS.cat,gruppo:mdS.grp,tipo:mdS.tipo,avversario:mdS.avv,sede:mdS.sede,impiantoId:mdS.impiantoId,impiantoEsterno:impNome,impiantoIndirizzo:impIndirizzo,impiantoLibero:mdS.impiantoLibero,home:mdS.home,away:mdS.away,nPeriods:mdS.nPeriods,perDur:mdS.perDur,roster:JSON.parse(JSON.stringify(mdS.roster)),events:[...mdS.events],opp:[...mdS.opp]};
+  const matchData={categoria:mdS.cat,gruppo:mdS.grp,tipo:mdS.tipo,avversario:mdS.avv,sede:mdS.sede,impiantoId:mdS.impiantoId,impiantoEsterno:impNome,impiantoIndirizzo:impIndirizzo,impiantoLibero:mdS.impiantoLibero,home:mdS.home,away:mdS.away,nPeriods:mdS.nPeriods,perDur:mdS.perDur,roster:JSON.parse(JSON.stringify(mdS.roster)),events:[...mdS.events],opp:[...mdS.opp],_mdg:mdFormState.mdg||null,_modIdx:mdFormState.modIdx||0};
   if(mdS._reopenedId){
     const existing=state.matches.find(x=>x.id===mdS._reopenedId);
     if(existing){Object.assign(existing,matchData);const ag=state.attivita.find(a=>a.matchId===mdS._reopenedId);if(ag)ag.note='Risultato: '+mdS.home+'-'+mdS.away;saveStore();toast('Partita aggiornata: '+mdS.home+'-'+mdS.away,'s');mdReset();goto('minutaggi');return}
