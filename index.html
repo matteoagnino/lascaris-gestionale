@@ -2599,9 +2599,13 @@ function mdArchive(){
   if(mdS.sede==='casa'){const imp=state.impianti.find(i=>i.id===mdS.impiantoId);if(imp){impNome=imp.nome;impIndirizzo=imp.indirizzo||''}}else{impNome=mdS.impiantoLibero||'';const ie=(state.impiantiEsterni||[]).find(x=>x.nome.toLowerCase()===(impNome||'').toLowerCase());impIndirizzo=ie?ie.indirizzo||'':''}
   // Add to impiantiEsterni archive if trasferta
   if(mdS.sede==='trasferta'&&impNome){if(!state.impiantiEsterni)state.impiantiEsterni=[];const ex=state.impiantiEsterni.find(ie=>ie.nome.toLowerCase()===impNome.toLowerCase());if(!ex)state.impiantiEsterni.push({id:uid(),nome:impNome,indirizzo:impIndirizzo})}
-  const match={id:uid(),data:today(),categoria:mdS.cat,gruppo:mdS.grp,tipo:mdS.tipo,avversario:mdS.avv,sede:mdS.sede,impiantoId:mdS.impiantoId,impiantoEsterno:impNome,impiantoIndirizzo:impIndirizzo,impiantoLibero:mdS.impiantoLibero,home:mdS.home,away:mdS.away,nPeriods:mdS.nPeriods,perDur:mdS.perDur,roster:JSON.parse(JSON.stringify(mdS.roster)),events:[...mdS.events],opp:[...mdS.opp]};
+  const matchData={categoria:mdS.cat,gruppo:mdS.grp,tipo:mdS.tipo,avversario:mdS.avv,sede:mdS.sede,impiantoId:mdS.impiantoId,impiantoEsterno:impNome,impiantoIndirizzo:impIndirizzo,impiantoLibero:mdS.impiantoLibero,home:mdS.home,away:mdS.away,nPeriods:mdS.nPeriods,perDur:mdS.perDur,roster:JSON.parse(JSON.stringify(mdS.roster)),events:[...mdS.events],opp:[...mdS.opp]};
+  if(mdS._reopenedId){
+    const existing=state.matches.find(x=>x.id===mdS._reopenedId);
+    if(existing){Object.assign(existing,matchData);const ag=state.attivita.find(a=>a.matchId===mdS._reopenedId);if(ag)ag.note='Risultato: '+mdS.home+'-'+mdS.away;saveStore();toast('Partita aggiornata: '+mdS.home+'-'+mdS.away,'s');mdReset();goto('minutaggi');return}
+  }
+  const match={id:uid(),data:today(),...matchData};
   state.matches.push(match);
-  // Also add to agenda as "disputed"
   state.attivita.push({id:uid(),tipo:mdS.tipo,data:today(),ora:'',durata:mdS.nPeriods*mdS.perDur,categoria:mdS.cat,gruppo:mdS.grp,impiantoId:mdS.impiantoId,impiantoEsterno:impNome,luogoLibero:impIndirizzo,avversario:mdS.avv,sede:mdS.sede,note:`Risultato: ${mdS.home}-${mdS.away}`,matchId:match.id,disputata:true});
   saveStore();
   toast('Partita archiviata: '+mdS.home+'-'+mdS.away,'s');
@@ -2618,7 +2622,7 @@ VIEWS.minutaggi=function(c){
   c.innerHTML=`
     <div class="vw">
       <div class="vh"><div><h1>Minutaggi &amp; Partite</h1><div class="sb2">Dettaglio tecnico partite archiviate da Match Day Live</div></div>
-        <div style="display:flex;gap:6px"><button class="btn btn-p" onclick="goto('matchday')">⚽ Nuovo Match Day</button></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-p" onclick="goto('matchday')">⚽ Nuovo Match Day</button><button class="btn btn-s" onclick="mdBlankPDFPicker()">📄 Scheda vuota PDF</button></div>
       </div>
       ${!ms.length?`<div class="es"><div class="ic">⏱</div><h3>Nessuna partita archiviata</h3><p>Quando concludi una partita in Match Day Live e clicchi "Archivia", finirà qui col dettaglio tecnico completo.</p><button class="btn btn-p" onclick="goto('matchday')">Vai a Match Day</button></div>`:`
         <div class="card"><div class="tw"><table>
@@ -2633,7 +2637,7 @@ VIEWS.minutaggi=function(c){
             <td><strong style="color:${m.home>m.away?'var(--green)':m.home<m.away?'var(--red)':'var(--g500)'}">${m.home}-${m.away}</strong></td>
             <td>${totalMin}'</td>
             <td>${m.events.length}</td>
-            <td><button class="btn btn-sm btn-s" onclick="showMatchDetail('${m.id}')">Dettaglio</button> <button class="btn btn-sm btn-d" onclick="delMatch('${m.id}')">🗑</button></td>
+            <td style="white-space:nowrap"><button class="btn btn-sm btn-s" onclick="showMatchDetail('${m.id}')" title="Dettaglio">📋</button> <button class="btn btn-sm btn-s" onclick="editMatchGrid('${m.id}')" title="Modifica griglia">📊</button> <button class="btn btn-sm btn-s" onclick="reopenMatchLive('${m.id}')" title="Riapri nel Live">▶</button> <button class="btn btn-sm btn-s" onclick="downloadMatchPDF('${m.id}')" title="Scarica PDF">📄</button> <button class="btn btn-sm btn-d" onclick="delMatch('${m.id}')" title="Elimina">🗑</button></td>
           </tr>`}).join('')}</tbody>
         </table></div></div>
       ${Object.values(byTeam).map(tm=>minutaggiSummary(tm)).join('')}
@@ -2665,6 +2669,117 @@ function showMatchDetail(id){
   `,`<button class="btn btn-s" onclick="closeM()">Chiudi</button>`);
 }
 function delMatch(id){if(!confirm('Eliminare questa partita archiviata?'))return;state.matches=state.matches.filter(x=>x.id!==id);state.attivita=state.attivita.filter(a=>a.matchId!==id);saveStore();renderView();toast('Eliminata','s')}
+
+// === EDIT MATCH GRID (post-gara) ===
+function editMatchGrid(id){
+  const m=state.matches.find(x=>x.id===id);if(!m)return;
+  let h='<div style="margin-bottom:10px"><div class="fg">';
+  h+=`<div class="ff"><label>Data</label><input type="date" id="eg_da" value="${m.data}"></div>`;
+  h+=`<div class="ff"><label>Tipo</label><select id="eg_ti">${['Campionato','Amichevole','Torneo','Test match'].map(t=>`<option ${m.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>`;
+  h+=`<div class="ff"><label>Avversario</label><input id="eg_av" value="${esc(m.avversario||'')}"></div>`;
+  h+=`<div class="ff"><label>Gol casa</label><input type="number" id="eg_h" value="${m.home}" min="0" style="width:60px"></div>`;
+  h+=`<div class="ff"><label>Gol ospite</label><input type="number" id="eg_a" value="${m.away}" min="0" style="width:60px"></div>`;
+  h+='</div></div>';
+  h+='<div class="tw" style="margin-bottom:10px"><table style="font-size:11px"><thead><tr><th style="min-width:90px">Giocatore</th><th>T/P</th><th>Min</th><th>Tiri✅</th><th>Tiri❌</th><th>Pass✅</th><th>Pass❌</th><th>Dri✅</th><th>Dri❌</th><th>⚽</th><th>🅰</th></tr></thead><tbody>';
+  m.roster.forEach((r,i)=>{const s=r.stats;const tf=(s.tiri||0)-(s.tiriP||0);const pf=(s.passT||0)-(s.passC||0);const df=(s.drT||0)-(s.drR||0);const inp=(cls,v)=>`<input type="number" class="${cls}" data-i="${i}" value="${v}" min="0" style="width:42px;padding:3px;text-align:center;border:1px solid var(--g300);border-radius:4px">`;
+    h+=`<tr><td><strong>${esc(r.name)}</strong></td><td><select class="eg_tp" data-i="${i}" style="font-size:10px;padding:2px"><option value="1" ${r.starter?'selected':''}>Tit</option><option value="0" ${!r.starter?'selected':''}>Pan</option></select></td><td>${inp('eg_mn',r.minutes)}</td><td>${inp('eg_tP',s.tiriP||0)}</td><td>${inp('eg_tF',tf)}</td><td>${inp('eg_pC',s.passC||0)}</td><td>${inp('eg_pF',pf)}</td><td>${inp('eg_dR',s.drR||0)}</td><td>${inp('eg_dF',df)}</td><td>${inp('eg_go',s.gol||0)}</td><td>${inp('eg_as',s.assist||0)}</td></tr>`;
+  });
+  h+='</tbody></table></div>';
+  h+=`<div style="padding:8px;background:var(--g50);border-radius:var(--rs)"><label style="font-size:12px;font-weight:700">📎 Carica scheda cartacea (foto/PDF)</label><input type="file" id="eg_file" accept="image/*,application/pdf" style="margin-top:4px;font-size:11px;display:block">${m.attachment?`<div style="margin-top:4px;font-size:11px"><a href="${m.attachment}" download="${esc(m.attachmentName||'scheda')}" style="color:var(--blue);text-decoration:underline">📄 ${esc(m.attachmentName||'Allegato presente')} — scarica</a></div>`:''}</div>`;
+  openM('📊 Modifica griglia · '+m.categoria+' vs '+(m.avversario||'—'),h,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveMatchGrid('${id}')">💾 Salva modifiche</button>`);
+}
+function saveMatchGrid(id){
+  const m=state.matches.find(x=>x.id===id);if(!m)return;
+  m.data=document.getElementById('eg_da').value;
+  m.tipo=document.getElementById('eg_ti').value;
+  m.avversario=document.getElementById('eg_av').value;
+  m.home=+document.getElementById('eg_h').value;
+  m.away=+document.getElementById('eg_a').value;
+  m.roster.forEach((r,i)=>{
+    const v=k=>+(document.querySelector(`.${k}[data-i="${i}"]`)?.value||0);
+    r.starter=document.querySelector(`.eg_tp[data-i="${i}"]`)?.value==='1';
+    r.minutes=v('eg_mn');
+    const tP=v('eg_tP'),tF=v('eg_tF');r.stats.tiriP=tP;r.stats.tiri=tP+tF;
+    const pC=v('eg_pC'),pF=v('eg_pF');r.stats.passC=pC;r.stats.passT=pC+pF;
+    const dR=v('eg_dR'),dF=v('eg_dF');r.stats.drR=dR;r.stats.drT=dR+dF;
+    r.stats.gol=v('eg_go');r.stats.assist=v('eg_as');
+  });
+  const ag=state.attivita.find(a=>a.matchId===id);
+  if(ag)ag.note='Risultato: '+m.home+'-'+m.away;
+  const f=document.getElementById('eg_file')?.files[0];
+  if(f){const rd=new FileReader();rd.onload=e=>{m.attachment=e.target.result;m.attachmentName=f.name;saveStore();closeM();renderView();toast('Salvato con allegato','s')};rd.readAsDataURL(f)}
+  else{saveStore();closeM();renderView();toast('Modifiche salvate','s')}
+}
+
+// === REOPEN MATCH IN LIVE ===
+function reopenMatchLive(id){
+  const m=state.matches.find(x=>x.id===id);if(!m)return;
+  if(!confirm('Riaprire nel Match Day Live? Potrai modificare formazione, sostituzioni ed eventi, poi ri-archiviare.'))return;
+  clearInterval(mdS.clockInt);
+  mdS={live:false,t:0,period:m.nPeriods,nPeriods:m.nPeriods,perDur:m.perDur,home:m.home,away:m.away,roster:JSON.parse(JSON.stringify(m.roster)),events:m.events?[...m.events]:[],opp:m.opp?[...m.opp]:[],sede:m.sede||'casa',clockInt:null,configured:true,matchId:m.id,cat:m.categoria,grp:m.gruppo,tipo:m.tipo,avv:m.avversario||'',impiantoId:m.impiantoId||'',impiantoLibero:m.impiantoLibero||m.impiantoEsterno||'',_reopenedId:id};
+  _mdExp=null;_mdArmed='tiriP';_mdCorr=false;
+  goto('matchday');toast('Partita ricaricata nel Live · modifica e ri-archivia','s');
+}
+
+// === MATCH PDF (printable grid) ===
+function downloadMatchPDF(id){
+  const m=state.matches.find(x=>x.id===id);if(!m)return;
+  if(!window.jspdf){toast('Libreria PDF non caricata','e');return}
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'landscape'});
+  pdfHeader(doc,m.categoria+' '+groupLabel(m.categoria,m.gruppo)+' vs '+(m.avversario||'—')+' · '+fmtIt(m.data));
+  let y=48;
+  doc.setFontSize(10);doc.text('Tipo: '+m.tipo+'  |  Sede: '+(m.sede||'casa')+'  |  Risultato: '+m.home+'-'+m.away,15,y);y+=8;
+  const cols=['Giocatore','#','T/P','Min','Tiri✅','Tiri❌','Pass✅','Pass❌','Dri✅','Dri❌','Gol','Ass'];
+  const cw=[52,12,14,16,18,18,18,18,18,18,14,14];
+  let x=15;
+  doc.setFillColor(0);doc.rect(15,y,cw.reduce((a,b)=>a+b,0),7,'F');
+  doc.setTextColor(255);doc.setFontSize(8);doc.setFont(undefined,'bold');
+  cols.forEach((c,i)=>{doc.text(c,x+2,y+5);x+=cw[i]});
+  doc.setTextColor(0);y+=7;doc.setFont(undefined,'normal');
+  m.roster.forEach((r,ri)=>{
+    const s=r.stats;const tf=(s.tiri||0)-(s.tiriP||0);const pf=(s.passT||0)-(s.passC||0);const df=(s.drT||0)-(s.drR||0);
+    const vals=[r.name,''+r.num,r.starter?'T':'P',''+r.minutes,''+(s.tiriP||0),''+(tf),''+(s.passC||0),''+(pf),''+(s.drR||0),''+(df),''+(s.gol||0),''+(s.assist||0)];
+    if(ri%2===0){doc.setFillColor(245);doc.rect(15,y,cw.reduce((a,b)=>a+b,0),6,'F')}
+    x=15;doc.setFontSize(7);
+    vals.forEach((v,i)=>{doc.text(v,x+2,y+4.5);x+=cw[i]});
+    y+=6;
+    if(y>185){doc.addPage({orientation:'landscape'});y=15}
+  });
+  doc.save('scheda_'+m.categoria+'_'+m.data+'.pdf');toast('PDF scaricato','s');
+}
+function mdBlankPDFPicker(){
+  let h='<p style="font-size:12px;color:var(--g500);margin-bottom:8px">Seleziona la categoria e il gruppo per generare la scheda cartacea vuota.</p>';
+  h+=`<div class="fg"><div class="ff"><label>Categoria</label><select id="bp_ca">${state.categories.map(c=>`<option>${c}</option>`).join('')}</select></div>`;
+  h+=`<div class="ff"><label>Gruppo</label><select id="bp_gr">${state.groups.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div>`;
+  openM('📄 Scarica scheda vuota',h,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="downloadBlankMatchPDF(document.getElementById('bp_ca').value,document.getElementById('bp_gr').value);closeM()">📄 Scarica PDF</button>`);
+}
+function downloadBlankMatchPDF(cat,grp){
+  if(!window.jspdf){toast('Libreria PDF non caricata','e');return}
+  const players=state.players.filter(p=>!p.eliminato&&p.categoria===cat).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||''));
+  if(!players.length){toast('Nessun giocatore per '+cat,'w');return}
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'landscape'});
+  pdfHeader(doc,cat+' '+groupLabel(cat,grp)+' · Scheda raccolta dati gara');
+  let y=48;
+  doc.setFontSize(10);doc.text('Data: ________  Avversario: ________________  Risultato: ___-___  Tipo: ________',15,y);y+=10;
+  const cols=['Giocatore','#','T/P','Min','Tiri✅','Tiri❌','Pass✅','Pass❌','Dri✅','Dri❌','Gol','Ass'];
+  const cw=[52,12,14,16,18,18,18,18,18,18,14,14];
+  let x=15;
+  doc.setFillColor(0);doc.rect(15,y,cw.reduce((a,b)=>a+b,0),7,'F');
+  doc.setTextColor(255);doc.setFontSize(8);doc.setFont(undefined,'bold');
+  cols.forEach((c,i)=>{doc.text(c,x+2,y+5);x+=cw[i]});
+  doc.setTextColor(0);y+=7;doc.setFont(undefined,'normal');
+  players.forEach((p,ri)=>{
+    if(ri%2===0){doc.setFillColor(245);doc.rect(15,y,cw.reduce((a,b)=>a+b,0),6,'F')}
+    x=15;doc.setFontSize(7);
+    doc.text((p.cognome||'')+' '+(p.nome||'')[0]+'.',x+2,y+4.5);x+=cw[0];
+    doc.text(''+(p.numero||''),x+2,y+4.5);x+=cw[1];
+    for(let i=2;i<cols.length;i++){x+=cw[i]}
+    doc.setDrawColor(200);doc.rect(15,y,cw.reduce((a,b)=>a+b,0),6);
+    y+=6;
+    if(y>185){doc.addPage({orientation:'landscape'});y=15}
+  });
+  doc.save('scheda_vuota_'+cat+'_'+grp+'.pdf');toast('Scheda vuota scaricata','s');
+}
 
 /* =============================================================
    VIEW: AGENDA PARTITE
