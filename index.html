@@ -1236,24 +1236,23 @@ function openImp(id){
     <div class="ff full"><label>Nome *</label><input id="im_nm" value="${esc(imp.nome)}"></div>
     <div class="ff full"><label>Indirizzo *</label><input id="im_in" value="${esc(imp.indirizzo)}"></div>
     <div class="ff full"><label style="font-weight:700">Campi</label>
-      <div id="im_campi">${imp.campi.map((c,i)=>`<div style="display:flex;gap:4px;margin-bottom:4px;align-items:center"><input id="im_c${i}_n" value="${esc(c.nome)}" placeholder="Nome campo" style="flex:1"><select id="im_c${i}_t"><option value="11" ${c.tipo==='11'?'selected':''}>Campo 11</option><option value="11h" ${c.tipo==='11h'?'selected':''}>Metà 11</option><option value="7" ${c.tipo==='7'?'selected':''}>Campo 7</option></select></div>`).join('')}</div>
+      <div id="im_campi">${imp.campi.map((c,i)=>`<div class="im_campo_row" style="display:flex;gap:4px;margin-bottom:4px;align-items:center"><input class="im_cn" value="${esc(c.nome)}" placeholder="Nome campo" style="flex:1"><select class="im_ct"><option value="11" ${c.tipo==='11'?'selected':''}>Campo 11</option><option value="11h" ${c.tipo==='11h'?'selected':''}>Metà 11</option><option value="7" ${c.tipo==='7'?'selected':''}>Campo 7</option></select><button class="btn btn-sm btn-d" style="padding:2px 6px" onclick="this.closest('.im_campo_row').remove()" title="Rimuovi campo">🗑</button></div>`).join('')}</div>
       <button class="btn btn-s btn-sm" onclick="addImpCampo()" style="margin-top:4px">+ Aggiungi campo</button>
     </div>
     <div class="ff full"><label style="font-weight:700">Spogliatoi</label>
-      <div id="im_spog">${imp.spogliatoi.map((s,i)=>`<div style="display:flex;gap:4px;margin-bottom:4px"><input id="im_s${i}" value="${esc(s)}" placeholder="Spogliatoio" style="flex:1"></div>`).join('')}</div>
+      <div id="im_spog">${imp.spogliatoi.map((s,i)=>`<div class="im_spog_row" style="display:flex;gap:4px;margin-bottom:4px;align-items:center"><input class="im_sn" value="${esc(s)}" placeholder="Spogliatoio" style="flex:1"><button class="btn btn-sm btn-d" style="padding:2px 6px" onclick="this.closest('.im_spog_row').remove()" title="Rimuovi spogliatoio">🗑</button></div>`).join('')}</div>
       <button class="btn btn-s btn-sm" onclick="addImpSpog()" style="margin-top:4px">+ Aggiungi spogliatoio</button>
     </div>
   </div>`,`<button class="btn btn-s" onclick="closeM()">Annulla</button>${id?`<button class="btn btn-d" onclick="delImp('${id}')">🗑</button>`:''}<button class="btn btn-p" onclick="saveImp('${id||''}')">Salva</button>`);
-  window._impCampiCount=imp.campi.length;window._impSpogCount=imp.spogliatoi.length;
 }
-function addImpCampo(){const n=window._impCampiCount||0;const d=document.getElementById('im_campi');d.insertAdjacentHTML('beforeend',`<div style="display:flex;gap:4px;margin-bottom:4px;align-items:center"><input id="im_c${n}_n" placeholder="Nome campo" style="flex:1"><select id="im_c${n}_t"><option value="11">Campo 11</option><option value="11h">Metà 11</option><option value="7">Campo 7</option></select></div>`);window._impCampiCount=n+1}
-function addImpSpog(){const n=window._impSpogCount||0;const d=document.getElementById('im_spog');d.insertAdjacentHTML('beforeend',`<div style="display:flex;gap:4px;margin-bottom:4px"><input id="im_s${n}" placeholder="Spogliatoio" style="flex:1"></div>`);window._impSpogCount=n+1}
+function addImpCampo(){const d=document.getElementById('im_campi');d.insertAdjacentHTML('beforeend',`<div class="im_campo_row" style="display:flex;gap:4px;margin-bottom:4px;align-items:center"><input class="im_cn" placeholder="Nome campo" style="flex:1"><select class="im_ct"><option value="11">Campo 11</option><option value="11h">Metà 11</option><option value="7">Campo 7</option></select><button class="btn btn-sm btn-d" style="padding:2px 6px" onclick="this.closest('.im_campo_row').remove()" title="Rimuovi campo">🗑</button></div>`)}
+function addImpSpog(){const d=document.getElementById('im_spog');d.insertAdjacentHTML('beforeend',`<div class="im_spog_row" style="display:flex;gap:4px;margin-bottom:4px;align-items:center"><input class="im_sn" placeholder="Spogliatoio" style="flex:1"><button class="btn btn-sm btn-d" style="padding:2px 6px" onclick="this.closest('.im_spog_row').remove()" title="Rimuovi spogliatoio">🗑</button></div>`)}
 function saveImp(id){
   const nome=document.getElementById('im_nm').value.trim();
   const ind=document.getElementById('im_in').value.trim();
   if(!nome||!ind){toast('Nome e indirizzo obbligatori','e');return}
-  const campi=[];for(let i=0;i<(window._impCampiCount||1);i++){const n=document.getElementById('im_c'+i+'_n');const t=document.getElementById('im_c'+i+'_t');if(n&&n.value.trim())campi.push({id:uid(),nome:n.value.trim(),tipo:t?t.value:'11'})}
-  const spogliatoi=[];for(let i=0;i<(window._impSpogCount||0);i++){const s=document.getElementById('im_s'+i);if(s&&s.value.trim())spogliatoi.push(s.value.trim())}
+  const campi=[];document.querySelectorAll('.im_campo_row').forEach(row=>{const n=row.querySelector('.im_cn');const t=row.querySelector('.im_ct');if(n&&n.value.trim())campi.push({id:uid(),nome:n.value.trim(),tipo:t?t.value:'11'})});
+  const spogliatoi=[];document.querySelectorAll('.im_spog_row').forEach(row=>{const s=row.querySelector('.im_sn');if(s&&s.value.trim())spogliatoi.push(s.value.trim())});
   if(!campi.length)campi.push({id:uid(),nome:'Campo 1',tipo:'11'});
   const data={nome,indirizzo:ind,campi,spogliatoi,fasce:['16:00-18:00','18:00-20:00','20:00-22:00']};
   if(id){const imp=state.impianti.find(x=>x.id===id);Object.assign(imp,data);toast('Aggiornato','s')}
