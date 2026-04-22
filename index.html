@@ -1450,7 +1450,7 @@ let _ruoliOrder=[];
 function initRuoliOrder(ruoli){_ruoliOrder=[...(ruoli||[])]}
 function updateRuoliUI(){const checks=[...document.querySelectorAll('input[name="pl_ruoli"]')];const nowChecked=checks.filter(c=>c.checked).map(c=>c.value);const added=nowChecked.filter(r=>!_ruoliOrder.includes(r));const removed=_ruoliOrder.filter(r=>!nowChecked.includes(r));_ruoliOrder=_ruoliOrder.filter(r=>!removed.includes(r));added.forEach(r=>_ruoliOrder.push(r));checks.forEach(c=>{const l=c.parentElement;const mc=ROLE_MACRO[c.value]||'?';const col=ROLE_COLORS[mc]||'var(--g400)';const isPrimary=_ruoliOrder.length>0&&_ruoliOrder[0]===c.value;if(isPrimary){l.style.background=col;l.style.color='#fff';l.style.border='2px solid '+col}else if(c.checked){l.style.background='var(--g700)';l.style.color='#fff';l.style.border='2px solid transparent'}else{l.style.background='var(--g100)';l.style.color='inherit';l.style.border='2px solid transparent'}})}
 function openPlayer(id){
-  const p=id?state.players.find(x=>x.id===id):{id:null,nome:'',cognome:'',nascita:'',nascitaISO:'',comuneNascita:'',cf:'',indirizzo:'',comuneResidenza:'',categoria:state.categories[state.categories.length-1],gruppo:'A',ruoli:['Centrocampista'],piede:'Destro',tessera:'',taglia:'M',genitore1:{nome:'',tel:'',email:''},note:'',visitaMedica:{},docIdentita:{}};
+  const p=id?state.players.find(x=>x.id===id):{id:null,nome:'',cognome:'',nascita:'',nascitaISO:'',comuneNascita:'',cf:'',indirizzo:'',comuneResidenza:'',categoria:state.categories[state.categories.length-1],gruppo:'A',ruoli:['Centrocampista'],piede:'Destro',tessera:'',matricola:'',numero:'',taglia:'M',genitore1:{nome:'',tel:'',email:''},note:'',visitaMedica:{},docIdentita:{}};
   initRuoliOrder(p.ruoli||[p.ruolo]);
   openM(id?`${p.cognome} ${p.nome}`:'Nuovo giocatore',`
     <div class="tabs"><div class="tab on" onclick="pTab(event,'a')">Anagrafica</div><div class="tab" onclick="pTab(event,'f')">Famiglia</div><div class="tab" onclick="pTab(event,'s')">Scadenze</div>${id?'<div class="tab" onclick="pTab(event,\'d\')">📄 Documenti</div><div class="tab" onclick="pTab(event,\'r\')">Rimuovi</div>':''}</div>
@@ -1467,6 +1467,8 @@ function openPlayer(id){
       <div class="ff full"><label>Ruolo/i <span style="font-size:9px;color:var(--g500)">(il primo selezionato = ruolo principale)</span></label><div id="pl_ru_box" style="display:flex;flex-wrap:wrap;gap:4px;padding:4px 0">${PLAYER_ROLES.map(r=>{const ruoli=p.ruoli||[p.ruolo]||[];const checked=ruoli.includes(r);const isPrimary=ruoli[0]===r;const mc=ROLE_MACRO[r]||'?';const col=ROLE_COLORS[mc]||'var(--g400)';return '<label style="font-size:11px;display:flex;align-items:center;gap:2px;background:'+(isPrimary?col:(checked?'var(--g700)':'var(--g100)'))+';color:'+(checked?'#fff':'inherit')+';padding:2px 8px;border-radius:12px;cursor:pointer;border:'+(isPrimary?'2px solid '+col:'2px solid transparent')+'"><input type="checkbox" name="pl_ruoli" value="'+r+'" '+(checked?'checked':'')+' style="display:none" onchange="updateRuoliUI()">'+r+'</label>'}).join('')}</div></div>
       <div class="ff"><label>Piede</label><select id="pl_pi"><option ${p.piede==='Destro'?'selected':''}>Destro</option><option ${p.piede==='Sinistro'?'selected':''}>Sinistro</option><option ${p.piede==='Ambidestro'?'selected':''}>Ambidestro</option></select></div>
       <div class="ff"><label>N° tessera FIGC</label><input id="pl_te" value="${esc(p.tessera)}"></div>
+      <div class="ff"><label>Matricola FIGC</label><input id="pl_ma" value="${esc(p.matricola||'')}"></div>
+      <div class="ff"><label>N° maglia</label><input type="number" id="pl_nu" value="${p.numero||''}" min="1" max="99" placeholder="Es. 10"></div>
       <div class="ff"><label>Taglia</label><select id="pl_ta"><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option></select></div>
     </div></div>
     <div class="tc" id="p-f"><div class="fg">
@@ -1514,6 +1516,8 @@ function savePlayer(id){
     ruoli:_ruoliOrder.length?[..._ruoliOrder]:[...document.querySelectorAll('input[name="pl_ruoli"]:checked')].map(c=>c.value),
     piede:document.getElementById('pl_pi').value,
     tessera:document.getElementById('pl_te').value,
+    matricola:document.getElementById('pl_ma').value,
+    numero:document.getElementById('pl_nu').value?+document.getElementById('pl_nu').value:'',
     taglia:document.getElementById('pl_ta').value,
     genitore1:{nome:document.getElementById('pl_g1').value,tel:document.getElementById('pl_g2').value,email:document.getElementById('pl_g3').value},
     note:document.getElementById('pl_no').value
@@ -1579,7 +1583,7 @@ function filterAnag(){
 function exportPlayers(fmt){
   const ps=state.players.filter(p=>!p.eliminato);
   if(!ps.length){toast('Nessun dato','w');return}
-  const rows=ps.map(p=>({Cognome:p.cognome,Nome:p.nome,'Data nascita':p.nascita,'Comune nascita':p.comuneNascita||'',CF:p.cf||'',Indirizzo:p.indirizzo||'',Comune:p.comuneResidenza||'',Categoria:p.categoria,Gruppo:groupLabel(p.categoria,p.gruppo),Ruolo:(p.ruoli||[p.ruolo]).join(', '),Piede:p.piede,'Tessera':p.tessera||'',Genitore:p.genitore1.nome,'Tel':p.genitore1.tel,'Email':p.genitore1.email}));
+  const rows=ps.map(p=>({Cognome:p.cognome,Nome:p.nome,'Data nascita':p.nascita,'Comune nascita':p.comuneNascita||'',CF:p.cf||'',Indirizzo:p.indirizzo||'',Comune:p.comuneResidenza||'',Categoria:p.categoria,Gruppo:groupLabel(p.categoria,p.gruppo),Ruolo:(p.ruoli||[p.ruolo]).join(', '),Piede:p.piede,'Tessera':p.tessera||'','Matricola FIGC':p.matricola||'','N° Maglia':p.numero||'',Genitore:p.genitore1.nome,'Tel':p.genitore1.tel,'Email':p.genitore1.email}));
   if(fmt==='xlsx'&&window.XLSX){
     const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Anagrafica');XLSX.writeFile(wb,'lascaris_anagrafica_'+today()+'.xlsx');
   }else{
@@ -1590,8 +1594,8 @@ function exportPlayers(fmt){
 }
 function downloadPlayerTemplate(){
   if(!window.XLSX){toast('Libreria Excel non caricata','e');return}
-  const headers=['Cognome','Nome','Data nascita (GG/MM/AAAA)','Comune nascita','Codice Fiscale','Indirizzo residenza','Comune residenza','Categoria','Gruppo','Ruolo principale','Piede','Tessera FIGC','Taglia','Genitore riferimento','Telefono genitore','Email genitore','Tipo visita medica','Scadenza visita medica (GG/MM/AAAA)','Tipo documento','Scadenza documento (GG/MM/AAAA)','Note'];
-  const example=['Rossi','Marco','15/03/2015','Torino','RSSMRC15C15L219X','Via Roma 1','Pianezza','U10','A','Centrocampista','Destro','12345','M','Luca Rossi','3331234567','luca.rossi@email.com','Non agonistica','30/09/2026','Carta Identità','31/12/2028',''];
+  const headers=['Cognome','Nome','Data nascita (GG/MM/AAAA)','Comune nascita','Codice Fiscale','Indirizzo residenza','Comune residenza','Categoria','Gruppo','Ruolo principale','Piede','Tessera FIGC','Matricola FIGC','N° Maglia','Taglia','Genitore riferimento','Telefono genitore','Email genitore','Tipo visita medica','Scadenza visita medica (GG/MM/AAAA)','Tipo documento','Scadenza documento (GG/MM/AAAA)','Note'];
+  const example=['Rossi','Marco','15/03/2015','Torino','RSSMRC15C15L219X','Via Roma 1','Pianezza','U10','A','Centrocampista','Destro','12345','987654','10','M','Luca Rossi','3331234567','luca.rossi@email.com','Non agonistica','30/09/2026','Carta Identità','31/12/2028',''];
   const ws=XLSX.utils.aoa_to_sheet([headers,example]);
   // Larghezza colonne
   ws['!cols']=headers.map(h=>({wch:Math.max(h.length,14)}));
@@ -1612,7 +1616,7 @@ function importPlayersXlsx(ev){
       if(rows.length<2){toast('File vuoto o senza dati','e');return}
       const hdr=rows[0].map(h=>String(h||'').trim().toLowerCase());
       const ci=k=>hdr.findIndex(h=>h.includes(k));
-      const iCo=ci('cognome'),iNm=ci('nome'),iNa=ci('nascita'),iCn=ci('comune nas'),iCf=ci('codice fis')===-1?ci('cf'):ci('codice fis'),iIn=ci('indirizzo'),iCr=ci('comune res'),iCat=ci('categoria'),iGr=ci('gruppo'),iRu=ci('ruolo'),iPi=ci('piede'),iTe=ci('tessera'),iTa=ci('taglia'),iGe=ci('genitore'),iTl=ci('telefono'),iEm=ci('email gen')===-1?ci('email'):ci('email gen'),iVt=ci('tipo visita'),iVs=ci('scadenza visita'),iDt=ci('tipo doc'),iDs=ci('scadenza doc'),iNo=ci('note');
+      const iCo=ci('cognome'),iNm=ci('nome'),iNa=ci('nascita'),iCn=ci('comune nas'),iCf=ci('codice fis')===-1?ci('cf'):ci('codice fis'),iIn=ci('indirizzo'),iCr=ci('comune res'),iCat=ci('categoria'),iGr=ci('gruppo'),iRu=ci('ruolo'),iPi=ci('piede'),iTe=ci('tessera'),iMa=ci('matricola'),iNu=ci('maglia'),iTa=ci('taglia'),iGe=ci('genitore'),iTl=ci('telefono'),iEm=ci('email gen')===-1?ci('email'):ci('email gen'),iVt=ci('tipo visita'),iVs=ci('scadenza visita'),iDt=ci('tipo doc'),iDs=ci('scadenza doc'),iNo=ci('note');
       if(iCo<0||iNm<0){toast('Colonne Cognome e Nome obbligatorie','e');return}
       let added=0,updated=0,skipped=0;
       for(let r=1;r<rows.length;r++){
@@ -1638,6 +1642,8 @@ function importPlayersXlsx(ev){
           ruoli,
           piede:iPi>=0?String(row[iPi]||'').trim():'Destro',
           tessera:iTe>=0?String(row[iTe]||'').trim():'',
+          matricola:iMa>=0?String(row[iMa]||'').trim():'',
+          numero:iNu>=0?(+row[iNu]||''):'',
           taglia:iTa>=0?String(row[iTa]||'').trim():'M',
           genitore1:{nome:iGe>=0?String(row[iGe]||'').trim():'',tel:iTl>=0?String(row[iTl]||'').trim():'',email:iEm>=0?String(row[iEm]||'').trim():''},
           note:iNo>=0?String(row[iNo]||'').trim():'',
@@ -2218,6 +2224,7 @@ VIEWS.matchday=function(c){
           <div style="flex:1"></div>
           <button id="mdCorrBtn" style="padding:4px 10px;border:2px solid var(--g300);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;background:var(--g50);color:var(--g600);touch-action:manipulation" onclick="_mdCorr=!_mdCorr;mdRenderEvBar();mdRenderRoster()">↩ Correggi</button>
           <button style="padding:4px 10px;border:2px solid var(--g300);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;background:var(--g50);color:var(--g600);touch-action:manipulation" onclick="mdSubModal()">🔄 Sost.</button>
+          <button style="padding:4px 10px;border:2px solid var(--g300);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;background:var(--g50);color:var(--g600);touch-action:manipulation" onclick="mdEditNumbers()">✏ #</button>
         </div>
         <div id="mdEvBar"></div>
       </div>
@@ -2294,7 +2301,7 @@ function mdConfirmConvocati(){
   checked.forEach(cb=>{
     const pid=cb.dataset.pid;const numEl=document.querySelector(`.md_num[data-pid="${pid}"]`);
     const num=numEl?+numEl.value:0;const p=state.players.find(x=>x.id===pid);if(!p)return;
-    convocati.push({pid:p.id,name:p.cognome+' '+p.nome[0]+'.',fullName:p.cognome+' '+p.nome,num:num||idx+1,ruolo:p.ruolo});
+    convocati.push({pid:p.id,name:p.cognome+' '+p.nome[0]+'.',fullName:p.cognome+' '+p.nome,num:num||(p.numero?+p.numero:idx+1),ruolo:(p.ruoli&&p.ruoli[0])||p.ruolo||'Centrocampista'});
     idx++;
   });
   mdS._convocati=convocati;
@@ -2431,6 +2438,25 @@ function mdSubModal(){
   roster.filter(r=>r.status!=='in').forEach(r=>{h+=`<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--g100)"><div style="width:24px;height:24px;border-radius:50%;background:var(--g300);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${r.num}</div><span style="flex:1;font-size:12px;font-weight:600">${esc(r.name)}</span><button class="btn btn-sm" style="background:#16a34a;color:#fff;border:none;padding:5px 12px;border-radius:4px" onclick="mdSubIn('${r.pid}');closeM();setTimeout(()=>mdSubModal(),100)">⬆ Entra</button></div>`});
   h+='</div>';
   openM('🔄 Sostituzioni',h,'<button class="btn btn-p" onclick="closeM()">Chiudi</button>');
+}
+function mdEditNumbers(){
+  const roster=mdS.roster;if(!roster.length){toast('Configura prima la rosa','w');return}
+  const _rc={Portiere:'#ea580c','Difensore Centrale':'#dc2626',Terzino:'#dc2626','Esterno Difensivo':'#dc2626',Difensore:'#dc2626','Esterno Offensivo':'#2563eb',Centrocampista:'#2563eb',Mediano:'#2563eb',Regista:'#2563eb',Trequartista:'#2563eb',Ala:'#16a34a',Attaccante:'#16a34a','Seconda Punta':'#16a34a'};
+  const rc=r=>_rc[r]||'#6b7280';
+  let h='<p style="font-size:12px;color:var(--g500);margin-bottom:10px">Modifica i numeri di maglia per questa partita. Le modifiche NON aggiornano l\'anagrafica.</p>';
+  h+='<div style="max-height:60vh;overflow-y:auto">';
+  roster.forEach(r=>{h+=`<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--g100)"><input type="number" min="1" max="99" value="${r.num}" data-pid="${r.pid}" class="md_numEdit" style="width:50px;padding:6px;border:2px solid ${rc(r.ruolo)};border-radius:6px;text-align:center;font-weight:700;font-size:14px"><span style="flex:1;font-size:12px;font-weight:600">${esc(r.name)}</span><span style="font-size:10px;color:var(--g400)">${r.status==='in'?'In campo':'Panchina'}</span></div>`});
+  h+='</div>';
+  openM('✏ Numeri di maglia',h,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="mdSaveNumbers()">✓ Salva numeri</button>`);
+}
+function mdSaveNumbers(){
+  const inputs=document.querySelectorAll('.md_numEdit');
+  inputs.forEach(inp=>{
+    const pid=inp.dataset.pid;const v=+inp.value;
+    const r=mdS.roster.find(x=>x.pid===pid);
+    if(r&&v>=1&&v<=99)r.num=v;
+  });
+  closeM();mdRenderRoster();toast('Numeri aggiornati','s');
 }
 function mdRenderLastEv(){
   const el=document.getElementById('mdLastStrip');if(!el)return;
