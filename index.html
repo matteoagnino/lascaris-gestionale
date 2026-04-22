@@ -1543,11 +1543,11 @@ function removePlayer(id){
    VIEW: ANAGRAFICA & CONTATTI
    ============================================================= */
 VIEWS.anagrafica=function(c){
-  const ps=state.players.filter(p=>!p.eliminato);
+  const ps=state.players.filter(p=>!p.eliminato).sort((a,b)=>a.categoria.localeCompare(b.categoria)||a.gruppo.localeCompare(b.gruppo)||(a.cognome||'').localeCompare(b.cognome||'')||(a.nome||'').localeCompare(b.nome||''));
   c.innerHTML=`
     <div class="vw">
       <div class="vh"><div><h1>Anagrafica &amp; Contatti</h1><div class="sb2">Vista completa esportabile</div></div>
-        <div style="display:flex;gap:6px"><button class="btn btn-s" onclick="exportPlayers('xlsx')">📊 Excel</button><button class="btn btn-s" onclick="exportPlayers('csv')">📄 CSV</button><button class="btn btn-p" onclick="openPlayer('')">+ Giocatore</button></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-s" onclick="exportPlayers('xlsx')">📊 Excel</button><button class="btn btn-s" onclick="exportPlayers('csv')">📄 CSV</button><button class="btn btn-s" onclick="downloadPlayerTemplate()">📥 Template</button><label class="btn btn-s" style="cursor:pointer">📤 Importa<input type="file" accept=".xlsx,.xls" onchange="importPlayersXlsx(event)" style="display:none"></label><button class="btn btn-p" onclick="openPlayer('')">+ Giocatore</button></div>
       </div>
       ${!ps.length?`<div class="es"><div class="ic">📇</div><h3>Anagrafica vuota</h3><p>Inserisci il primo giocatore per popolare l'anagrafica.</p><button class="btn btn-p" onclick="openPlayer('')">+ Primo</button></div>`:`
         <div class="card"><div class="fb">
@@ -1599,10 +1599,30 @@ function downloadPlayerTemplate(){
   const ws=XLSX.utils.aoa_to_sheet([headers,example]);
   // Larghezza colonne
   ws['!cols']=headers.map(h=>({wch:Math.max(h.length,14)}));
+  // Formato data per colonne nascita e scadenze
+  const dateFmt='dd/mm/yyyy';
+  const dateColIdx=[headers.indexOf('Data nascita (GG/MM/AAAA)'),headers.indexOf('Scadenza visita medica (GG/MM/AAAA)'),headers.indexOf('Scadenza documento (GG/MM/AAAA)')];
+  dateColIdx.forEach(ci=>{if(ci>=0){const cell=XLSX.utils.encode_cell({r:1,c:ci});if(ws[cell])ws[cell].z=dateFmt}});
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Template Anagrafica');
-  // Foglio istruzioni ruoli
-  const ruoliSheet=XLSX.utils.aoa_to_sheet([['Ruoli disponibili'],['(Inserire esattamente uno di questi nella colonna "Ruolo principale")'],...PLAYER_ROLES.map(r=>[r]),[''],['Categorie disponibili'],...state.categories.map(c=>[c]),[''],['Gruppi disponibili'],...state.groups.map(g=>[g]),[''],['Piede'],['Destro'],['Sinistro'],['Ambidestro'],[''],['Taglie'],['XS'],['S'],['M'],['L'],['XL']]);
-  XLSX.utils.book_append_sheet(wb,ruoliSheet,'Valori ammessi');
+  // Foglio valori ammessi (per riferimento dropdown)
+  const catList=state.categories;const grpList=state.groups;const piedeList=['Destro','Sinistro','Ambidestro'];const tagliaList=['XS','S','M','L','XL'];const visitaList=['Non agonistica','Agonistica'];const docList=['Carta Identità','Passaporto','Permesso Soggiorno'];
+  const maxLen=Math.max(PLAYER_ROLES.length,catList.length,grpList.length,piedeList.length,tagliaList.length,visitaList.length,docList.length);
+  const valRows=[['Ruolo principale','Categoria','Gruppo','Piede','Taglia','Tipo visita medica','Tipo documento']];
+  for(let i=0;i<maxLen;i++){valRows.push([PLAYER_ROLES[i]||'',catList[i]||'',grpList[i]||'',piedeList[i]||'',tagliaList[i]||'',visitaList[i]||'',docList[i]||''])}
+  const valWs=XLSX.utils.aoa_to_sheet(valRows);
+  XLSX.utils.book_append_sheet(wb,valWs,'Valori');
+  // Data validation (dropdown) per le colonne a scelta multipla
+  const maxRows=200;
+  const dvArr=[];
+  const addDV=(colHeader,valCol,cnt)=>{const ci2=headers.indexOf(colHeader);if(ci2<0||cnt<1)return;const sqref=XLSX.utils.encode_range({s:{r:1,c:ci2},e:{r:maxRows,c:ci2}});const col=String.fromCharCode(65+valCol);const formula1='Valori!$'+col+'$2:$'+col+'$'+(cnt+1);dvArr.push({sqref,type:'list',formula1})};
+  addDV('Categoria',1,catList.length);
+  addDV('Gruppo',2,grpList.length);
+  addDV('Ruolo principale',0,PLAYER_ROLES.length);
+  addDV('Piede',3,piedeList.length);
+  addDV('Taglia',4,tagliaList.length);
+  addDV('Tipo visita medica',5,visitaList.length);
+  addDV('Tipo documento',6,docList.length);
+  if(dvArr.length)ws['!dataValidation']=dvArr;
   XLSX.writeFile(wb,'lascaris_template_anagrafica.xlsx');
   toast('Template scaricato','s');
 }
@@ -1616,7 +1636,8 @@ function importPlayersXlsx(ev){
       if(rows.length<2){toast('File vuoto o senza dati','e');return}
       const hdr=rows[0].map(h=>String(h||'').trim().toLowerCase());
       const ci=k=>hdr.findIndex(h=>h.includes(k));
-      const iCo=ci('cognome'),iNm=ci('nome'),iNa=ci('nascita'),iCn=ci('comune nas'),iCf=ci('codice fis')===-1?ci('cf'):ci('codice fis'),iIn=ci('indirizzo'),iCr=ci('comune res'),iCat=ci('categoria'),iGr=ci('gruppo'),iRu=ci('ruolo'),iPi=ci('piede'),iTe=ci('tessera'),iMa=ci('matricola'),iNu=ci('maglia'),iTa=ci('taglia'),iGe=ci('genitore'),iTl=ci('telefono'),iEm=ci('email gen')===-1?ci('email'):ci('email gen'),iVt=ci('tipo visita'),iVs=ci('scadenza visita'),iDt=ci('tipo doc'),iDs=ci('scadenza doc'),iNo=ci('note');
+      const ciExact=k=>hdr.findIndex(h=>h===k||h.startsWith(k+' ')||h.startsWith(k+'(')||h==k);
+      const iCo=ci('cognome'),iNm=ciExact('nome')>=0?ciExact('nome'):hdr.findIndex((h,idx)=>h.includes('nome')&&idx!==iCo),iNa=ci('nascita'),iCn=ci('comune nas'),iCf=ci('codice fis')===-1?ci('cf'):ci('codice fis'),iIn=ci('indirizzo'),iCr=ci('comune res'),iCat=ci('categoria'),iGr=ci('gruppo'),iRu=ci('ruolo'),iPi=ci('piede'),iTe=ci('tessera'),iMa=ci('matricola'),iNu=ci('maglia'),iTa=ci('taglia'),iGe=ci('genitore'),iTl=ci('telefono'),iEm=ci('email gen')===-1?ci('email'):ci('email gen'),iVt=ci('tipo visita'),iVs=ci('scadenza visita'),iDt=ci('tipo doc'),iDs=ci('scadenza doc'),iNo=ci('note');
       if(iCo<0||iNm<0){toast('Colonne Cognome e Nome obbligatorie','e');return}
       let added=0,updated=0,skipped=0;
       for(let r=1;r<rows.length;r++){
@@ -1624,11 +1645,22 @@ function importPlayersXlsx(ev){
         const cognome=String(row[iCo]||'').trim();
         const nome=String(row[iNm]||'').trim();
         if(!cognome||!nome){skipped++;continue}
-        const nascitaRaw=String(row[iNa>=0?iNa:-1]||'').trim();
+        const nascitaCell=iNa>=0?row[iNa]:null;
         let nascitaISO='',nascita='';
-        if(nascitaRaw){
-          if(nascitaRaw.includes('/')){const p=nascitaRaw.split('/');if(p.length===3){nascitaISO=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');nascita=nascitaRaw}}
-          else if(nascitaRaw.includes('-')){nascitaISO=nascitaRaw;const p=nascitaRaw.split('-');nascita=p[2]+'/'+p[1]+'/'+p[0]}
+        if(nascitaCell!=null&&nascitaCell!==''){
+          if(typeof nascitaCell==='number'){
+            // Excel serial number → JS Date (epoch offset 25569 days)
+            const dt=new Date((nascitaCell-25569)*86400000);
+            const dd=String(dt.getUTCDate()).padStart(2,'0'),mm=String(dt.getUTCMonth()+1).padStart(2,'0'),yy=dt.getUTCFullYear();
+            nascitaISO=yy+'-'+mm+'-'+dd;nascita=dd+'/'+mm+'/'+yy;
+          }else if(nascitaCell instanceof Date){
+            const dd=String(nascitaCell.getDate()).padStart(2,'0'),mm=String(nascitaCell.getMonth()+1).padStart(2,'0'),yy=nascitaCell.getFullYear();
+            nascitaISO=yy+'-'+mm+'-'+dd;nascita=dd+'/'+mm+'/'+yy;
+          }else{
+            const nascitaRaw=String(nascitaCell).trim();
+            if(nascitaRaw.includes('/')){const p=nascitaRaw.split('/');if(p.length===3){nascitaISO=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');nascita=nascitaRaw}}
+            else if(nascitaRaw.includes('-')){nascitaISO=nascitaRaw;const p=nascitaRaw.split('-');nascita=p[2]+'/'+p[1]+'/'+p[0]}
+          }
         }
         const ruoloPrinc=String(row[iRu>=0?iRu:-1]||'').trim();
         const ruoli=ruoloPrinc&&PLAYER_ROLES.includes(ruoloPrinc)?[ruoloPrinc]:['Centrocampista'];
