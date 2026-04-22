@@ -2300,36 +2300,69 @@ function mdConfigure(){
   mdS.tipo=document.getElementById('md_ti').value;
   mdS.avv=document.getElementById('md_av').value;
   if(mdS.sede==='casa'&&state.impianti.length&&document.getElementById('md_im'))mdS.impiantoId=document.getElementById('md_im').value;
-  const allPs=state.players.filter(p=>!p.eliminato&&p.categoria===mdS.cat);
-  if(!allPs.length){toast('Nessun giocatore per '+mdS.cat,'w');return}
-  // Find last match for this category to pre-fill
+  // Find last match for this category to pre-fill (only main group)
   const lastMatch=mdGetLastMatch(mdS.cat);
   mdS._lastMatch=lastMatch;
   const lastRoster=lastMatch?lastMatch.roster||[]:[];
   const lastPids=new Set(lastRoster.map(r=>r.pid));
   const lastNumByPid={};lastRoster.forEach(r=>{lastNumByPid[r.pid]=r.num});
-  // Macro-role grouping
+  const hasLast=lastRoster.length>0;
+  // Macro-role helpers
   const MACRO_LBL={P:'PORTIERI',D:'DIFENSORI',C:'CENTROCAMPISTI',A:'ATTACCANTI'};
   const MACRO_CLR={P:'#ea580c',D:'#dc2626',C:'#2563eb',A:'#16a34a'};
   const MACRO_ORDER={P:0,D:1,C:2,A:3};
   const pMacro=p=>{const r=(p.ruoli&&p.ruoli[0])||p.ruolo||'';return ROLE_MACRO[r]||'C'};
-  const sorted=allPs.slice().sort((a,b)=>(MACRO_ORDER[pMacro(a)]??9)-(MACRO_ORDER[pMacro(b)]??9)||(a.cognome||'').localeCompare(b.cognome||''));
-  // Determine pre-checked: if last match exists, check those who played; otherwise check same-group players
-  const hasLast=lastRoster.length>0;
-  let html=`<p style="font-size:12px;color:var(--g500);margin-bottom:10px">Seleziona i giocatori e assegna i numeri di maglia. Raggruppati per ruolo: POR → DIF → CC → ATT.${hasLast?' <strong>Pre-selezionati dalla partita precedente</strong> ('+esc(lastMatch.avversario||'')+' '+lastMatch.home+'-'+lastMatch.away+').':' I giocatori del gruppo '+groupLabel(mdS.cat,mdS.grp)+' sono pre-selezionati.'}</p>`;
-  html+=`<div style="display:flex;gap:6px;margin-bottom:10px"><button class="btn btn-s btn-sm" onclick="mdSelAll(true)">Seleziona tutti</button><button class="btn btn-s btn-sm" onclick="mdSelAll(false)">Deseleziona tutti</button></div>`;
-  html+=`<div style="max-height:400px;overflow-y:auto">`;
-  let curMacro='';
-  sorted.forEach(p=>{
+  const sortByRole=arr=>arr.slice().sort((a,b)=>(MACRO_ORDER[pMacro(a)]??9)-(MACRO_ORDER[pMacro(b)]??9)||(a.cognome||'').localeCompare(b.cognome||''));
+  // Determine younger category (e.g. U11 → U10)
+  const catIdx=state.categories.indexOf(mdS.cat);
+  const youngerCat=catIdx>0?state.categories[catIdx-1]:null;
+  // 3 player pools
+  const mainGrp=sortByRole(state.players.filter(p=>!p.eliminato&&p.categoria===mdS.cat&&p.gruppo===mdS.grp));
+  const otherGrps=state.groups.filter(g=>g!==mdS.grp).map(g=>({grp:g,players:sortByRole(state.players.filter(p=>!p.eliminato&&p.categoria===mdS.cat&&p.gruppo===g))})).filter(x=>x.players.length>0);
+  const youngerGrps=youngerCat?state.groups.map(g=>({grp:g,cat:youngerCat,players:sortByRole(state.players.filter(p=>!p.eliminato&&p.categoria===youngerCat&&p.gruppo===g))})).filter(x=>x.players.length>0):[];
+  if(!mainGrp.length&&!otherGrps.length){toast('Nessun giocatore per '+mdS.cat,'w');return}
+  // Render helper for a group of players with macro-role headers
+  const renderPlayerBlock=(players,checked,sectionColor)=>{let h='';let curMacro='';players.forEach(p=>{
     const mc=pMacro(p);
-    if(mc!==curMacro){curMacro=mc;html+=`<div style="font-size:10px;font-weight:700;color:${MACRO_CLR[mc]};text-transform:uppercase;padding:6px 0 4px;margin-top:${curMacro?'10':'0'}px;border-bottom:2px solid ${MACRO_CLR[mc]}">${MACRO_LBL[mc]} (${sorted.filter(x=>pMacro(x)===mc).length})</div>`}
-    const checked=hasLast?lastPids.has(p.id):(p.gruppo===mdS.grp);
+    if(mc!==curMacro){curMacro=mc;h+=`<div style="font-size:10px;font-weight:700;color:${MACRO_CLR[mc]};text-transform:uppercase;padding:4px 0 2px;margin-top:4px;border-bottom:1px solid ${MACRO_CLR[mc]}80">${MACRO_LBL[mc]} (${players.filter(x=>pMacro(x)===mc).length})</div>`}
+    const isChecked=typeof checked==='function'?checked(p):checked;
     const numVal=lastNumByPid[p.id]||p.numero||'';
     const ruoloLbl=(p.ruoli&&p.ruoli[0])||p.ruolo||'';
-    html+=`<div style="padding:6px 8px;border:1px solid var(--g200);border-radius:var(--rs);margin-bottom:4px;display:flex;align-items:center;gap:8px;border-left:3px solid ${MACRO_CLR[mc]}"><input type="checkbox" class="md_sel" data-pid="${p.id}" ${checked?'checked':''}><input type="number" class="md_num" data-pid="${p.id}" value="${numVal}" min="1" max="99" style="width:50px;padding:4px;border:1px solid var(--g300);border-radius:4px;text-align:center" placeholder="#"><span style="flex:1;font-size:12px"><strong>${esc(p.cognome)} ${esc(p.nome)}</strong> <span style="color:${MACRO_CLR[mc]};font-size:10px;font-weight:600">${esc(ruoloLbl)}</span> <span style="color:var(--g400);font-size:10px">${groupLabel(p.categoria,p.gruppo)}</span></span></div>`;
-  });
+    h+=`<div style="padding:5px 8px;border:1px solid var(--g200);border-radius:var(--rs);margin-bottom:3px;display:flex;align-items:center;gap:8px;border-left:3px solid ${sectionColor||MACRO_CLR[mc]}"><input type="checkbox" class="md_sel" data-pid="${p.id}" ${isChecked?'checked':''}><input type="number" class="md_num" data-pid="${p.id}" value="${numVal}" min="1" max="99" style="width:50px;padding:4px;border:1px solid var(--g300);border-radius:4px;text-align:center" placeholder="#"><span style="flex:1;font-size:12px"><strong>${esc(p.cognome)} ${esc(p.nome)}</strong> <span style="color:${MACRO_CLR[mc]};font-size:10px;font-weight:600">${esc(ruoloLbl)}</span></span></div>`;
+  });return h};
+  // Build HTML
+  let html=`<p style="font-size:12px;color:var(--g500);margin-bottom:10px">Seleziona convocati e numeri di maglia.${hasLast?' <strong>Pre-selezionati dalla partita prec.</strong> ('+esc(lastMatch.avversario||'')+' '+lastMatch.home+'-'+lastMatch.away+').':''}</p>`;
+  html+=`<div style="display:flex;gap:6px;margin-bottom:10px"><button class="btn btn-s btn-sm" onclick="mdSelAll(true)">Seleziona tutti</button><button class="btn btn-s btn-sm" onclick="mdSelAll(false)">Deseleziona tutti</button></div>`;
+  html+=`<div style="max-height:450px;overflow-y:auto">`;
+  // === SECTION 1: Main group ===
+  html+=`<div style="background:#f0fdf4;border:2px solid #16a34a;border-radius:8px;padding:8px;margin-bottom:10px">`;
+  html+=`<div style="font-size:12px;font-weight:800;color:#16a34a;margin-bottom:4px">🟢 ${mdS.cat} · Gruppo ${groupLabel(mdS.cat,mdS.grp)} <span style="font-weight:400;color:var(--g500)">(${mainGrp.length} giocatori)</span></div>`;
+  html+=renderPlayerBlock(mainGrp,p=>hasLast?lastPids.has(p.id):true,'#16a34a');
   html+=`</div>`;
-  openM('1/2 · Seleziona convocati · '+mdS.cat,html,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="mdConfirmConvocati()">Avanti: formazione ▶</button>`);
+  // === SECTION 2: Other groups same category ===
+  if(otherGrps.length){
+    html+=`<div style="background:#eff6ff;border:2px solid #2563eb;border-radius:8px;padding:8px;margin-bottom:10px">`;
+    html+=`<div style="font-size:12px;font-weight:800;color:#2563eb;margin-bottom:6px">🔵 ${mdS.cat} · Altri gruppi</div>`;
+    otherGrps.forEach(({grp,players})=>{
+      html+=`<details style="margin-bottom:6px"><summary style="font-size:11px;font-weight:700;color:#2563eb;cursor:pointer;padding:4px 0">Gruppo ${groupLabel(mdS.cat,grp)} (${players.length})</summary>`;
+      html+=renderPlayerBlock(players,false,'#2563eb');
+      html+=`</details>`;
+    });
+    html+=`</div>`;
+  }
+  // === SECTION 3: Younger category ===
+  if(youngerGrps.length){
+    html+=`<div style="background:#fefce8;border:2px solid #ca8a04;border-radius:8px;padding:8px;margin-bottom:10px">`;
+    html+=`<div style="font-size:12px;font-weight:800;color:#ca8a04;margin-bottom:6px">🟡 ${youngerCat} · Annata inferiore</div>`;
+    youngerGrps.forEach(({grp,cat,players})=>{
+      html+=`<details style="margin-bottom:6px"><summary style="font-size:11px;font-weight:700;color:#ca8a04;cursor:pointer;padding:4px 0">${cat} Gruppo ${groupLabel(cat,grp)} (${players.length})</summary>`;
+      html+=renderPlayerBlock(players,false,'#ca8a04');
+      html+=`</details>`;
+    });
+    html+=`</div>`;
+  }
+  html+=`</div>`;
+  openM('1/2 · Seleziona convocati · '+mdS.cat+' '+groupLabel(mdS.cat,mdS.grp),html,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="mdConfirmConvocati()">Avanti: formazione ▶</button>`);
 }
 function mdSelAll(yes){document.querySelectorAll('.md_sel').forEach(cb=>cb.checked=yes)}
 // === FORMAZIONI DATA ===
