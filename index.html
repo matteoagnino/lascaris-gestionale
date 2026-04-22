@@ -714,7 +714,7 @@ VIEWS.dashboard=function(c){
             <!-- Infortuni attivi -->
             ${ni?`<div style="margin-bottom:12px">
               <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Infortuni attivi</div>
-              ${injured.slice(0,4).map(inj=>{const p=state.players.find(x=>x.id===inj.giocatoreId);return p?`<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;font-size:11px;border-left:3px solid var(--red);margin-bottom:3px"><strong>${esc(p.cognome||'')} ${esc(p.nome||'')}</strong><span style="color:var(--g500)">${esc(inj.tipo)||''}</span>${inj.dataRientro?`<span style="margin-left:auto;font-size:10px;color:var(--g500)">Rientro: ${fmtIt(inj.dataRientro)}</span>`:''}</div>`:''}).join('')}
+              ${injured.slice(0,4).map(inj=>{const p=state.players.find(x=>x.id===inj.playerId);return p?`<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;font-size:11px;border-left:3px solid var(--red);margin-bottom:3px"><strong>${esc(p.cognome||'')} ${esc(p.nome||'')}</strong><span style="color:var(--g500)">${esc(inj.tipo)||''}</span>${inj.dataRientro?`<span style="margin-left:auto;font-size:10px;color:var(--g500)">Rientro: ${fmtIt(inj.dataRientro)}</span>`:''}</div>`:''}).join('')}
             </div>`:''}
             <!-- Scadenze documenti -->
             ${docScad.length?`<div>
