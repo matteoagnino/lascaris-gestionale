@@ -3579,10 +3579,22 @@ VIEWS.statInf=function(c){
         <div class="card"><div style="padding:10px;background:#fef3c7;border-radius:var(--rs);font-size:12px;margin-bottom:10px"><strong>⚠️ Nota metodologica</strong> — Con gruppi piccoli la potenza statistica è bassa. Interpreta i p-value insieme alla dimensione dell'effetto. 🟢 robusto · 🟡 suggestivo · 🔴 non concludente.</div></div>
         <div class="grid g2">
           ${siCard(1,'si1','Equità d\'impiego (ANOVA)','Varianza minutaggi tra gruppi della stessa categoria.')}
-          ${siCard(2,'si2','Equità per semestre di nascita','Minutaggio medio 1° sem (gen-giu) vs 2° sem (lug-dic) per categoria.')}
+          <div class="card"><div class="card-h"><h2 style="font-size:13px">2. Equità per semestre di nascita</h2><button class="btn btn-sm btn-s" onclick="chartMenu('si2','si2',[])" title="Esporta">⬇</button></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;font-size:11px">
+              <select id="si2_grp" onchange="siRenderSem2()" style="padding:3px 6px;border:1px solid var(--g200);border-radius:4px;font-size:11px"><option value="">Tutti i livelli</option>${state.groups.map(g=>'<option value="'+g+'">Gruppo '+g+'</option>').join('')}</select>
+              <select id="si2_ann" onchange="siRenderSem2()" style="padding:3px 6px;border:1px solid var(--g200);border-radius:4px;font-size:11px"><option value="">Tutte le annate</option>${[...new Set(ps.map(p=>p.nascitaISO?p.nascitaISO.substring(0,4):'').filter(Boolean))].sort().map(y=>'<option value="'+y+'">'+y+'</option>').join('')}</select>
+              <select id="si2_mcat" onchange="siRenderSem2()" style="padding:3px 6px;border:1px solid var(--g200);border-radius:4px;font-size:11px"><option value="">Tutte le categorie</option><option value="PA">Piccoli Amici (U6-U7)</option><option value="PC">Primi Calci (U8-U9)</option><option value="PU">Pulcini (U10-U11)</option><option value="ES">Esordienti (U12-U13)</option></select>
+            </div>
+            <div class="cw sm"><canvas id="si2"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">Minutaggio medio 1° sem (gen-giu) vs 2° sem (lug-dic) per categoria.</p></div>
         </div>
         <div class="grid g2">
-          ${siCard(3,'si3','Equità semestre — dettaglio gruppi','Confronto semestre di nascita per ogni gruppo della stessa categoria.')}
+          <div class="card"><div class="card-h"><h2 style="font-size:13px">3. Equità semestre — dettaglio gruppi</h2><button class="btn btn-sm btn-s" onclick="chartMenu('si3','si3',[])" title="Esporta">⬇</button></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;font-size:11px">
+              <select id="si3_grp" onchange="siRenderSem3()" style="padding:3px 6px;border:1px solid var(--g200);border-radius:4px;font-size:11px"><option value="">Tutti i livelli</option>${state.groups.map(g=>'<option value="'+g+'">Gruppo '+g+'</option>').join('')}</select>
+              <select id="si3_ann" onchange="siRenderSem3()" style="padding:3px 6px;border:1px solid var(--g200);border-radius:4px;font-size:11px"><option value="">Tutte le annate</option>${[...new Set(ps.map(p=>p.nascitaISO?p.nascitaISO.substring(0,4):'').filter(Boolean))].sort().map(y=>'<option value="'+y+'">'+y+'</option>').join('')}</select>
+              <select id="si3_mcat" onchange="siRenderSem3()" style="padding:3px 6px;border:1px solid var(--g200);border-radius:4px;font-size:11px"><option value="">Tutte le categorie</option><option value="PA">Piccoli Amici (U6-U7)</option><option value="PC">Primi Calci (U8-U9)</option><option value="PU">Pulcini (U10-U11)</option><option value="ES">Esordienti (U12-U13)</option></select>
+            </div>
+            <div class="cw sm"><canvas id="si3"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">Confronto semestre di nascita per ogni gruppo della stessa categoria.</p></div>
           ${siCard(4,'si4','Retention multi-annuale','% giocatori che restano stagione su stagione.')}
         </div>
         <div class="grid g2">
@@ -3619,15 +3631,27 @@ VIEWS.statInf=function(c){
   const equitaData=cats.map(cat=>{const grpMins={};state.matches.filter(m=>m.categoria===cat).forEach(m=>{if(!grpMins[m.gruppo])grpMins[m.gruppo]=[];m.roster.forEach(r=>grpMins[m.gruppo].push(r.minutes))});const grps=Object.keys(grpMins);if(grps.length<2)return 0;const means=grps.map(g=>{const a=grpMins[g];return a.reduce((s,v)=>s+v,0)/a.length});const grandMean=means.reduce((s,v)=>s+v,0)/means.length;const ssb=means.reduce((s,m)=>s+Math.pow(m-grandMean,2),0);return ssb>0?(ssb/(means.length-1)):0});
   renderChart('si1',{type:'bar',data:{labels:cats,datasets:[{label:'Varianza minutaggio tra gruppi',data:equitaData,backgroundColor:equitaData.map(v=>v>100?'#dc2626':v>30?'#d97706':'#16a34a')}]},options:{plugins:{legend:{display:false}}}});
 
-  // 2. Equità per semestre di nascita
-  const sem1Min=cats.map(cat=>{const pp=ps.filter(p=>p.categoria===cat&&getSem(p)===1);if(!pp.length)return 0;return Math.round(pp.reduce((s,p)=>s+(_minByP[p.id]||0),0)/pp.length)});
-  const sem2Min=cats.map(cat=>{const pp=ps.filter(p=>p.categoria===cat&&getSem(p)===2);if(!pp.length)return 0;return Math.round(pp.reduce((s,p)=>s+(_minByP[p.id]||0),0)/pp.length)});
-  renderChart('si2',{type:'bar',data:{labels:cats,datasets:[{label:'1° sem (gen-giu)',data:sem1Min,backgroundColor:'#2563eb'},{label:'2° sem (lug-dic)',data:sem2Min,backgroundColor:'#ea580c'}]},options:{plugins:{legend:{position:'bottom'}}}});
-
-  // 3. Equità semestre — dettaglio per gruppo
-  const grpSemLabels=[];const grpSem1=[];const grpSem2=[];
-  cats.forEach(cat=>{state.groups.forEach(g=>{const pp=ps.filter(p=>p.categoria===cat&&p.gruppo===g);if(!pp.length)return;grpSemLabels.push(cat+'-'+groupLabel(cat,g));const s1=pp.filter(p=>getSem(p)===1);const s2=pp.filter(p=>getSem(p)===2);grpSem1.push(s1.length?Math.round(s1.reduce((s,p)=>s+(_minByP[p.id]||0),0)/s1.length):0);grpSem2.push(s2.length?Math.round(s2.reduce((s,p)=>s+(_minByP[p.id]||0),0)/s2.length):0)})});
-  renderChart('si3',{type:'bar',data:{labels:grpSemLabels,datasets:[{label:'1° sem',data:grpSem1,backgroundColor:'#2563eb'},{label:'2° sem',data:grpSem2,backgroundColor:'#ea580c'}]},options:{plugins:{legend:{position:'bottom'}},scales:{x:{ticks:{font:{size:9}}}}}});
+  // 2 & 3. Equità per semestre — con filtri (funzioni globali)
+  const SI_MCAT={PA:['U6','U7'],PC:['U8','U9'],PU:['U10','U11'],ES:['U12','U13']};
+  window._siCtx={ps,cats,getSem,_minByP,SI_MCAT};
+  window.siRenderSem2=function(){
+    const ctx=window._siCtx;const grpF=document.getElementById('si2_grp')?.value||'';const annF=document.getElementById('si2_ann')?.value||'';const mcF=document.getElementById('si2_mcat')?.value||'';
+    const filtCats=mcF?ctx.SI_MCAT[mcF]||ctx.cats:ctx.cats;
+    const fp=ctx.ps.filter(p=>filtCats.includes(p.categoria)&&(!grpF||p.gruppo===grpF)&&(!annF||p.nascitaISO?.startsWith(annF)));
+    const labels=filtCats.filter(cat=>fp.some(p=>p.categoria===cat));
+    const d1=labels.map(cat=>{const pp=fp.filter(p=>p.categoria===cat&&ctx.getSem(p)===1);return pp.length?Math.round(pp.reduce((s,p)=>s+(ctx._minByP[p.id]||0),0)/pp.length):0});
+    const d2=labels.map(cat=>{const pp=fp.filter(p=>p.categoria===cat&&ctx.getSem(p)===2);return pp.length?Math.round(pp.reduce((s,p)=>s+(ctx._minByP[p.id]||0),0)/pp.length):0});
+    renderChart('si2',{type:'bar',data:{labels,datasets:[{label:'1° sem (gen-giu)',data:d1,backgroundColor:'#2563eb'},{label:'2° sem (lug-dic)',data:d2,backgroundColor:'#ea580c'}]},options:{plugins:{legend:{position:'bottom'}}}});
+  };
+  window.siRenderSem3=function(){
+    const ctx=window._siCtx;const grpF=document.getElementById('si3_grp')?.value||'';const annF=document.getElementById('si3_ann')?.value||'';const mcF=document.getElementById('si3_mcat')?.value||'';
+    const filtCats=mcF?ctx.SI_MCAT[mcF]||ctx.cats:ctx.cats;
+    const fp=ctx.ps.filter(p=>filtCats.includes(p.categoria)&&(!grpF||p.gruppo===grpF)&&(!annF||p.nascitaISO?.startsWith(annF)));
+    const labels=[];const d1=[];const d2=[];
+    filtCats.forEach(cat=>{const filtGrps=grpF?[grpF]:state.groups;filtGrps.forEach(g=>{const pp=fp.filter(p=>p.categoria===cat&&p.gruppo===g);if(!pp.length)return;labels.push(cat+'-'+groupLabel(cat,g));const s1=pp.filter(p=>ctx.getSem(p)===1);const s2=pp.filter(p=>ctx.getSem(p)===2);d1.push(s1.length?Math.round(s1.reduce((s,p)=>s+(ctx._minByP[p.id]||0),0)/s1.length):0);d2.push(s2.length?Math.round(s2.reduce((s,p)=>s+(ctx._minByP[p.id]||0),0)/s2.length):0)})});
+    renderChart('si3',{type:'bar',data:{labels,datasets:[{label:'1° sem',data:d1,backgroundColor:'#2563eb'},{label:'2° sem',data:d2,backgroundColor:'#ea580c'}]},options:{plugins:{legend:{position:'bottom'}},scales:{x:{ticks:{font:{size:9}}}}}});
+  };
+  siRenderSem2();siRenderSem3();
 
   // 4. Retention
   const stagioni=[...state.storicoArchiviato.map(s=>({l:s.stagione,v:s.tesserati||0})),{l:state.societa.stagione||'2025/2026',v:ps.length}].sort((a,b)=>a.l.localeCompare(b.l));
