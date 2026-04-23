@@ -424,6 +424,8 @@ if(!state.users||!state.users.find(u=>u.email==='matteo.agnino@gmail.com')){
   state.users=DEFAULT_STATE.users;
 }
 /* ---------- UTILS ---------- */
+// Ricalcola gruppoLabels all'avvio (dipende da state.staff)
+(function(){state.gruppoLabels={};(state.staff||[]).forEach(function(s){var incs=s.incarichi||(s.ruolo?[{ruolo:s.ruolo,categoria:s.categoria,gruppo:s.gruppo}]:[]);incs.forEach(function(inc){if(inc.ruolo==='Tecnico'&&inc.categoria&&inc.gruppo&&(s.cognome||s.nome)){state.gruppoLabels[inc.categoria+inc.gruppo]={cognome:s.cognome||s.nome||'',iniz:s.nome?s.nome[0]:''}}})})})();
 function uid(){return 'id'+(state.nextId++)}
 function pad(n,l=2){return String(n).padStart(l,'0')}
 function today(){return isoL(new Date())}
