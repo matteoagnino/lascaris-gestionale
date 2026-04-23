@@ -3561,51 +3561,148 @@ VIEWS.statDesc=function(c){
 function exportStatDescXLSX(){const ps=state.players.filter(p=>!p.eliminato);if(!ps.length){toast('Nessun dato','w');return}const _m={};state.matches.forEach(m=>m.roster.forEach(r=>{_m[r.pid]=(_m[r.pid]||0)+r.minutes}));const rows=ps.map(p=>{const tp=state.tippsInt.find(t=>t.playerId===p.id);const catSess=state.presenze.filter(r=>r.cat===p.categoria&&r.grp===p.gruppo);let pr=0;catSess.forEach(r=>{const s=r.marks[p.id]||'Presente';if(s==='Presente'||s==='Ritardo')pr++});return{Cognome:p.cognome,Nome:p.nome,Cat:p.categoria,Gruppo:groupLabel(p.categoria,p.gruppo),Ruolo:(p.ruoli||[p.ruolo]).join(', '),'TIPPS media':tp?tp.media:'—','Presenze %':catSess.length?Math.round(pr/catSess.length*100):0,'Minuti':_m[p.id]||0}});exportChartXLSX(rows,'statistiche_descrittive','StatDesc')}
 
 /* =============================================================
-   VIEW: ANALISI INFERENZIALI (5 analisi avanzate)
+   VIEW: ANALISI INFERENZIALI (15 analisi avanzate)
    ============================================================= */
 VIEWS.statInf=function(c){
   const ps=state.players.filter(p=>!p.eliminato);
   const insufficient=ps.length<10;
+  const cats=state.categories;
+  const getSem=p=>{if(!p.nascitaISO)return 0;const m=parseInt(p.nascitaISO.split('-')[1]);return m<=6?1:2};
+  const siIds=['si1','si2','si3','si4','si5','si6','si7','si8','si9','si10','si11','si12','si13','si14','si15'];
+  const siCard=(n,id,title,desc)=>`<div class="card"><div class="card-h"><h2 style="font-size:13px">${n}. ${title}</h2><button class="btn btn-sm btn-s" onclick="chartMenu('${id}','${id}',[])" title="Esporta">⬇</button></div><div class="cw sm"><canvas id="${id}"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">${desc}</p></div>`;
   c.innerHTML=`
     <div class="vw">
-      <div class="vh"><div><h1>Analisi Inferenziali</h1><div class="sb2">Test statistici · correlazioni · significatività (p-value &amp; dimensione effetto)</div></div>
-        <div style="display:flex;gap:6px"><button class="btn btn-s" onclick="exportViewPDF('Analisi Inferenziali',['si1','si2','si3','si4','si5'])">📄 Export PDF</button></div>
+      <div class="vh"><div><h1>Analisi Inferenziali</h1><div class="sb2">Test statistici · correlazioni · significatività — 15 analisi avanzate</div></div>
+        <div style="display:flex;gap:6px"><button class="btn btn-s" onclick="exportViewPDF('Analisi Inferenziali',${JSON.stringify(siIds)})">📄 Export PDF</button></div>
       </div>
       ${insufficient?`<div class="es"><div class="ic">📈</div><h3>Dati insufficienti</h3><p>Le analisi inferenziali richiedono almeno <strong>10 giocatori</strong>. Attuali: ${ps.length}.</p></div>`:`
         <div class="card"><div style="padding:10px;background:#fef3c7;border-radius:var(--rs);font-size:12px;margin-bottom:10px"><strong>⚠️ Nota metodologica</strong> — Con gruppi piccoli la potenza statistica è bassa. Interpreta i p-value insieme alla dimensione dell'effetto. 🟢 robusto · 🟡 suggestivo · 🔴 non concludente.</div></div>
         <div class="grid g2">
-          <div class="card"><div class="card-h"><h2 style="font-size:13px">1. Equità d'impiego (ANOVA)</h2><button class="btn btn-sm btn-s" onclick="chartMenu('si1','equita',[])" title="Esporta grafico (PDF/Excel/PNG)">⬇ Esporta</button></div><div class="cw sm"><canvas id="si1"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">Test di omogeneità minutaggi tra gruppi della stessa categoria.</p></div>
-          <div class="card"><div class="card-h"><h2 style="font-size:13px">2. Retention multi-annuale</h2><button class="btn btn-sm btn-s" onclick="chartMenu('si2','retention',[])" title="Esporta grafico (PDF/Excel/PNG)">⬇ Esporta</button></div><div class="cw sm"><canvas id="si2"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">% giocatori che restano stagione su stagione.</p></div>
+          ${siCard(1,'si1','Equità d\'impiego (ANOVA)','Varianza minutaggi tra gruppi della stessa categoria.')}
+          ${siCard(2,'si2','Equità per semestre di nascita','Minutaggio medio 1° sem (gen-giu) vs 2° sem (lug-dic) per categoria.')}
         </div>
         <div class="grid g2">
-          <div class="card"><div class="card-h"><h2 style="font-size:13px">3. Carico ↔ Infortuni</h2><button class="btn btn-sm btn-s" onclick="chartMenu('si3','carico_inf',[])" title="Esporta grafico (PDF/Excel/PNG)">⬇ Esporta</button></div><div class="cw sm"><canvas id="si3"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">Correlazione volume attività con incidenza infortuni.</p></div>
-          <div class="card"><div class="card-h"><h2 style="font-size:13px">4. Efficacia sostituzioni</h2><button class="btn btn-sm btn-s" onclick="chartMenu('si4','subs',[])" title="Esporta grafico (PDF/Excel/PNG)">⬇ Esporta</button></div><div class="cw sm"><canvas id="si4"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">Delta contributo individuale pre/post entrata.</p></div>
+          ${siCard(3,'si3','Equità semestre — dettaglio gruppi','Confronto semestre di nascita per ogni gruppo della stessa categoria.')}
+          ${siCard(4,'si4','Retention multi-annuale','% giocatori che restano stagione su stagione.')}
         </div>
-        <div class="card"><div class="card-h"><h2 style="font-size:13px">5. Benchmark interno vs Scouting esterno</h2><button class="btn btn-sm btn-s" onclick="chartMenu('si5','bench',[])" title="Esporta grafico (PDF/Excel/PNG)">⬇ Esporta</button></div><div class="cw sm"><canvas id="si5"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">Confronto media TIPPS tesserati vs osservati esterni.</p></div>
+        <div class="grid g2">
+          ${siCard(5,'si5','Carico ↔ Infortuni','Correlazione volume partite con incidenza infortuni.')}
+          ${siCard(6,'si6','Efficacia sostituzioni','Contributo medio titolari vs subentranti.')}
+        </div>
+        <div class="grid g2">
+          ${siCard(7,'si7','Benchmark interno vs Scouting esterno','TIPPS a parità di rilevazioni: migliori N del set più numeroso.')}
+          ${siCard(8,'si8','TIPPS per semestre di nascita','Voti TIPPS interni: 1° semestre vs 2° semestre, globale e per categoria.')}
+        </div>
+        <div class="grid g2">
+          ${siCard(9,'si9','Presenze allenamento ↔ Minutaggio','Correlazione tra % presenze e minuti giocati in partita.')}
+          ${siCard(10,'si10','Progressione stagionale','Andamento metriche di squadra mese per mese.')}
+        </div>
+        <div class="grid g2">
+          ${siCard(11,'si11','Indice di polivalenza','Distribuzione giocatori per numero di macro-ruoli ricoperti.')}
+          ${siCard(12,'si12','Rapporto allenamento / gara','Numero di allenamenti per ogni partita disputata, per categoria.')}
+        </div>
+        <div class="grid g2">
+          ${siCard(13,'si13','Curva di fatica stagionale','Andamento mensile tasso infortuni e presenze.')}
+          ${siCard(14,'si14','Efficacia formato di gioco','Metriche per modalità di gioco (3c3, 5c5, 7c7, 9c9).')}
+        </div>
+        <div class="card">${(()=>{const _t='15. Distribuzione carico settimanale';return `<div class="card-h"><h2 style="font-size:13px">${_t}</h2><button class="btn btn-sm btn-s" onclick="chartMenu('si15','si15',[])" title="Esporta">⬇</button></div><div class="cw sm"><canvas id="si15"></canvas></div><p style="font-size:11px;color:var(--g500);margin-top:6px">Attività per giorno della settimana, suddivise per categoria.</p>`})()}</div>
       `}
     </div>
   `;
   if(insufficient)return;
-  // Real data charts
-  const cats=state.categories;
-  // 1. Equità d'impiego: minutaggio medio per gruppo nella stessa categoria (from matches)
+
+  // Shared data
+  const _minByP={};state.matches.forEach(m=>m.roster.forEach(r=>{_minByP[r.pid]=(_minByP[r.pid]||0)+r.minutes}));
+  const matchesByPlayer={};state.matches.forEach(m=>m.roster.forEach(r=>{matchesByPlayer[r.pid]=(matchesByPlayer[r.pid]||0)+1}));
+
+  // 1. Equità d'impiego ANOVA (unchanged)
   const equitaData=cats.map(cat=>{const grpMins={};state.matches.filter(m=>m.categoria===cat).forEach(m=>{if(!grpMins[m.gruppo])grpMins[m.gruppo]=[];m.roster.forEach(r=>grpMins[m.gruppo].push(r.minutes))});const grps=Object.keys(grpMins);if(grps.length<2)return 0;const means=grps.map(g=>{const a=grpMins[g];return a.reduce((s,v)=>s+v,0)/a.length});const grandMean=means.reduce((s,v)=>s+v,0)/means.length;const ssb=means.reduce((s,m)=>s+Math.pow(m-grandMean,2),0);return ssb>0?(ssb/(means.length-1)):0});
   renderChart('si1',{type:'bar',data:{labels:cats,datasets:[{label:'Varianza minutaggio tra gruppi',data:equitaData,backgroundColor:equitaData.map(v=>v>100?'#dc2626':v>30?'#d97706':'#16a34a')}]},options:{plugins:{legend:{display:false}}}});
-  // 2. Retention (from storico)
+
+  // 2. Equità per semestre di nascita
+  const sem1Min=cats.map(cat=>{const pp=ps.filter(p=>p.categoria===cat&&getSem(p)===1);if(!pp.length)return 0;return Math.round(pp.reduce((s,p)=>s+(_minByP[p.id]||0),0)/pp.length)});
+  const sem2Min=cats.map(cat=>{const pp=ps.filter(p=>p.categoria===cat&&getSem(p)===2);if(!pp.length)return 0;return Math.round(pp.reduce((s,p)=>s+(_minByP[p.id]||0),0)/pp.length)});
+  renderChart('si2',{type:'bar',data:{labels:cats,datasets:[{label:'1° sem (gen-giu)',data:sem1Min,backgroundColor:'#2563eb'},{label:'2° sem (lug-dic)',data:sem2Min,backgroundColor:'#ea580c'}]},options:{plugins:{legend:{position:'bottom'}}}});
+
+  // 3. Equità semestre — dettaglio per gruppo
+  const grpSemLabels=[];const grpSem1=[];const grpSem2=[];
+  cats.forEach(cat=>{state.groups.forEach(g=>{const pp=ps.filter(p=>p.categoria===cat&&p.gruppo===g);if(!pp.length)return;grpSemLabels.push(cat+'-'+groupLabel(cat,g));const s1=pp.filter(p=>getSem(p)===1);const s2=pp.filter(p=>getSem(p)===2);grpSem1.push(s1.length?Math.round(s1.reduce((s,p)=>s+(_minByP[p.id]||0),0)/s1.length):0);grpSem2.push(s2.length?Math.round(s2.reduce((s,p)=>s+(_minByP[p.id]||0),0)/s2.length):0)})});
+  renderChart('si3',{type:'bar',data:{labels:grpSemLabels,datasets:[{label:'1° sem',data:grpSem1,backgroundColor:'#2563eb'},{label:'2° sem',data:grpSem2,backgroundColor:'#ea580c'}]},options:{plugins:{legend:{position:'bottom'}},scales:{x:{ticks:{font:{size:9}}}}}});
+
+  // 4. Retention
   const stagioni=[...state.storicoArchiviato.map(s=>({l:s.stagione,v:s.tesserati||0})),{l:state.societa.stagione||'2025/2026',v:ps.length}].sort((a,b)=>a.l.localeCompare(b.l));
   const retLabels=stagioni.map(s=>s.l);const retData=stagioni.map((s,i)=>i===0?100:stagioni[i-1].v?Math.round(s.v/stagioni[i-1].v*100):100);
-  renderChart('si2',{type:'line',data:{labels:retLabels,datasets:[{label:'Retention %',data:retData,borderColor:'#000',tension:.3,fill:true,backgroundColor:'rgba(0,0,0,.08)'}]},options:{scales:{y:{min:0,max:150}},plugins:{legend:{display:false}}}});
-  // 3. Carico ↔ Infortuni (real: # matches per player vs injuries)
-  const matchesByPlayer={};state.matches.forEach(m=>m.roster.forEach(r=>{matchesByPlayer[r.pid]=(matchesByPlayer[r.pid]||0)+1}));
-  renderChart('si3',{type:'scatter',data:{datasets:[{label:'Giocatori',data:ps.map(p=>({x:matchesByPlayer[p.id]||0,y:state.infortuni.filter(i=>i.playerId===p.id).length})),backgroundColor:'rgba(0,0,0,.5)'}]},options:{scales:{x:{title:{display:true,text:'Partite giocate'}},y:{title:{display:true,text:'N° infortuni'}}},plugins:{legend:{display:false}}}});
-  // 4. Efficacia: titolari vs subentranti — media minuti/gol
+  renderChart('si4',{type:'line',data:{labels:retLabels,datasets:[{label:'Retention %',data:retData,borderColor:'#000',tension:.3,fill:true,backgroundColor:'rgba(0,0,0,.08)'}]},options:{scales:{y:{min:0,max:150}},plugins:{legend:{display:false}}}});
+
+  // 5. Carico ↔ Infortuni
+  renderChart('si5',{type:'scatter',data:{datasets:[{label:'Giocatori',data:ps.map(p=>({x:matchesByPlayer[p.id]||0,y:state.infortuni.filter(i=>i.playerId===p.id).length})),backgroundColor:'rgba(0,0,0,.5)'}]},options:{scales:{x:{title:{display:true,text:'Partite giocate'}},y:{title:{display:true,text:'N° infortuni'}}},plugins:{legend:{display:false}}}});
+
+  // 6. Efficacia sostituzioni
   const titStats={min:0,gol:0,n:0};const subStats={min:0,gol:0,n:0};
   state.matches.forEach(m=>m.roster.forEach(r=>{if(r.starter){titStats.min+=r.minutes;titStats.gol+=(r.stats?.gol||0);titStats.n++}else{subStats.min+=r.minutes;subStats.gol+=(r.stats?.gol||0);subStats.n++}}));
-  renderChart('si4',{type:'bar',data:{labels:['Titolari','Subentranti'],datasets:[{label:'Min. medi',data:[titStats.n?Math.round(titStats.min/titStats.n):0,subStats.n?Math.round(subStats.min/subStats.n):0],backgroundColor:['#000','#6b7280']},{label:'Gol medi x100',data:[titStats.n?Math.round(titStats.gol/titStats.n*100):0,subStats.n?Math.round(subStats.gol/subStats.n*100):0],backgroundColor:['#16a34a','#86efac']}]},options:{plugins:{legend:{position:'bottom'}}}});
-  // 5. Benchmark interno vs Scouting esterno
-  const mediaInt=state.tippsInt.length?state.tippsInt.reduce((s,t)=>s+parseFloat(t.media||0),0)/state.tippsInt.length:0;
-  const mediaExt=state.tippsExt.length?state.tippsExt.reduce((s,t)=>s+parseFloat(t.media||0),0)/state.tippsExt.length:0;
-  renderChart('si5',{type:'bar',data:{labels:['LASCARIS (interno)','Scouting (esterno)'],datasets:[{label:'Media TIPPS',data:[mediaInt,mediaExt],backgroundColor:['#000','#dc2626']}]},options:{scales:{y:{min:0,max:5}},plugins:{legend:{display:false}}}});
+  renderChart('si6',{type:'bar',data:{labels:['Titolari','Subentranti'],datasets:[{label:'Min. medi',data:[titStats.n?Math.round(titStats.min/titStats.n):0,subStats.n?Math.round(subStats.min/subStats.n):0],backgroundColor:['#000','#6b7280']},{label:'Gol medi x100',data:[titStats.n?Math.round(titStats.gol/titStats.n*100):0,subStats.n?Math.round(subStats.gol/subStats.n*100):0],backgroundColor:['#16a34a','#86efac']}]},options:{plugins:{legend:{position:'bottom'}}}});
+
+  // 7. Benchmark vs Scouting — parità di rilevazioni
+  const intArr=state.tippsInt.map(t=>parseFloat(t.media||0)).sort((a,b)=>b-a);
+  const extArr=state.tippsExt.map(t=>parseFloat(t.media||0)).sort((a,b)=>b-a);
+  const nPair=Math.min(intArr.length,extArr.length);
+  const topInt=intArr.slice(0,nPair);const topExt=extArr.slice(0,nPair);
+  const mInt=nPair?topInt.reduce((s,v)=>s+v,0)/nPair:0;
+  const mExt=nPair?topExt.reduce((s,v)=>s+v,0)/nPair:0;
+  renderChart('si7',{type:'bar',data:{labels:['LASCARIS (interno)','Scouting (esterno)'],datasets:[{label:'Media TIPPS (top '+nPair+')',data:[+mInt.toFixed(2),+mExt.toFixed(2)],backgroundColor:['#000','#dc2626']}]},options:{scales:{y:{min:0,max:5}},plugins:{legend:{display:false},subtitle:{display:nPair>0,text:'Confronto sulle migliori '+nPair+' rilevazioni per ciascun set',font:{size:11}}}}});
+
+  // 8. TIPPS per semestre di nascita (globale + per categoria)
+  const tippsS1=[];const tippsS2=[];
+  const tippsSemByCat1=cats.map(()=>[]);const tippsSemByCat2=cats.map(()=>[]);
+  state.tippsInt.forEach(t=>{const p=ps.find(x=>x.id===t.playerId);if(!p)return;const s=getSem(p);const v=parseFloat(t.media||0);const ci=cats.indexOf(p.categoria);if(s===1){tippsS1.push(v);if(ci>=0)tippsSemByCat1[ci].push(v)}else if(s===2){tippsS2.push(v);if(ci>=0)tippsSemByCat2[ci].push(v)}});
+  const tLabels=['Globale',...cats];
+  const tD1=[tippsS1.length?+(tippsS1.reduce((s,v)=>s+v,0)/tippsS1.length).toFixed(2):0,...tippsSemByCat1.map(a=>a.length?+(a.reduce((s,v)=>s+v,0)/a.length).toFixed(2):0)];
+  const tD2=[tippsS2.length?+(tippsS2.reduce((s,v)=>s+v,0)/tippsS2.length).toFixed(2):0,...tippsSemByCat2.map(a=>a.length?+(a.reduce((s,v)=>s+v,0)/a.length).toFixed(2):0)];
+  renderChart('si8',{type:'bar',data:{labels:tLabels,datasets:[{label:'1° sem',data:tD1,backgroundColor:'#2563eb'},{label:'2° sem',data:tD2,backgroundColor:'#ea580c'}]},options:{scales:{y:{min:0,max:5}},plugins:{legend:{position:'bottom'}}}});
+
+  // 9. Presenze allenamento ↔ Minutaggio
+  const presData=ps.map(p=>{const catSess=state.presenze.filter(r=>r.cat===p.categoria&&r.grp===p.gruppo);if(!catSess.length)return null;let pr=0;catSess.forEach(r=>{const s=r.marks[p.id];if(s==='Presente'||s==='Ritardo')pr++});return{x:Math.round(pr/catSess.length*100),y:_minByP[p.id]||0}}).filter(Boolean);
+  renderChart('si9',{type:'scatter',data:{datasets:[{label:'Giocatori',data:presData,backgroundColor:'rgba(37,99,235,.5)'}]},options:{scales:{x:{title:{display:true,text:'% presenze allenamento'},min:0,max:100},y:{title:{display:true,text:'Minuti in partita'}}},plugins:{legend:{display:false}}}});
+
+  // 10. Progressione stagionale
+  const monthMap={};state.matches.forEach(m=>{if(!m.data)return;const mk=m.data.substring(0,7);if(!monthMap[mk])monthMap[mk]={pass:0,passT:0,dr:0,drT:0,tiri:0,tiriP:0,n:0};m.roster.forEach(r=>{const s=r.stats||{};monthMap[mk].pass+=(s.passC||0);monthMap[mk].passT+=(s.passT||0);monthMap[mk].dr+=(s.drR||0);monthMap[mk].drT+=(s.drT||0);monthMap[mk].tiri+=(s.tiri||0);monthMap[mk].tiriP+=(s.tiriP||0);monthMap[mk].n++})});
+  const mKeys=Object.keys(monthMap).sort();
+  const progLabels=mKeys.map(k=>{const[y,m]=k.split('-');return['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][+m-1]+' '+y.slice(2)});
+  const passAcc=mKeys.map(k=>{const d=monthMap[k];return d.passT?Math.round(d.pass/d.passT*100):0});
+  const drAcc=mKeys.map(k=>{const d=monthMap[k];return d.drT?Math.round(d.dr/d.drT*100):0});
+  const shotAcc=mKeys.map(k=>{const d=monthMap[k];return d.tiri?Math.round(d.tiriP/d.tiri*100):0});
+  renderChart('si10',{type:'line',data:{labels:progLabels,datasets:[{label:'% passaggi',data:passAcc,borderColor:'#2563eb',tension:.3,fill:false},{label:'% dribbling',data:drAcc,borderColor:'#16a34a',tension:.3,fill:false},{label:'% tiri in porta',data:shotAcc,borderColor:'#dc2626',tension:.3,fill:false}]},options:{scales:{y:{min:0,max:100}},plugins:{legend:{position:'bottom'}}}});
+
+  // 11. Indice di polivalenza
+  const macroCount={1:0,2:0,3:0,4:0};
+  ps.forEach(p=>{const ruoli=p.ruoli||[p.ruolo];const macros=new Set(ruoli.map(r=>ROLE_MACRO[r]).filter(Boolean));const n=macros.size||1;macroCount[Math.min(n,4)]=(macroCount[Math.min(n,4)]||0)+1});
+  renderChart('si11',{type:'bar',data:{labels:['1 macro-ruolo','2 macro-ruoli','3 macro-ruoli','4 macro-ruoli'],datasets:[{label:'N° giocatori',data:[macroCount[1],macroCount[2],macroCount[3],macroCount[4]],backgroundColor:['#6b7280','#2563eb','#16a34a','#eab308']}]},options:{plugins:{legend:{display:false}}}});
+
+  // 12. Rapporto allenamento / gara
+  const allByCat=cats.map(cat=>state.attivita.filter(a=>a.categoria===cat&&a.tipo==='Allenamento').length);
+  const matchByCat=cats.map(cat=>state.attivita.filter(a=>a.categoria===cat&&['Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)).length);
+  const ratioByCat=cats.map((_,i)=>matchByCat[i]?+(allByCat[i]/matchByCat[i]).toFixed(1):0);
+  renderChart('si12',{type:'bar',data:{labels:cats,datasets:[{label:'Allenamenti',data:allByCat,backgroundColor:'#2563eb'},{label:'Partite',data:matchByCat,backgroundColor:'#dc2626'},{label:'Rapporto All/Gara',data:ratioByCat,type:'line',borderColor:'#000',backgroundColor:'rgba(0,0,0,.1)',yAxisID:'y1',tension:.3,fill:false}]},options:{scales:{y:{beginAtZero:true},y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:'Rapporto'}}},plugins:{legend:{position:'bottom'}}}});
+
+  // 13. Curva di fatica stagionale
+  const injByMonth={};state.infortuni.forEach(i=>{if(!i.data)return;const mk=i.data.substring(0,7);injByMonth[mk]=(injByMonth[mk]||0)+1});
+  const presByMonth={};state.presenze.forEach(r=>{if(!r.data)return;const mk=r.data.substring(0,7);if(!presByMonth[mk])presByMonth[mk]={tot:0,pres:0};const pp=Object.values(r.marks||{});pp.forEach(v=>{presByMonth[mk].tot++;if(v==='Presente'||v==='Ritardo')presByMonth[mk].pres++})});
+  const fatMonths=[...new Set([...Object.keys(injByMonth),...Object.keys(presByMonth)])].sort();
+  const fatLabels=fatMonths.map(k=>{const[y,m]=k.split('-');return['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][+m-1]+' '+y.slice(2)});
+  const fatInj=fatMonths.map(k=>injByMonth[k]||0);
+  const fatPres=fatMonths.map(k=>{const d=presByMonth[k];return d&&d.tot?Math.round(d.pres/d.tot*100):0});
+  renderChart('si13',{type:'line',data:{labels:fatLabels,datasets:[{label:'Infortuni',data:fatInj,borderColor:'#dc2626',backgroundColor:'rgba(220,38,38,.1)',tension:.3,fill:true,yAxisID:'y'},{label:'% presenze',data:fatPres,borderColor:'#2563eb',backgroundColor:'rgba(37,99,235,.1)',tension:.3,fill:true,yAxisID:'y1'}]},options:{scales:{y:{beginAtZero:true,title:{display:true,text:'N° infortuni'}},y1:{position:'right',min:0,max:100,title:{display:true,text:'% presenze'},grid:{drawOnChartArea:false}}},plugins:{legend:{position:'bottom'}}}});
+
+  // 14. Efficacia formato di gioco
+  const modKeys=Object.values(state.modalitaGioco).filter((v,i,a)=>a.indexOf(v)===i).sort();
+  const modStats={};modKeys.forEach(mk=>modStats[mk]={gol:0,tiri:0,tiriP:0,passC:0,passT:0,n:0});
+  state.matches.forEach(m=>{const mod=m.modalita||state.modalitaGioco[m.categoria]||'';if(!modStats[mod])return;m.roster.forEach(r=>{const s=r.stats||{};modStats[mod].gol+=(s.gol||0);modStats[mod].tiri+=(s.tiri||0);modStats[mod].tiriP+=(s.tiriP||0);modStats[mod].passC+=(s.passC||0);modStats[mod].passT+=(s.passT||0);modStats[mod].n++})});
+  renderChart('si14',{type:'bar',data:{labels:modKeys,datasets:[{label:'Gol/partecipaz. x10',data:modKeys.map(k=>modStats[k].n?+(modStats[k].gol/modStats[k].n*10).toFixed(1):0),backgroundColor:'#16a34a'},{label:'% tiri in porta',data:modKeys.map(k=>modStats[k].tiri?Math.round(modStats[k].tiriP/modStats[k].tiri*100):0),backgroundColor:'#2563eb'},{label:'% passaggi',data:modKeys.map(k=>modStats[k].passT?Math.round(modStats[k].passC/modStats[k].passT*100):0),backgroundColor:'#eab308'}]},options:{plugins:{legend:{position:'bottom'}}}});
+
+  // 15. Distribuzione carico settimanale
+  const giorni=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  const caricoData=cats.map(cat=>{const byDay=[0,0,0,0,0,0,0];state.attivita.filter(a=>a.categoria===cat).forEach(a=>{if(!a.data)return;const d=new Date(a.data).getDay();const idx=d===0?6:d-1;byDay[idx]++});return{cat,data:byDay}});
+  renderChart('si15',{type:'bar',data:{labels:giorni,datasets:caricoData.map((cd,i)=>({label:cd.cat,data:cd.data,backgroundColor:['#2563eb','#dc2626','#16a34a','#eab308','#8b5cf6','#ec4899','#0d9488','#000'][i%8]}))},options:{scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}},plugins:{legend:{position:'bottom'}}}});
 };
 
 /* =============================================================
