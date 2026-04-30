@@ -1761,7 +1761,7 @@ function openAttivita(id,dataIso,impId,fascia){
     <div class="ff"><label>Sede</label><select id="at_sd" onchange="toggleSedeFields()"><option value="casa" ${a.sede==='trasferta'?'':'selected'}>Casa</option><option value="trasferta" ${a.sede==='trasferta'?'selected':''}>Trasferta</option></select></div><div class="ff" id="atImpBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Impianto</label><select id="at_im" onchange="atUpdateCampi()"><option value="">—</option>${state.impianti.map(i=>`<option value="${i.id}" ${a.impiantoId===i.id?'selected':''}>${esc(i.nome)}</option>`).join('')}</select></div><div class="ff full" id="atCampoBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Zona di campo</label><div id="at_cp_list" style="display:flex;flex-wrap:wrap;gap:6px">${(()=>{const imp=state.impianti.find(i=>i.id===a.impiantoId);const cIds=a.campoIds||(a.campoId?[a.campoId]:[]);if(!imp)return '';const cc=imp.campi||[];return cc.map(c=>{const lbl=c.tipo==='11h'?((cc.find(p=>p.tipo==='11')||{}).nome||'Campo')+' · '+c.nome:c.nome;return '<label style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--g200);border-radius:6px;font-size:11px;cursor:pointer;background:var(--g50)"><input type=checkbox class=at_cp_chk value='+c.id+(cIds.includes(c.id)?' checked':'')+'>'+esc(lbl)+'</label>'}).join('')})()}</div></div><div id="atTrasBox" style="${a.sede==='trasferta'?'':'display:none'};display:${a.sede==='trasferta'?'flex':'none'};flex-wrap:wrap;gap:10px;width:100%"><div class="ff"><label>Impianto esterno</label><input id="at_ie" list="impEstList" value="${esc(a.impiantoEsterno||'')}" placeholder="Nome stadio/campo" oninput="autoFillImpEst()"><datalist id="impEstList">${(state.impiantiEsterni||[]).map(ie=>`<option value="${esc(ie.nome)}">`).join('')}</datalist></div><div class="ff"><label>Indirizzo</label><input id="at_il" value="${esc(a.luogoLibero||'')}" placeholder="Via, Città (Provincia)"></div></div>
     <div class="ff"><label>Fascia oraria</label><input id="at_fa" value="${a.fascia||(a.ora&&a.durata?a.ora+'-'+calcOraFine(a.ora,a.durata):''
 )}" readonly style="background:var(--g100);cursor:default" placeholder="auto"></div>
-    <div class="ff full"><label>Avversario</label><input id="at_av" value="${esc(a.avversario)}"></div>
+    <div class="ff full"><label>Avversario</label><textarea id="at_av" rows="2" placeholder="Un avversario per riga (es. più avversari in un torneo = più partite)">${esc(a.avversario)}</textarea></div>
     <div class="ff"><label>Modalità</label><input id="at_mo" value="${a.modalita||state.modalitaGioco[a.categoria]||''}" placeholder="es. 9c9"></div>
     <div id="atMatchFields" style="display:${['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)?'flex':'none'};flex-wrap:wrap;gap:10px;width:100%">
       <div class="ff"><label>N. tempi di gioco</label><input type="number" id="at_tg" value="${a.tempiGioco||2}" min="1" max="6"></div>
@@ -1775,9 +1775,50 @@ function toggleSedeFields(){const v=document.getElementById('at_sd').value;docum
 function atUpdateCampi(){const impId=document.getElementById('at_im')?.value;const box=document.getElementById('at_cp_list');if(!box)return;const imp=state.impianti.find(i=>i.id===impId);if(!imp){box.innerHTML='';return}const cc=imp.campi||[];box.innerHTML=cc.map(c=>{const lbl=c.tipo==='11h'?((cc.find(p=>p.tipo==='11')||{}).nome||'Campo')+' \u00b7 '+c.nome:c.nome;return '<label style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--g200);border-radius:6px;font-size:11px;cursor:pointer;background:var(--g50)"><input type=checkbox class=at_cp_chk value='+c.id+'>'+esc(lbl)+'</label>'}).join('')}
 function atUpdateModalita(){const cat=document.getElementById('at_ca')?.value;const mo=document.getElementById('at_mo');if(mo&&cat)mo.value=state.modalitaGioco[cat]||''}
 function autoFillImpEst(){const nm=(document.getElementById('at_ie')?.value||'').trim();const found=(state.impiantiEsterni||[]).find(ie=>ie.nome.toLowerCase()===nm.toLowerCase());if(found){const il=document.getElementById('at_il');if(il&&!il.value)il.value=found.indirizzo||''}}
+function openMultiMatchStep(base,avvList){
+  // Calcola orari auto: ogni partita inizia dopo la fine della precedente
+  const durTot=(base.tempiGioco||2)*(base.durataTempo||20);
+  const rows=avvList.map((avv,i)=>{
+    const baseMin=(parseInt((base.ora||'18:00').split(':')[0])*60+parseInt((base.ora||'18:00').split(':')[1]))+i*durTot;
+    const hh=pad(Math.floor(baseMin/60)%24);const mm=pad(baseMin%60);
+    return{avv,ora:hh+':'+mm,durata:durTot};
+  });
+  let h='<p style="font-size:12px;color:var(--g500);margin-bottom:10px">Configura orario e durata per ogni partita. I campi condivisi (data, categoria, gruppo, sede, impianto) restano quelli inseriti.</p>';
+  h+='<div style="max-height:50vh;overflow-y:auto">';
+  rows.forEach((r,i)=>{
+    h+=`<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--g100)">
+      <span style="flex:1;font-weight:600;font-size:12px">${i+1}. ${esc(r.avv)}</span>
+      <label style="font-size:11px">Ora <input type="time" class="mm_ora" value="${r.ora}" style="padding:3px;border:1px solid var(--g200);border-radius:4px;font-size:11px;width:80px"></label>
+      <label style="font-size:11px">Durata <input type="number" class="mm_dur" value="${r.durata}" min="10" max="180" style="padding:3px;border:1px solid var(--g200);border-radius:4px;font-size:11px;width:55px"> min</label>
+    </div>`;
+  });
+  h+='</div>';
+  window._mmBase=base;window._mmAvvList=avvList;
+  openM('⚽ '+avvList.length+' partite — '+esc(base.tipo),h,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveMultiMatch()">✓ Crea ${avvList.length} partite</button>`);
+}
+function saveMultiMatch(){
+  const base=window._mmBase;const avvList=window._mmAvvList;
+  const oras=document.querySelectorAll('.mm_ora');const durs=document.querySelectorAll('.mm_dur');
+  // Salva impianto esterno se trasferta
+  if(base.sede==='trasferta'&&base.impiantoEsterno){if(!state.impiantiEsterni)state.impiantiEsterni=[];const existing=state.impiantiEsterni.find(ie=>ie.nome.toLowerCase()===base.impiantoEsterno.toLowerCase());if(!existing)state.impiantiEsterni.push({id:uid(),nome:base.impiantoEsterno,indirizzo:base.luogoLibero||''})}
+  avvList.forEach((avv,i)=>{
+    const ora=oras[i]?oras[i].value:base.ora;
+    const durata=durs[i]?+durs[i].value:base.durata;
+    const fascia=ora+'-'+calcOraFine(ora,durata);
+    state.attivita.push({id:uid(),...base,avversario:avv,ora,durata,fascia});
+  });
+  closeM();saveStore();renderView();toast(avvList.length+' partite create','s');
+}
 function saveAttivita(id){
-  const sede=document.getElementById('at_sd')?.value||'casa';const impEst=(document.getElementById('at_ie')?.value||'').trim();const luogoLib=(document.getElementById('at_il')?.value||'').trim();const tipo=document.getElementById('at_ti').value;const isMatch=['Partita','Campionato','Torneo','Amichevole','Test match'].includes(tipo);const data={tipo,data:document.getElementById('at_da').value,ora:document.getElementById('at_or').value,durata:+document.getElementById('at_du').value,categoria:document.getElementById('at_ca').value,gruppo:document.getElementById('at_gr').value,sede,impiantoId:sede==='casa'?(document.getElementById('at_im')?.value||''):'',campoIds:sede==='casa'?[...document.querySelectorAll('.at_cp_chk:checked')].map(c=>c.value):[],modalita:(document.getElementById('at_mo')?.value||'').trim(),impiantoEsterno:sede==='trasferta'?impEst:'',luogoLibero:sede==='trasferta'?luogoLib:'',fascia:document.getElementById('at_fa').value,avversario:document.getElementById('at_av').value,tempiGioco:isMatch?+(document.getElementById('at_tg')?.value||2):undefined,durataTempo:isMatch?+(document.getElementById('at_dt')?.value||20):undefined,spogliatoio:(document.getElementById('at_sp')?.value||'').trim(),note:document.getElementById('at_no').value};
+  const sede=document.getElementById('at_sd')?.value||'casa';const impEst=(document.getElementById('at_ie')?.value||'').trim();const luogoLib=(document.getElementById('at_il')?.value||'').trim();const tipo=document.getElementById('at_ti').value;const isMatch=['Partita','Campionato','Torneo','Amichevole','Test match'].includes(tipo);
+  const avvRaw=(document.getElementById('at_av').value||'').trim();
+  const avvList=avvRaw.split('\n').map(s=>s.trim()).filter(Boolean);
+  const data={tipo,data:document.getElementById('at_da').value,ora:document.getElementById('at_or').value,durata:+document.getElementById('at_du').value,categoria:document.getElementById('at_ca').value,gruppo:document.getElementById('at_gr').value,sede,impiantoId:sede==='casa'?(document.getElementById('at_im')?.value||''):'',campoIds:sede==='casa'?[...document.querySelectorAll('.at_cp_chk:checked')].map(c=>c.value):[],modalita:(document.getElementById('at_mo')?.value||'').trim(),impiantoEsterno:sede==='trasferta'?impEst:'',luogoLibero:sede==='trasferta'?luogoLib:'',fascia:document.getElementById('at_fa').value,avversario:avvList[0]||'',tempiGioco:isMatch?+(document.getElementById('at_tg')?.value||2):undefined,durataTempo:isMatch?+(document.getElementById('at_dt')?.value||20):undefined,spogliatoio:(document.getElementById('at_sp')?.value||'').trim(),note:document.getElementById('at_no').value};
   if(!data.data||!data.categoria){toast('Data e Categoria obbligatorie','e');return}
+  // Multi-avversario: apri step 2 per configurare orari
+  if(isMatch&&avvList.length>1&&!id){
+    openMultiMatchStep(data,avvList);return;
+  }
   // Salva nell'archivio impianti esterni se trasferta con nome impianto
   if(sede==='trasferta'&&impEst){if(!state.impiantiEsterni)state.impiantiEsterni=[];const existing=state.impiantiEsterni.find(ie=>ie.nome.toLowerCase()===impEst.toLowerCase());if(!existing)state.impiantiEsterni.push({id:uid(),nome:impEst,indirizzo:luogoLib});else if(luogoLib&&!existing.indirizzo)existing.indirizzo=luogoLib}
   if(id){const a=state.attivita.find(x=>x.id===id);Object.assign(a,data)}
