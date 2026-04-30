@@ -1775,7 +1775,7 @@ function toggleSedeFields(){const v=document.getElementById('at_sd').value;docum
 function atUpdateCampi(){const impId=document.getElementById('at_im')?.value;const box=document.getElementById('at_cp_list');if(!box)return;const imp=state.impianti.find(i=>i.id===impId);if(!imp){box.innerHTML='';return}const cc=imp.campi||[];box.innerHTML=cc.map(c=>{const lbl=c.tipo==='11h'?((cc.find(p=>p.tipo==='11')||{}).nome||'Campo')+' \u00b7 '+c.nome:c.nome;return '<label style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--g200);border-radius:6px;font-size:11px;cursor:pointer;background:var(--g50)"><input type=checkbox class=at_cp_chk value='+c.id+'>'+esc(lbl)+'</label>'}).join('')}
 function atUpdateModalita(){const cat=document.getElementById('at_ca')?.value;const mo=document.getElementById('at_mo');if(mo&&cat)mo.value=state.modalitaGioco[cat]||''}
 function autoFillImpEst(){const nm=(document.getElementById('at_ie')?.value||'').trim();const found=(state.impiantiEsterni||[]).find(ie=>ie.nome.toLowerCase()===nm.toLowerCase());if(found){const il=document.getElementById('at_il');if(il&&!il.value)il.value=found.indirizzo||''}}
-function openMultiMatchStep(base,avvList){
+function openMultiMatchStep(base,avvList,editId){
   // Calcola orari auto: ogni partita inizia dopo la fine della precedente
   const durTot=(base.tempiGioco||2)*(base.durataTempo||20);
   const rows=avvList.map((avv,i)=>{
@@ -1793,12 +1793,14 @@ function openMultiMatchStep(base,avvList){
     </div>`;
   });
   h+='</div>';
-  window._mmBase=base;window._mmAvvList=avvList;
+  window._mmBase=base;window._mmAvvList=avvList;window._mmEditId=editId;
   openM('⚽ '+avvList.length+' partite — '+esc(base.tipo),h,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveMultiMatch()">✓ Crea ${avvList.length} partite</button>`);
 }
 function saveMultiMatch(){
-  const base=window._mmBase;const avvList=window._mmAvvList;
+  const base=window._mmBase;const avvList=window._mmAvvList;const editId=window._mmEditId;
   const oras=document.querySelectorAll('.mm_ora');const durs=document.querySelectorAll('.mm_dur');
+  // Se modifica, elimina l'attività originale
+  if(editId){state.attivita=state.attivita.filter(x=>x.id!==editId)}
   // Salva impianto esterno se trasferta
   if(base.sede==='trasferta'&&base.impiantoEsterno){if(!state.impiantiEsterni)state.impiantiEsterni=[];const existing=state.impiantiEsterni.find(ie=>ie.nome.toLowerCase()===base.impiantoEsterno.toLowerCase());if(!existing)state.impiantiEsterni.push({id:uid(),nome:base.impiantoEsterno,indirizzo:base.luogoLibero||''})}
   avvList.forEach((avv,i)=>{
@@ -1816,8 +1818,8 @@ function saveAttivita(id){
   const data={tipo,data:document.getElementById('at_da').value,ora:document.getElementById('at_or').value,durata:+document.getElementById('at_du').value,categoria:document.getElementById('at_ca').value,gruppo:document.getElementById('at_gr').value,sede,impiantoId:sede==='casa'?(document.getElementById('at_im')?.value||''):'',campoIds:sede==='casa'?[...document.querySelectorAll('.at_cp_chk:checked')].map(c=>c.value):[],modalita:(document.getElementById('at_mo')?.value||'').trim(),impiantoEsterno:sede==='trasferta'?impEst:'',luogoLibero:sede==='trasferta'?luogoLib:'',fascia:document.getElementById('at_fa').value,avversario:avvList[0]||'',tempiGioco:isMatch?+(document.getElementById('at_tg')?.value||2):undefined,durataTempo:isMatch?+(document.getElementById('at_dt')?.value||20):undefined,spogliatoio:(document.getElementById('at_sp')?.value||'').trim(),note:document.getElementById('at_no').value};
   if(!data.data||!data.categoria){toast('Data e Categoria obbligatorie','e');return}
   // Multi-avversario: apri step 2 per configurare orari
-  if(isMatch&&avvList.length>1&&!id){
-    openMultiMatchStep(data,avvList);return;
+  if(isMatch&&avvList.length>1){
+    openMultiMatchStep(data,avvList,id||null);return;
   }
   // Salva nell'archivio impianti esterni se trasferta con nome impianto
   if(sede==='trasferta'&&impEst){if(!state.impiantiEsterni)state.impiantiEsterni=[];const existing=state.impiantiEsterni.find(ie=>ie.nome.toLowerCase()===impEst.toLowerCase());if(!existing)state.impiantiEsterni.push({id:uid(),nome:impEst,indirizzo:luogoLib});else if(luogoLib&&!existing.indirizzo)existing.indirizzo=luogoLib}
@@ -2278,6 +2280,7 @@ VIEWS.matchday=function(c){
         <div style="display:flex;gap:6px"><button class="btn btn-s btn-sm" onclick="mdLoadFromAgenda()">📥 Carica da agenda</button><button class="btn btn-s btn-sm" onclick="mdArchive()" ${mdS.roster.length===0?'disabled':''}>💾 Archivia partita</button></div>
       </div>
 
+      ${(()=>{const todIso=today();const agenda=state.attivita.filter(a=>['Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)).sort((a,b)=>a.data.localeCompare(b.data)||((a.ora||'').localeCompare(b.ora||'')));const todayGames=agenda.filter(a=>a.data===todIso);const futureGames=agenda.filter(a=>a.data>todIso).slice(0,10);const allGames=[...todayGames,...futureGames];if(!allGames.length)return '';return `<div class="card" style="margin-bottom:10px"><div class="card-h"><h2 style="font-size:14px">📋 Partite in agenda</h2><span style="font-size:11px;color:var(--g500)">${todayGames.length?todayGames.length+' oggi':'Prossime partite'}</span></div><div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto">${allGames.map(a=>{const isToday=a.data===todIso;return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid ${isToday?'var(--blue)':'var(--g200)'};border-radius:8px;cursor:pointer;background:${isToday?'#eff6ff':'var(--g50)'}" onclick="mdSetFromAgenda('${a.id}');"><div style="min-width:60px;font-size:11px;font-weight:600;color:${isToday?'var(--blue)':'var(--g500)'}">${isToday?a.ora||'Oggi':fmtIt(a.data)}</div><div style="flex:1"><strong style="font-size:12px">${esc(a.categoria)} ${groupLabel(a.categoria,a.gruppo)}</strong> <span style="font-size:11px;color:var(--g500)">${esc(a.tipo)}</span>${a.avversario?' <span style="font-size:11px">vs <strong>'+esc(a.avversario)+'</strong></span>':''}</div><button class="btn btn-p btn-sm" onclick="event.stopPropagation();mdSetFromAgenda('${a.id}')">▶ Avvia</button></div>`}).join('')}</div></div>`})()}
       <div class="card">
         <h2 style="font-size:14px;margin-bottom:10px">Configurazione partita</h2>
         <div class="fg">
