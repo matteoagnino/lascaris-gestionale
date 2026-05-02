@@ -1,4 +1,44 @@
 <!DOCTYPE html>
+<!--
+================================================================================
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.3
+================================================================================
+  CHANGELOG
+  ----------
+  v2.3 · 2026-04-30 · Estensione dilettantismo + bug-fix critici
+    · FIX  Organigramma: implementata `openOrgComunicazione()` (era richiamata
+           ma non definita) — invio comunicazioni email/WhatsApp/SMS in BCC
+    · FIX  Match Day OCR: collegato il fallback "Aggiungi manualmente" a
+           `mdAddOpp()` (era un dead link che bloccava l'utente)
+    · CHG  Rimossa `mdShowOCR_DEPRECATED` (codice morto)
+    · NEW  Categorie estese: U14, U15, U16, U17, U19, Prima Squadra
+           Mappa denominazioni FIGC: Piccoli Amici, Primi Calci, Pulcini,
+           Esordienti, Giovanissimi FB, Giovanissimi, Allievi FB, Allievi,
+           Juniores. U18 disponibile come opzionale (attivabile da Parametri).
+    · NEW  Helper `categoryDisplay`, `categoryShort`, `categoryUsesMultiGroup`,
+           `categoryIsAgonistica`, `categoryIsSenior`, `campNumInField`.
+    · CHG  `mdSubIn` ora ricava il limite in campo da `modalitaGioco` invece
+           che da literal hardcoded → supporta nativamente 11v11 senza patch
+    · NEW  Modello campionati: `campionatoPrimaSquadra` (in Parametri) e
+           `campionatiAgonistiche{cat_grp:{livello,girone}}` per U14-U19.
+           Sincronizzato tra Parametri / Staff / Calendario.
+    · NEW  Parametri Società: sezioni "Campionato Prima Squadra",
+           "Squadre agonistiche · Campionati", attivazione/disattivazione
+           categorie con `toggleCategoria()`.
+    · CHG  Modello multi-gruppo: U6-U13 invariato (A/B/C/D), U14+ a gruppo
+           unico con possibilità di aggiungere gruppi se necessario.
+    · CHG  `groupLabel`/`groupLong`/`groupSigla` aggiornati per categorie
+           single-group (mostrano solo `categoryShort` quando un gruppo solo).
+    · CHG  `refreshGruppoSel` nasconde il selettore se la categoria ha un solo
+           gruppo, mostrandolo solo quando ce n'è più di uno.
+    · NEW  Funzione `migrateStateV23` invocata in load: aggiunge i nuovi campi
+           ai dati esistenti senza perdita.
+    · CHG  Tutti i dropdown categoria ora mostrano "U17 · Allievi" anziché
+           solo "U17" (10 punti UI aggiornati).
+
+  v2.2 · stagione 2025/26 · gestionale settore giovanile U6-U13
+================================================================================
+-->
 <html lang="it">
 <head>
 <meta charset="UTF-8">
@@ -6,9 +46,9 @@
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="description" content="Gestionale Settore Giovanile LASCARIS 1954 ASD - Calcio U6-U13">
+<meta name="description" content="Gestionale LASCARIS 1954 ASD - Calcio dilettantistico dal Settore Giovanile alla Prima Squadra">
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.2</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.3</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -193,14 +233,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Settore Giovanile · v2.2</div>
+    <div class="sub">Gestionale Sportivo · v2.3</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.2</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.3</div>
   </div>
 </div>
 
@@ -249,11 +289,30 @@ const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON);
 const STORE='lascaris_v1';
 const SCHEDA_TEMPLATE_B64='UEsDBBQABgAIAAAAIQBy//ribAEAAAgFAAATAAgCW0NvbnRlbnRfVHlwZXNdLnhtbCCiBAIooAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACslMtOwzAQRfdI/EPkLUrcskAINe2CxxIqUT7AxJPGqmNbHvf194zdFCEUGqF2E8fxzL0nY48ns12rsw14VNaUbFyMWAamslKZZck+Fi/5PcswCCOFtgZKtgdks+n11WSxd4AZZRssWROCe+AcqwZagYV1YGiltr4VgaZ+yZ2oVmIJ/HY0uuOVNQFMyEPUYNPJE9RirUP2vKPPBxIPGln2eAiMXiUTzmlViUCkfGPkL5e8cygoM8VgoxzeEAbjvQ5x5W+DLu+NSuOVhGwufHgVLWHwneZb61ef1q6K0yI9lLauVQXSVuuWKlCg8yAkNgCh1UUai1Yoc+Q+4Z+CkadhfGGQ+H9JeIAj0H4DT8/zEZLMgCGGvQa8dNmT6JBzIzzI9+CpMy4O8FN7gEN6sY0IvHs5v+6d0ClfOq9zbx1S53r4f/WPrRmzc0dC4IOC7+bsO+TfjtT1Z283xHtFguzx5ukem34BAAD//wMAUEsDBBQABgAIAAAAIQC1VTAj9AAAAEwCAAALAAgCX3JlbHMvLnJlbHMgogQCKKAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAArJJNT8MwDIbvSPyHyPfV3ZAQQkt3QUi7IVR+gEncD7WNoyQb3b8nHBBUGoMDR3+9fvzK2908jerIIfbiNKyLEhQ7I7Z3rYaX+nF1ByomcpZGcazhxBF21fXV9plHSnkodr2PKqu4qKFLyd8jRtPxRLEQzy5XGgkTpRyGFj2ZgVrGTVneYviuAdVCU+2thrC3N6Dqk8+bf9eWpukNP4g5TOzSmRXIc2Jn2a58yGwh9fkaVVNoOWmwYp5yOiJ5X2RswPNEm78T/XwtTpzIUiI0Evgyz0fHJaD1f1q0NPHLnXnENwnDq8jwyYKLH6jeAQAA//8DAFBLAwQUAAYACAAAACEAlSJ8860DAAA8CQAADwAAAHhsL3dvcmtib29rLnhtbKxVbW/iOBD+ftL9h1zUr2ni4IQQFVZ5IbpKZYUo2959Qm5iGquJzTlOoar2v+84vJQutyuuewhsZuw8fmbm8eTq06aujGcqGyb40ESXjmlQnouC8ceh+WWeWYFpNIrwglSC06H5Qhvz0+j3367WQj49CPFkAABvhmap1Cq07SYvaU2aS7GiHFaWQtZEgSkf7WYlKSmaklJVV7brOL5dE8bNLUIoz8EQyyXLaSrytqZcbUEkrYgC+k3JVs0erc7PgauJfGpXVi7qFUA8sIqplw7UNOo8vH7kQpKHCsLeIM/YSPj68EMODO7+JFg6OapmuRSNWKpLgLa3pE/iR46N0LsUbE5zcB4StiV9ZrqGB1bS/yAr/4Dlv4Eh55fREEir00oIyfsgmnfg5pqjqyWr6N1WugZZrT6TWleqMo2KNGpcMEWLodkHU6zpO4dsV3HLKlhFDnawaY8Ocp5KMKD2UaWo5ETRRHAFUttR/1VZddhJKUDExoz+0zJJ4e6AhCAcGEkekodmSlRptLIamvaXBuKzJ0QpKqJHzriwU7HmlYCLZB8pkJzK/T9okOQ6BTaEvaW2/f99CoChDPc6myppwP/r9AZyfUueIfNQ32J3Ma8htcHitZf2griHYmuAEsfKEPatOO27VpBlSezHOMoi7ytEIf0wF6RV5a6aGnNoYijdydKEbPYryAlbVryd/+rsPpaevxv2a191pLpv3TG6bt7qrk1jc894IdZaFgFE83IwXR/Mdbd4zwpVDk237+OD70/KHktgjPy+doK+NbOh+YqTKHCTJLAC3HMtz8GJFeEEW1ESRH6Qxhgjt2NkH1HqOiRQ62aDd6rWbbUgC1JVVDu4EovnVigCzVn3U51vZBoy1KfK6wJ19dwDFXTJOC30/QDYI2sHvthUvL6cSsbVIoIerW9MTqrbPbJjjn50/h8X0QUKL6KbCy+4so+gQULvjwXAfCoNPXVsA+S4A02TbtRNo7oZRM8gawg7Ud8ZYMsZ9zwLBwNQjM5fglN37PXH6TjuZKNfPOH/0X67uxfu32iaZUmkmkuSP8F7cEaXMWlA4NusAt9jsrEXxE4PKOIMZRZGA8eKYx9bXpr1vD5Kk7GXaY1vyerwlx9sfoHdPU2JaqFr6IbR2aEes5334FxuHbsKv+sF4SzVed89/bONtxB9Rc/cnN2duTH5PJlPztx7M54v7rNzN0eTOI3O3x/NZtHf8/Ff+yPsf02o3RVcj51M7b1MRt8AAAD//wMAUEsDBBQABgAIAAAAIQCBPpSX8wAAALoCAAAaAAgBeGwvX3JlbHMvd29ya2Jvb2sueG1sLnJlbHMgogQBKKAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsUk1LxDAQvQv+hzB3m3YVEdl0LyLsVesPCMm0KdsmITN+9N8bKrpdWNZLLwNvhnnvzcd29zUO4gMT9cErqIoSBHoTbO87BW/N880DCGLtrR6CRwUTEuzq66vtCw6acxO5PpLILJ4UOOb4KCUZh6OmIkT0udKGNGrOMHUyanPQHcpNWd7LtOSA+oRT7K2CtLe3IJopZuX/uUPb9gafgnkf0fMZCUk8DXkA0ejUISv4wUX2CPK8/GZNec5rwaP6DOUcq0seqjU9fIZ0IIfIRx9/KZJz5aKZu1Xv4XRC+8opv9vyLMv072bkycfV3wAAAP//AwBQSwMEFAAGAAgAAAAhABoEvPdmHwAAVsUAABgAAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWyc3dty20iSgOH7jdh3UOi+W6JOthS2JyASJMHz+XSnlmlb0ZKppdjtntnYd98EUFWsqj/ZY07ETNv+kAWCyEoCYILkh3/89fJ88ud6+/a0+f7xtPLr+enJ+vvj5vPT968fT6eT+i/vT0/edg/fPz88b76vP57+c/12+o9P//1fH35str+/fVuvdyeyhu9vH0+/7Xavd2dnb4/f1i8Pb79uXtffZcmXzfblYSf/3H49e3vdrh8+F4Nens8uzs9vzl4enr6flmu42/7MOjZfvjw9rmubxz9e1t935Uq26+eHnWz/27en1ze7tpfHn1ndy8P29z9ef3ncvLzKKn57en7a/bNY6enJy+Nd9vX7Zvvw27M8778qVw+PJ39t5X8X8v9L+zCF45Fenh63m7fNl92vsuazcpv59G/Pbs8eHt2a+Px/ajWVq7Pt+s+nPIH7VV38Z5tUuXbrutiv7PI/XNmNW1m+u7Z3fzx9/nj6v+8vk9vbi3fJL+fJ1ftfrs+v3v1ye1tLf7mq36bX9XeX7yrp/f+dfvpQzJPB9tOH14ev6/F6N30dbE++PO0mm4GAzNXTs08fzlzU5yeZEPlOONmuv3w8TSp3yfL6fR5ThMye1j/evL+f7B5+G6+f14+7tWxU5fRkt3ntrL/squvnZxktG/yvzeZl/PjwvO7lU1iwci7FkU/73zab3/P1ZTLyPN/SYj35Qz887p7+XJfruE+uJP7tf4rNKf7htjcfbLfd37B6USzyNH97eFtXN8/zp8+7b/kDn558Xn95+ON5t8eLX6+djjY/muunr992Eiv6+MfbbvPiJN8Hj5tnefby35OXp7zOZXo//FX8+aN8jPNf319enF9WLmT82+6f+ZR3a7KbYVZUrkLmR7EK+dOsotgiN7Z80DJW9mYRK38qsVeyNeUmqw90ZbdVwv7tI1XsZl2+OxD9dw91KS925YbeutFH75g868VK3skO/Lcb/O7GRstf/tNcvJMnWz7kf/Ks39lnXanoCboOEl+p7DNy6Bn+3U6uVOxTrlz/VEqvbU4r14e2728f79pt7/t9Wg9P1sqtTWDl9tD2/e3j3brSuDiUDr84Li7s/i/+ps6Yv3u8iwt5VmU131y+l+d6aM6dlS8Cxcth7WH38OnDdvPjRI468izfXh/yY3jlLk9J/jqivIzI60ceneTh5uW3gPsSLopZkkdUS7h0UIshjaEeQyOGZgxZDK0Y2jF0YujG0IuhH8MghmEMoxjGMUximMYwi2EewyKGZQyrGBKTun1iEpM7T5C8BNlLkL4E+UuQwAQZTJDCBDlMkMTEZPGqOP7LFHbzWOoO81g7HtqJnMd/PL1x0/S+BClaKYA3ObD/+en8w9mfcqR+NEOqNiIv4Hyq12JIY6jH0IihGUMWQyuGdgydGLox9GLoxzCIYRjDKIZxDJMYpjHMYpjHsIhhGcMqhiSBuGTaVCVIXoLsJUhfgvwlSGCCDCZIYYIcJkhiYrJYnLWe+TNbjntHzew8PpjZJbzbv0THUIshjaEeQyOGZgxZDK0Y2jF0YujG0IuhH8MghmEMoxjGMUximMYwi2EewyKGZQyrGJL8ykNSt89Ucg+pQpC9BOlLkL8ECUyQwQQpTJDDBElMTBY5keX05KiJnMcHE7kEbyLHUIshjaEeQyOGZgxZDK0Y2jF0YujG0IuhH8MghmEMoxjGMUximMYwi2EewyKGZQyrGJIEcg+pQpC9BOlLkL8ECUyQwQQpTJDDBElMTBY5kfPL5CPOmfPwYB6XcLt/QS5BLvXdqUUcksZQj6ERQzOGLIZWDO0YOjF0Y+jF0I9hEMMwhlEM4xgmMUxjmMUwj2ERwzKGVQxJArmHVCE1CNKXIH8JEpgggwlSmCCHCZKYmCxyIsvFOF+R5Yo0fhPJnjTn8cFMLqEiFxvurLkSnTW7EDe3ISmkDmlAmpAM0oK0S9kXX0d5Dhfhc+hiLT1IHzJQVnwZrniIQSNl0FU4aIxBE2XQdThoikEzZdBNOGiOQQtl0Ltw0BKDVsqg9+GgJMGo5F4ZdhsNq3JYTRlWiS7lEs64xE65/VsZyX7OedM7mt8Jp2HCeZhwIiZmJkrxuKsUMxdZqHJZeswRJw8P6rQEeYPUPlQVUoOkRvZvENQhDUgTkkFakHYpXlnG0I2hF0M/hkEMwxhGMYxjmMQwjWEWwzyGRQzLGFYxJAnkHmKSuN9piUmiJyaJnpgkemKS6IlJoicmiZ6YJHqCJCadcps5ofPOYnwKVfmbI08eH8zoEsIjT/SyXXUx7tADSY3Iyej+CBa9StdNTPlWeP7OTwPShGSQlpH9m07tUrxZb0Jkt+03J3r975qYYqcWb0T1IH3IADKEjCBjyAQyNbJ/FrNSLvbns3PIArKErCBJQronmcx7G5DUGGVy70eZVPtkcu2TSbZPJts+mXT7ZPLtU6fcLlaIvLF/VIXk8UGFlBBWSHRWUHUxrkIgaSkXwTledKJQdzF2PQ1IE5JBWpB2KV6FmA0MKiQ6BemaGK9CIH3IADKEjCBjyAQyNeJViHmiXoVAFpAlZAVJEtI9yWQ+qBBG2dzvNzOxqfbI5tojm2yPbLY9sun2yOQ7qJByu1gheWv8qBIpBgQ1YiQskujctLoPclVCSg1dyJvR+5fu6Hy1rgVdRCenjZ8JaqpB0blppgZFR8mWGhQdAtsmyKtDuwv8QryID1U2yKtEUp80IA1JI9KYNCFNLXkVaXeDV5KkBWlJWpGk/ZbP1o+n/sy+V8zOtqAylTg33/zaVOLcbPKrU4lzc8WvTyXOzoSgQk2cUqJ5G/KY87y8EsPDmJH8xgNXVxfxccwG7U/Rapb2Z1vpflV5ey8qljoHNMIBUeE0OSALB0RF1OKAtiG/rso9UAnqKjredu2a/Loy4/bUZ9SANCSNSGPShDS15NdVuV3+yaCJ8mhBWpJWJKkrrF8a27SqYnaO+HPZTpLgrFAZa+dGcF6oxNkpEZwZKnF2JoR1VT4Ppa7yludRdVX2SL1+d363VH4rR1BX0YlU1Qb5dWXG+XXlVmUPkHUObJCapIzUsuRdNxnyy8ZsQ1A20ZG8a9fkl40Z55cNaMCBQ9KINCZNSFNLftmUGxGUDWhhBnpRS9KKJGWDlUnZ0OwMCA9HjEuVsXYS+GPtLAjLhuuz8yAsG8a1lcftGNunNLHZuvBudrHp8s3myzebsIvippPyNiibMd9mdlO8uLliLmlenMsab2zJ78s7rtTLDrFf6qXkrzr7Q2h0alotHkdeD/ZvR9ZI6Z72q7qMTmDrHNdQx0VH4CbHZeo4nMG652dff9pmnP8CYYL8F4jL6AjdtQ/nv0CYcf4LBGjAgUPSiDQmTUhTS/4LRLkRwQsEaGEGBi8QiFoxSl4gECYvEDQ7b8IXCMbZmRMeVxlnZ0r4AsE4OzPCFwjG2ZkQHlfLOOW4mjelj7kdsmxi+7VWyj5R1fwImx9ove6uoX1QCqlDGpAmJIO0IG1IB9KF9CB9yAAyhIwgY8gEMoXMIHPIArKErCAy9eMcyswH2bx673/XGMXEyu2SWBdTKzdMIorJlVsmEcX0yk2TZZQy3/NONc4jBQ91gPNbKqPrs1KCg8tl9D5A1QwLDi5unH3RThlVJzVITVJGapHapA6pS+qR+qQBaUgakcakCWlKmpHmpAVpSVqRpDSQNakNmpJwuZWYcUrKpT4YpyRdKoRxStqlRhinJF6qpIxTqiRvKR9zVChb0P5RoRT/qGDa1P5RIQ5K809LSLXth9UhDUgTkkFakDakA+lCepA+ZAAZQkaQMWQCmUJmkDlkAVlCVhCZ+nEyZOaDqqQaiYmVWY91MbUy5xHF5MqMRxTTK/O9jFLme961tfM9/1zUoQ+XuU+FlG1ef8KXEryLdYl37UzQ/tS6lg/IT5b2lJLqpAapScpILVKb1CF1ST1SnzQgDUkjQ/KZPHt8HJMmpClpRpqTFqQlaUWS0iiz5m2r1AatqpjNuD/Wptw3m3PfbNJ9s1n3zabdN5t332ziL/YTWark0C0M+e0Kx1VJ2er1q8Q0pb1bmou1SpvArwkT5dcEqM6BDVKTlJFapDapQ+qSeqQ+aUAakkaW9gfEsaHL/XF0QpqSZqQ5aUFaklYkqYkyRd6GSU3QqorVFEsVszn3H8Mm3Tebdd9s2n2zeffNJv7Sv03NbIty5Mh7tUcdOcrmrl8TpVz6Hyk05H+oEJRWQHVSg9QkZaQWqU3qkLqkHqlPGpCGpJEh+SDo/jhh9oRfE6CpXdc+akaakxakJWlFkprAVkhN0KqK1RRzKQ96oFyfS3rQA2WcS3vQA2WcS3xQE4duU5B3no6riWJA+NnEsnfs14QJuvRqgpSS6qQGqUnKSC1Sm9QhdUk9Up80IA1JI0N+TdgoryZIU9KMNCctSEvSiiQfXjS59ebcvWJVxWqKuZT7NaHEuaT7NaHEubT7NaHEucT7NWHieJzI7yY76jhRDAhrwnzC2TtOmKCgJkzUvkxSRtVJDVKTlJFapDapQ+qSeqQ+aUAakkaGgpowO8evCdDUrss7TpDmpAVpSVqRpCawFcm9YlXFaoq5lAc1wcdwSQ9qgnEu7UFNMM4lPqiJQz39/M6x42oCPf1iFR9Pg+NEGRTUBCi1A71b/UkNUpOUkVqkNqlD6pJ6pD5pQBqSRoaCmjA7x68J0NSuy68JRM0ZtSAtSSuS1ATWLzVBqypWU8ylPKgJrs8lPagJxrm0BzXBOJf4oCbKOOU4kTfqjrmekMZ9/L0OpQQ1Ycg/dwKlZlVe5dRJDVKTlJFapDapQ+qSeqQ+aUAakkaGgpowO8evCdDUrsuvCUTNGbUgLUkrktQE1i81QasqVlPMpTyoCa7PJT2oCca5tAc1wTiX+KAmDvWo5Z6TI2sCTepiFdFxogwKjhOg1A70jxOIajCqScpILVKb1CF1ST1SnzQgDUkjQ0FNmKft1wRoatfl1wSi5oxakJakFUlqAuuXmqBVFasp5lIe1ATX55Ie1ATjXNqDmmCcS3xQE4f62MU31x11nEAfu1iF1MT+rqyqJe/uR1JKqpMapCYpI7VIbVKH1CX1SH3SgDQkjQwFNVHuVP+9WDtwn+0paUaakxakJWlFkprAhklN0FzCvblZU+JcyoOa4Ppc0oOaYJxLe1ATjHOJD2riUNdauhg8TkjwoVs7ivjwEhtdaxPj38tkyLuXCVKHNCBNSAZpQdqQDqQL6UH6kAFkCBlBxpAJZAqZQeaQBWQJWUFk6rNrTaqSaqSUxMzKN2ThEZlb+Y4sRDG78i1ZiLL5Va4Vju1a59/QGH0HXCmX8qjuRtnL6LMXVTNMXhf2XwSHXmfKqDqpQWqSMlKL1CZ1SF1Sj9QnDUhD0og0Jk1IU9KMNCctSEvSiiSloXStFVMSLl8ex7FKyuUL5BinJF2+RI5xStrli+QY5xLvd61NnFIlx3at828ojaqEXWsT5HetSSmpTmqQmqSM1CK1SR1Sl9Qj9UkD0pA0suR16AwFZ0roDU8ZNSPNSQvSkrQiSU0oXWvFqorVFLMp9zvKNudB11oZa7MedK2VOJv3oGtt44IzpUMftc+/RPe4d5nQtS5WEV1Rs2tto/xuBLvWjGqQmqSM1CK1SR1Sl9Qj9UkD0pA0MiR/uK61jfKvqNm1ZtSMNCctSEvSiiQ1oXStFasqVlMsVayumEt6cPWgdK2VsS7v3liX+KAmDnWtpZqOq4liQPi9o+xamyD/XSZSSqqTGqQmKSO1SG1Sh9Ql9Uh90oA0JI0M+TVho7yaIE1JM9KctCAtSSuSfFOp0rVWrKpYTTGXcv+KWolzSfdrQolzafevqJU4l3i/Jkwcz53kHqgja6Ls9Xl3NxWrCI8TlrxuBCkl1UkNUpOUkVqkNqlD6pJ6pD5pQBqSRoaCmmDX2g703mUizUhz0oK0JK1IUhNK11qxqmI1xVzKg5pQutbKWJd1b6xLe1ATStfari+oiUNda+mrHVkT6FoXq4hqgl1rG+WdO5HqpAapScpILVKb1CF1ST1SnzQgDUkjQ0FNsGttB/o1gagZo+akBWlJWpGkJpSutWJVxWqKpYq5nHvz2iU9OE4oXWtlfS7v/rmTjQtq4lDXWk5vjqwJdK2LVUQ1wa61jfJrAlF1RjVITVJGapHapA6pS+qR+qQBaUgaGQpqgl1rO9CvCUTNGDUnLUhL0ookNaF0rRWrKlZTLFXM5TyoCT6uy3pwnGCcy3tQEyYuqIlDXWvpqx1ZE+haF6uIaoJdaxvl1wSi6oxqkJqkjNQitUkdUpfUI/VJA9KQNDIU1AS71nagXxOImjFqTlqQlqQVSWpC6VorVlWspliqmMt5UBN8XJf1oCYY5/Ie1ISJC2riUNf6Mm/dHdO1LgaE19imS+h1rU2Q/OH6E6SUVCc1SE1SRmqR2qQOqUvqkfqkAWlIGhkKaoJdazvQrwlEzRg1Jy1IS9KKJDWhdK0VqypWU8ylPLieULrWyliX9aAmONblPagJExfUxKGudd57Q038Tde6iA9LAl1rE+N3rQ15XWtIHdKANCEZpAVpQzqQLqQH6UMGkCFkBBlDJpApZAaZQxaQJWQFkanPrjWpSqqRUhIzKz+Hw641icmVX8ThZ61JNr/Ke0rHdq3zH7cM+3FG8g+q7rvW8Te52SDvc6WklFQnNUhNUkZqkdqkDqlL6pH6pAFpSBqRxqQJaUqakeakBWlJWpGkNPAJ+eResapiNcWUlMuvRfExlKTLL0YxTkm71AjjXOK978+xmVeq5Niudf6tBVGVsGttgqRXuD9T4metGVUnNUhNUkZqkdqkDqlL6pH6pAFpSBpZ8jp0huT9cbu/JqQpaUaakxakJWlFkppQutaKVRWrKZYqZnPuPXk5aPBxbdb9OJt232zefbOJlzdg9z8JYh5DqYlju9aX6FobkTe33O+CWPK7EWhRp4yqkxqkJikjtUhtUofUJfVIfdKANCSNDAVXD2jITuxA/+oBUTNGzUkL0pK0IklNKF1rxaqK1RRzKQ+uHvgYLulenMt6cPXAsS7vwdWDiQtq4lDXuvjV9WOuqIsB4Y8MsmttguR9NnecIKWkOqlBapIyUovUJnVIXVKP1CcNSEPSyJBfEzbKO06QpqQZaU5akJakFUl+llDpWitWVaymmEu5XxNKnEu6XxNKnEu7F+fy7teEHevXhDEeJ66O7VoXA8KaMF1C7zhhgoKaMFHeO6+MqpMapCYpI7VIbVKH1CX1SH3SgDQkjQwFNcGutR3oHSdIM9KctCAtSSuS1ITStVasqlhNsVQxl3NvDrukBzWhfNZaWZ/Le1ATZmxQE4e61lfHdq2LAWFNmG6iXxPsWptxXpmkpDqpQWqSMlKL1CZ1SF1Sj9QnDUhD0shQUBPsWtuBfk2wa82oOWlBWpJWJKkJpWutWFWxmmIu5cFxgo/hkh7UhNK1Vh7D5T2oCTM2qIlDXeurY7vWxYCwJkxH0K8Jdq3NuKAm2LVmVIPUJGWkFqlN6pC6pB6pTxqQhqSRoaAm2LW2A/2aYNeaUXPSgrQkrUhSE0rXWrGqYjXFUsXqirmkBzXBbXFpD86dGOcSH9TEoa711bFd62JAWBOmI+jXBLvWZlxQE+xaM6pBapIyUovUJnVIXVKP1CcNSEPSyFBQE+xa24F+TbBrzag5aUFaklYkqQmla61YVbGaYqlidcVc0oOa4La4tAc1wTiX+KAmDnWtr47tWhcDwppg19oESe9xf41tovaUMqpOapCapIzUIrVJHVKX1CP1SQPSkDQyFNQEu9Z2oF8T7Fozak5akJakFUlqQulaK1ZVrKaYS3lw7qR0rZWxLuveWJf2oCa4Ppf4oCYOda2vjuxaF/FhSaBrbWL8rrUhr2sNqUMakCYkg7QgbUgH0oX0IH3IADKEjCBjyAQyhcwgc8gCsoSsIDL12bUmVUk1UkpiZhOmNmFuEyY3YXYTpjex+VXeUzq2a32FrrWRsGsd//SmDfI6dKSUVCc1SE1SRmqR2qQOqUvqkfqkAWlIGpHGpAlpSpqR5qQFaUlakaQ0lK61YlXFaoopKU+UnEuB8HGVrEuJME7JuxSJifO71saUKjm2a32FrrUR+Ti369BZ8muCXWtG1UkNUpOUkVqkNqlD6pJ6pD5pQBqSRpa8rrUhv2tNmpJmpDlpQVqSViSpCaVrrVhVsZpiqWI250HXWomzWQ+61kqczXvQtbZxwZnSoc9aX/ld6/yc7d/9tkQxIDxVMh1B/4oaLeqaGRdcUSOqzqgGqUnKSC1Sm9QhdUk9Up80IA1JI0PB1QO71nagf/XArjWj5qQFaUlakaQmlK61YlXFXMa9M/tUiXM59+Jc0oMram6LS3tw9cA4l/igJg51ra/9z1r/TE0UA4KaMOLfyWHJ61qTUlKd1CA1SRmpRWqTOqQuqUfqkwakIWlkyK8JG7VP7YQ0Jc1Ic9KCtCStSEmi2L1iVcVqirmU+1fUSpxLul8TSpxLu18TSpxLvF8TJo7nTtd+1/qnagKftS5WEX5eyJJfE+xaM6pOapCapIzUIrVJHVKX1CP1SQPSkDQyFNQEu9Z2oHecIM1Ic9KCtCStSFITStdasapiNcVSxVzO/eOEEuey7r/LpMS5vHtxLvFBTXhd6/LnhseyOjn/P9tufnz6IP852X48vfZb2D9VIGXjz/sygmIVUYGwhW2jvNs6SHVSg9QkZaQWqU3qkLqkHqlPGpCGpJGhoEDYwrYD/QJhC5tRc9KCtCStSFIgSgtbsapiNcVSxVzOgwLh47qsBwXCOJf3oECUFrbZFuWg4bewf6omysafXxNsYV+zhU1KSXVSg9QkZaQWqU3qkLqkHqlPGpCGpJGhoCbYwrYD/ZpgC5tRc9KCtCStSFITSgtbsapiNcVcyoMTKT6GS3pwIqW0sJXHcHkPasKMDQ4ah1rY134L+6dqomz8+TXBFnaxVjl0+CdS6FenjKqTGqQmKSO1SG1Sh9Ql9Uh90oA0JI0MBTXBFrYd6NcEW9iMmpMWpCVpRZKaUFrYilUVqynmUh7UBB/DJT2oCaWFrTyGy3tQE2ZsUBOHWtjXfgv7p2qibPz5NcEWdrFWqQmvhU1KSXVSg9QkZaQWqU3qkLqkHqlPGpCGpJGhoCbYwrYD/ZpgC5tRc9KCtCStSFITSgtbsapiNcVcyoOaUFrYyliX9eDciWNd3oOaMHFBTRxqYV/7LWxbExJ86OvCi/jwPaiy/VnZHxOqJsijGikl1UkNUpOUkVqkNqlD6pJ6pD5pQBqSRqQxaUKakmakOWlBWpJWJCkJ5Da5V0xJeKJkPFFSnig5T5SkJ0rWEyXtiZL3REl8YjOvXE74Xe6fOkygy31t+oVySb//bPbth7M/5Wr+0fx8dnUf5O59IqWkOqlBapIyUovUJnVIXVKP1CcNSEPSiDQmTUhT0ow0Jy1IS9KKJFXisu0+v3mvmJJwqRKOVVIuVcI4JelSJYxT0i5Vwjgl8VIlZZxSJX6X+28OHCe7b0+Pv99vpA4qp/aX469ND3Tf3763tO9vVy3tu7o1RqWkOqlBapIyUovUJnVIXVKP1CcNSEPSiDQmTUhT0ow0Jy1IS9KKJAVi0r3PrRxGaC7hXpyScTmMcKySczmMME7JuhxGGKfkXQ4jjLOZl8/hubdqz96+rde72sPu4dOHl/X267q6fn5+O3nc/PFdquD9pZSB45Pt+svHUzlPvpPVF5cQ0SJ5JckXFZUSj7rKR0ntySPHo67yUXKLirbo/V1+qs4lchtFPqjY+3io23xRUYnY9vN8A4vnj0WVfFFxIopFF/miopmPRZf5ouJ8Eouu8kXF117Fiy7znVFehcU74zLfGfJtFMrOuJSdoe5B+SaEfJC6My7znSGfltZ2Yb4zysmAXZjvDPlcmzYq3xny8R5tUb4z5BMS2qJ8Z8iN4sqii3xnlL9VEu+Mi3xnlHcWYZHsDHUPyo8Z5IPUnXGR74zyAg8pyXdGedMIFuU7o/zGAyzKd0bZ0saifGeU7z5hUb4z5PvflBxX8p1RUcukku8MuRlRGyU7Q92Do0q+MyrqzqjkO0N+s1xLSb4z5KeRtUX5zpBfsNUW5TtDfshTW5TvDPk9Q21RvjPkZ920p3VxV6to60srF3ctdUlHlkzVJTNZIs9XW9195VIeSNu6VJbU1SUNWdJUl2SypKUu6ciSqbpkJktk47RNuK9UZOO0HZ7Kkrq6pCFLmuqSTJa01CUdWTJVl8xkiWyctgn3t3c1bQalt3ctzTu3d1PNZ/lc1BbcV87l2WszsSNLpuqSmSyR7dUGJfc3d0m1eJMsKsqkJktSdUlDljTVJZksaWtL7t/f1bSiS9/ftTTvvL+baj7Ly1dbcF+8CmtFc3NX07Yovblrad65uetrPri5G2o+urkbaz65uZtqPru5m2u+uLlbar6SXZoUC85cht4+fXjdPn3f9V93T5vvbyffNtunf22+7x6eq+vvu/V2/Tk/YT/5c73dPT2GKK8qrw9f192H7dcnGfm8/iKnNee/Vm5v3l+fX95evjs/f/f+Xf4J7u3T1/xGP3XZbvN6YMlvm91u83Jg4bf1w+e1NMLl5qkvm41saP5Xs0Xj9e6P15PXh9f1dvz0r/XH0/zWK9n4/G/yV3mG8tQe8uf78fR1s91tH552ciuie+a116dixfZJm3/L2j9vH348ff96sr17kv2yzT6Xnfkfm+3vxcnep/8HAAD//wMAUEsDBBQABgAIAAAAIQCu3mFmigYAAIYaAAATAAAAeGwvdGhlbWUvdGhlbWUxLnhtbOxZzY7bNhC+F+g7ELo7/pNkexFvYMv2ps1uEmSdtDnSNm0xS4mGSO/GCAL0CQoUSIteCvTWQy8B2mdK0aYP0SElW+SazuZnA6RF18BCor4ZDmeG3/Dn5q2nCUPnJBOUp12vfqPmIZJO+Yymi673cDyqtD0kJE5nmPGUdL01Ed6tw88/u4kPZEwSgkA+FQe468VSLg+qVTGFZixu8CVJ4ducZwmW8JotqrMMX4DehFUbtVpYTTBNPZTiBNSOQQbNKLo3n9Mp8Q436ocM+kilUA1Tlp0q5aSQMbCzs7pCiLWIWIbOMet60NOMX4zJU+khhoWED12vpv+86uHNKj4ohJjcI2vIjfRfIVcIzM4aus9sMdl26vuBH/a2+jWAyV3csDUMh+FWnwbg6RRGmtti6gz6nf4gKLAGKH906B60Bs26hTf0N3ds7gXqZ+E1KNfv7+BHowi8aOE1KMcHDp+0GpFv4TUox4c7+FatN/BbFl6DYkbTsx10LQib0Wa0W8ics9tOeCfwR61GobxEQTZss0t1Meep3JdrCX7CsxEAFJBhSVMk10syx1PI4wgzOskoOqaLGBJviVMuoLnWqI1qTfivfr5+0h7BBwQb0sousETsNCl7kJhmdCm73peg1TMgj1foiMuYTotetRJL4jZOF6bE61+++/unb9Bfv/38+sX3eaeX8cLED0i6+Jri9E0dwGhLN7z64eUfv7989eO3f/76wqG/l+GJCR/ThAh0l1ygBzyBwTlGQCbZu0mMY0wtCRyDbofqIbjOBN5dY+bC9cEJJu5RBgzjAh6tnli2nsbZSlJHz3fixAKecM76PHM64I7qy/DweJUu3J1nKxP3AONzV98RTq0QD1dLoFbqUhnFxDLzPsOpxAuSEonUN35GiGN0jym1/HpCpxkXfC7RY4r6mDpdMqYTK5FKods0gbisXQZCqC3fnDxCfc5cox6QcxsJEwMzh/Fjwiw3HuGVxIlL5RgnzHT4MZaxy8jTdTY1cUMhIdILwjgazogQLpl7GYzXCPodYBd32E/YOrGRmaRnLp3HmHNrbvOzKMbJ0mkzTWMT+4U4gxTF6D6XLvgJt2eIeoc4AG/sC/cjSqxwX00ED4FYTZPKBFFfVpkjlkeE2/NxzeaYaJYB3rfoPKHpldx+idWDj83qbn6+Fj53q/4QJu9l1Dmfbl/i7324fyFrD/AqvU9gouxWrf9J+3/S9v7zpL1vLl8/VZfsDMRdrtH1ij3Zu2CfU8ZO5ZqRY6HX7AJq0mwEjXozoXeU2w3cMobHYntg4RYZ1jIo4/IrKuPTGC9hYV/XW9WFKFQvBFpyAet93ay3wuSSbr1rWCUnfJbvU+t1tSfNyUNgWbbXgm077DFkjg5b5d5rq17vZhd6j7wxQMm+ixFGZ7YRTYcRrU0jROFNRuiRXYsVHYcVbaV+E6pNFLeuANO2UYFFE4KlVtcL/Hz/D1spzMhMxSk/CthEVwXnWiO9z5nMzABYQWwyoIx0R9m6d3hqdHmqvUWkLSOMdLONMNIwxjNSZKd5YHKdse6UIbXMU67YzIbSjFb7Y8RakcglbmCpyRQsRRddL2wGcCo2xcuuN4f9PjwmS8gdoRa7mC3g2Gwqs3zCvw+zLDMhB1jEucM16eRskFBJMsRo0vXU8LfZwFLNIdq2egMI4ZM1rgO08qkZB0G3g0zmczKVZtiNFuXp/BUYPucK51ct/v5gJclXEO7TeHaBJmyVPcCQYkGrrhw4owKOfeq5N2cUzjG3RFbm36XCVNCueZCocyhvx2wZ46KimGSewzWJbs3Rb1sfGG/FmMGhuy6cLFSB/eCqe3WpVp4zSLOsmRarqKrpJtOPV+QNq8oialmVU7feNoiS6zobroNEdVaJK6ruWxQEw7SyM8s0ZfEuDSvOLlpt065xQWB4Itzjt22NcHrifSs/yF3OWlUgNutKnfj6ysO8k+CTJ0AeAzj9XTEpdCjhxiHDsOjLz49z2oAp8lQWa0R4QquMdr1ntaDnR40gqtTawbDiN/1apR30mpVeEDTrw6BeG/Qbz6GwyDipB/l1ywgOodi6uHTR7TsXL8nmnO3GlCdVri9UqtpwffFSb1gXL/klChqrexUPUSCdZ2Fj1Gl2+mGl0+yNKv6g3650orBfGYRRazAaREG7M3ruoXMN9nvNyA+H7UpYj6KKH9aU+e1OpeU3Gj2/1WsP/d7zYhkDI8/po/AFuFfbdfgPAAAA//8DAFBLAwQUAAYACAAAACEA2xxdQjoFAADkLAAADQAAAHhsL3N0eWxlcy54bWzkWltv4jgUfl9p/0OUd5oLhAFEGJVpI81qtlqpXWlfTeKAVSdGjtOFWc1/3+OEQKCkJNShjOaljY19/Pncj+3x51VEtRfME8JiV7duTF3Dsc8CEs9d/e8nrzPQtUSgOECUxdjV1zjRP09+/22ciDXFjwuMhQYk4sTVF0IsR4aR+AscoeSGLXEMv4SMR0hAk8+NZMkxChI5KaKGbZp9I0Ik1nMKo8ivQyRC/DlddnwWLZEgM0KJWGe0dC3yR1/nMeNoRgHqyuohX1tZfW5rK14skvW+WiciPmcJC8UN0DVYGBIfv4Y7NIYG8neUgPJ5lCzHMO29va/4mZR6BscvRIpPn4xDFotE81kaC1cfbDom4+S79oIoiNfUjck4RhHO27ecICq7QhQRus47bdlhSEo5verpf6QvOBZponkoTrQpo0Hl1MH+wg1mdvuNp85gA8WWz5i+5Vb3XStbB9OneIYS7QGnGFjFnuuy6qSMMlElICtC6Vb2tpQ9dEzGYCQC89iDhrb5flovwTxisOccRDbuxOg5R2vLdkoTjGzByXjGeAD+o9A6Wy6d903GFIcChMHJfCH/C7aEvzMmBBjZZBwQNGcxolLfihnlmeB4wMe4eoQDkkZA1meUcY3EAV7hwNX7vQyOXGRvjZrzAE0DMPvbaHWJmsQzrmZMbQXNudw/R8JiAVGgkC9KBQNfdSjbAk/l2Nf8qBxaEv1Jsrm6ntbWQkEaS68thuUGd3J/bfLiCiD8LGrTnFU1POihTiq2nQY+vI6Ft8KCo/J/I4SUxvvPlTHnhK85pH/Kxg7H1/U59cCWAuQvs7tdODnk7fWJ7mToOz91qm922yikPCAeoFdG/90JSk0CTROAiv2eyGIvl2Yo2PYmXYeqw8eUPso0/Z9wWwJY4DZXoRankReJr5Cow6GCrCeLT6g3Np95tp83ZBVQppbTLpHtycqiOV1tFW4XqJptAcBjqKC/mK2h5ZKuPdiGzE3z1jQrfXbtW0rmcQQ1seyajFHRlAcsgviyBPfhV8yz3HYVVm+nCpD9UYBg4aMcUgVowTj5Dswt8ag516pAdhVxTQlIaQzHLeBA19rXpt5HaRMI5CgPnGsSVJUN9q/NKYBGveWl1OlRlX2dC0CJPYHOXL8uVYG8mOhUA2hVdJ+uyQ1UcQ4uRpTkBq1ycvgzgGxD3LLm1ZtnEJcUtmKIbYhaMcQ2wnsTiBYkPEUhUjtsPKTRDHMvu8bcpfpnFgK/TsSDLKlemrvPyXcmK2UJ10ZQR8LqkqgqxYPLWfUBRbEBW6oK4rIdqMZ40ZJU+5ej5RNeZSW/PMJ4q6q/qOg3Jw2vY6AayBetqdVAVlXu1nLiaiBftCBWA1lVeXw5Lrdavqph6kUrIjWQL1ofqYHcRuQ4M7pVnkirSvPVHUmrylsaI6o8k24jk6oMp6eCfuVR/oddLoAzUZqaNypqsjseuNUpXR3tXRxtr4A0+U7R1R9k4UVxKTeepYQKEh+5NQKiwWp3D5W9dhTyMWh2Q7VdBtQjwCFKqXja/ujqu+8/s/dmoF2bUX+RFyYyEq6++/4mH7VZ2etESP++JfAGDf5rKSeu/t/99NPw7t6zOwNzOuj0utjpDJ3pXcfpfZne3XlD0za//Cg9SX3Hg9TsBS3cJFm9UULh2SrfbHYD/nHX5+qlRg4/u4gC2GXsQ7tv3jqW2fG6ptXp9dGgM+h3nY7nWPZdvze9dzynhN058+GqaVhW/gRWgndGgkSYkriQVSGhci8ICZpvbMIoJGHsnidP/gcAAP//AwBQSwMEFAAGAAgAAAAhACsb4bR1AgAAnAYAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbKxVzW7TQBC+I/EOo71wap2kP7RV4mprO8HIiUPs5NDb1l7SlZLd4N1EgDiUOxIHLtw48go8T18AHoHZJmrAWygCLHul/fabmf1mZtft05fzGax4pYWSHdLcbRDgslClkNMOGefdnSMC2jBZspmSvENecU1O/YcP2lobQFupO+TSmMWJ5+niks+Z3lULLnHluarmzOC0mnp6UXFW6kvOzXzmtRqNQ2/OhCRQqKU0HbLfJLCU4sWSBxugQfy2Fn67wneIw4WH89ewYrMO2TskOKu6Spo18HS54tIsNXSZ1HCmZqUleDeGxk9oFtBRnLU9Y8Gtz7/01zw+2Hd8/cP+aBb+p63ZgpzoBSuwUJhxzasVJz68gSx4EoUUaJJEA9qPBnl6G9GzWbaf8XNeSFGo9dIWDpjhU1UJVl8YHzrIYwc5cpBjB2k2XKjpQi0X2qtDVEpHQGbYFNub17mtRusAm7HlyEgvBDdGrBQMNSZkpqY4Xl99iObKoid1RyEzTnI8+Onx6jbbGH1lMLvWf6BUhSeP3RmkJ1Tlakvqfvt1oFcHJnVgczK2Fd/ubdMSjuKMl0tX87ASshALoaAUgCl3e6lfOtvJlDFqZ3G/KTe8XtpfNDzA9cerr1/e14T+hv32z9nfPr377LL9tQxtxcD9Ys5GcdSNBz2IB/F5TJMID2mQDsJ4EmdxOoggjHpJDOlZHOU5goDdAQeP6pXr0iyCJtpSy6Ln1vROTsteApM4GQ+HKca0ccIxhr2TvPcjOUjx0rDeN1fGtktugu8jd0hHeZzTuq9bjSj0VmF3lOLtY7VCQiF7NqbhiDrqPPy7+N8BAAD//wMAUEsDBBQABgAIAAAAIQAcFF1imAIAADoFAAAYAAAAeGwvZHJhd2luZ3MvZHJhd2luZzEueG1snFRdb5swFH2ftP9g+Z1iiCEJCqkSPqZJXVep2w9wwRRUsJHtJqmq/vdd89Gl6/qw5SXXl+Nz7z3nwuby1LXowJVupIixd0Ew4qKQZSPuY/zzR+6sMNKGiZK1UvAYP3GNL7efP21OpYqOOlUICISO4Bjj2pg+cl1d1Lxj+kL2XMDTSqqOGTiqe7dU7AjUXev6hISu7hVnpa45N+n4BE987D/YOtYIvB06M0eZ8LbdiaKWCvGyMTsdY5jAZidMpWQ3ogvZbinduHYmGw8UEHyvqi15TdvT8ETJ4zaY8jaek2dwSA/wgfJ3ISPPCgZ/L+h5dEE+quqNd/6sen7nTem5oO5RxwolY4yR4SfTNuIB4rEbcbjtb9TU2fXhRqGmjLGPkWAdWL57NPK2Zj1HHlxgEVy/0maK0KNqYvyc5/4+yHLq5BA5lOyps8/o2sn9xSrzl3niL8IXe9sLowI8N7BuX8vZay9853bXQLdaVuaikJ0rq6op+Lw9sDsedQe3h06fA3+xDv1g5yyCLHWWGQ2dnUf3znodBuE+IXuy9F6wu924Q/fz/zDFaLqd+lWAUQ0W6f5KFg8aCZnUTNzzne55YeAtAWXmlAK5a7vDNm0rDDt0PSk6nM7l1SA0ujt+kyUIy0DYQdFTpWATWQRjolOMV4R4hMCb+ATxchksIQbqoXdUAGBBKGAwKgAwxeNwM1GvtPnCZYdsEGMFbQ+F2AFmHqEzxPIKmTdtO5d4Z+6arLNVtqIO9cMMzE1TZ5cn1AlzbxmkizRJUpDXmkujuilLLizdq7n0n80lo7m2NS3bprR0w0Hd3yWtQgfWxhg2DX6Tq2cw920bH5tuvZgM0/1kfttwYVJm2Gzlmw/JhLafve0vAAAA//8DAFBLAwQUAAYACAAAACEAFa+qPL0AAAArAQAAIwAAAHhsL3dvcmtzaGVldHMvX3JlbHMvc2hlZXQxLnhtbC5yZWxzhI/NCsIwEITvgu8Q9m7SehCRpl5E8Cr1AZZk+4NtErLxp29vLoKC4G1nl/1mpto/p1HcKfLgnYZSFiDIGW8H12m4NMfVFgQndBZH70jDTAz7ermozjRiyk/cD4FFpjjW0KcUdkqx6WlClj6Qy5fWxwlTlrFTAc0VO1Lrotio+MmA+ospTlZDPNkSRDOH7Pyf7dt2MHTw5jaRSz8slI34yM0yEmNHSYOU7x2/h1LmyKDqSn1VrF8AAAD//wMAUEsDBBQABgAIAAAAIQBw3FBjQQEAAGsCAAARAAgBZG9jUHJvcHMvY29yZS54bWwgogQBKKAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACUkl1LwzAYhe8F/0PJfZu2k1FC2+EHu3IgOFG8C8m7Lth8kES7/XvTdtbqvPEyOed9cs5LytVBttEHWCe0qlCWpCgCxTQXqqnQ03YdFyhynipOW62gQkdwaFVfXpTMEKYtPFhtwHoBLgok5QgzFdp7bwjGju1BUpcEhwriTltJfTjaBhvK3mgDOE/TJZbgKaee4h4Ym4mITkjOJqR5t+0A4AxDCxKUdzhLMvzt9WCl+3NgUGZOKfzRhE6nuHM2Z6M4uQ9OTMau65JuMcQI+TP8srl/HKrGQvW7YoDqkjPCLFCvbb2h3oOOrhsllC7xTOm32FLnN2HhOwH85vjbfG4I5KHIiAcehWhkLPKlPC9u77ZrVOdpvozTqzhbbrOCLAqSp6/9+z/m+6jjhTyl+BexmBG/AHWJz75H/QkAAP//AwBQSwMEFAAGAAgAAAAhAKvpiWnBAQAA1wMAABAACAFkb2NQcm9wcy9hcHAueG1sIKIEASigAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAApFPLbtswELwX6D+wvMeS0yAoDEpB4DRIgQY1YCdXY0utLKIUKZBrwe7Xd2khitzXob3tY7g7Oxiqm0NrRY8hGu8KOZ/lUqDTvjJuV8inzf3FBykigavAeoeFPGKUN+XbN2oVfIeBDEbBI1wsZEPULbIs6gZbiDNuO+7UPrRAnIZd5uvaaLzzet+io+wyz68zPBC6CquLbhwoh4mLnv51aOV14hefN8eOCZfqtuus0UB8ZflodPDR1yQeQRtHPjbi40GjVdkUppjnGvU+GDqWucqmqVprsLjkFWUNNqLKXgvqASHJtwITYql6WvSoyQcRzXcW8EqKrxAxEStkD8GAIyaYYENyim0XKZT3fmeNqIyw0PvgVcaooXMKpw+msbkq5ycAB38FDrM+OcLQg02r0PnWONbp/3clssPlTOJck40hi/FLvYJAv5HocirRieMg0EA3+auCLfNFB8lHftvvPcGU8ajTn8DvbgPClo3ddmcPz0j/RHPpGeyOfM0YfTbuW3zqNv4OCF+scF5U6wYCVuye0SpjQT2wC4JNQ5YNuB1WL5hfG8nCz8M/LefXs/x9zp6c1FT2+iPLHwAAAP//AwBQSwECLQAUAAYACAAAACEAcv/64mwBAAAIBQAAEwAAAAAAAAAAAAAAAAAAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQItABQABgAIAAAAIQC1VTAj9AAAAEwCAAALAAAAAAAAAAAAAAAAAKUDAABfcmVscy8ucmVsc1BLAQItABQABgAIAAAAIQCVInzzrQMAADwJAAAPAAAAAAAAAAAAAAAAAMoGAAB4bC93b3JrYm9vay54bWxQSwECLQAUAAYACAAAACEAgT6Ul/MAAAC6AgAAGgAAAAAAAAAAAAAAAACkCgAAeGwvX3JlbHMvd29ya2Jvb2sueG1sLnJlbHNQSwECLQAUAAYACAAAACEAGgS892YfAABWxQAAGAAAAAAAAAAAAAAAAADXDAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sUEsBAi0AFAAGAAgAAAAhAK7eYWaKBgAAhhoAABMAAAAAAAAAAAAAAAAAcywAAHhsL3RoZW1lL3RoZW1lMS54bWxQSwECLQAUAAYACAAAACEA2xxdQjoFAADkLAAADQAAAAAAAAAAAAAAAAAuMwAAeGwvc3R5bGVzLnhtbFBLAQItABQABgAIAAAAIQArG+G0dQIAAJwGAAAUAAAAAAAAAAAAAAAAAJM4AAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQItABQABgAIAAAAIQAcFF1imAIAADoFAAAYAAAAAAAAAAAAAAAAADo7AAB4bC9kcmF3aW5ncy9kcmF3aW5nMS54bWxQSwECLQAUAAYACAAAACEAFa+qPL0AAAArAQAAIwAAAAAAAAAAAAAAAAAIPgAAeGwvd29ya3NoZWV0cy9fcmVscy9zaGVldDEueG1sLnJlbHNQSwECLQAUAAYACAAAACEAcNxQY0EBAABrAgAAEQAAAAAAAAAAAAAAAAAGPwAAZG9jUHJvcHMvY29yZS54bWxQSwECLQAUAAYACAAAACEAq+mJacEBAADXAwAAEAAAAAAAAAAAAAAAAAB+QQAAZG9jUHJvcHMvYXBwLnhtbFBLBQYAAAAADAAMABcDAAB1RAAAAAA=';
 let _savePending=false;let _saveTimer=null;
+/* ---------- MIGRAZIONI STATE (v2.3) ---------- */
+function migrateStateV23(d){
+  if(!d) return;
+  // 1) categorie + label FIGC + struttura campionati
+  if(!d.categoryLabels) d.categoryLabels=JSON.parse(JSON.stringify(DEFAULT_STATE.categoryLabels));
+  if(!d.categoriesAvailable) d.categoriesAvailable=JSON.parse(JSON.stringify(DEFAULT_STATE.categoriesAvailable));
+  ['U14','U15','U16','U17','U19','PrimaSquadra'].forEach(c=>{
+    if(Array.isArray(d.categories) && !d.categories.includes(c)) d.categories.push(c);
+    if(d.modalitaGioco && !d.modalitaGioco[c]) d.modalitaGioco[c]=DEFAULT_STATE.modalitaGioco[c];
+    if(d.maxPerTeam && !d.maxPerTeam[c]) d.maxPerTeam[c]=DEFAULT_STATE.maxPerTeam[c];
+  });
+  // 2) campionati
+  if(d.campionatoPrimaSquadra===undefined) d.campionatoPrimaSquadra='';
+  if(!d.campionatiPrimaSquadraPreset) d.campionatiPrimaSquadraPreset=JSON.parse(JSON.stringify(DEFAULT_STATE.campionatiPrimaSquadraPreset));
+  if(!d.campionatiAgonistiche) d.campionatiAgonistiche={};
+  if(!d.campionatiAgonistichePreset) d.campionatiAgonistichePreset=JSON.parse(JSON.stringify(DEFAULT_STATE.campionatiAgonistichePreset));
+}
+
 function loadStore(){
   // Try localStorage first for instant load, then ALWAYS sync from Supabase
   let d=null;
   try{const s=localStorage.getItem(STORE);d=s?JSON.parse(s):null;if(d){
     ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
+    migrateStateV23(d);
     const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(d.users||[]).find(x=>x.id===uref.id);if(u)d.currentUser=u}}
   }catch(e){}
   // ALWAYS check Supabase for data (even if localStorage is empty)
@@ -305,6 +364,7 @@ async function loadFromSupabase(){
       const d=row.data;
       ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
       if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
+      migrateStateV23(d);
       Object.assign(state,d);
       const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(state.users||[]).find(x=>x.id===uref.id);if(u)state.currentUser=u}
       localStorage.setItem(STORE,JSON.stringify(d));
@@ -345,10 +405,16 @@ async function testSupabaseConnection(){
 const DEFAULT_STATE={
   currentView:'dashboard',
   sidebarOpen:false,
-  categories:['U6','U7','U8','U9','U10','U11','U12','U13'],
+  categories:['U6','U7','U8','U9','U10','U11','U12','U13','U14','U15','U16','U17','U19','PrimaSquadra'],
+  categoryLabels:{'U6':'Piccoli Amici','U7':'Piccoli Amici','U8':'Primi Calci','U9':'Primi Calci','U10':'Pulcini','U11':'Pulcini','U12':'Esordienti','U13':'Esordienti','U14':'Giovanissimi FB','U15':'Giovanissimi','U16':'Allievi FB','U17':'Allievi','U18':'Allievi II anno','U19':'Juniores','PrimaSquadra':'Prima Squadra'},
+  categoriesAvailable:['U6','U7','U8','U9','U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','PrimaSquadra'],
   groups:['A','B','C','D'],
-  modalitaGioco:{'U6':'3c3','U7':'3c3','U8':'5c5','U9':'5c5','U10':'7c7','U11':'7c7','U12':'9c9','U13':'9c9'},
-  maxPerTeam:{'U6':10,'U7':10,'U8':10,'U9':10,'U10':14,'U11':14,'U12':18,'U13':18},
+  modalitaGioco:{'U6':'3c3','U7':'3c3','U8':'5c5','U9':'5c5','U10':'7c7','U11':'7c7','U12':'9c9','U13':'9c9','U14':'11c11','U15':'11c11','U16':'11c11','U17':'11c11','U18':'11c11','U19':'11c11','PrimaSquadra':'11c11'},
+  maxPerTeam:{'U6':10,'U7':10,'U8':10,'U9':10,'U10':14,'U11':14,'U12':18,'U13':18,'U14':22,'U15':22,'U16':22,'U17':25,'U18':25,'U19':25,'PrimaSquadra':30},
+  campionatoPrimaSquadra:'',
+  campionatiPrimaSquadraPreset:['Eccellenza','Promozione','Prima Categoria','Seconda Categoria','Terza Categoria'],
+  campionatiAgonistiche:{},
+  campionatiAgonistichePreset:['Provinciale','Regionale','Élite','Nazionale'],
   impianti:[
     {id:'imp1',nome:'LASCARIS',indirizzo:'Via Claviere 16, 10044 Pianezza (TO)',campi:[{id:'l11',nome:'Campo 11',tipo:'11'},{id:'l11a',nome:'Metà A',tipo:'11h'},{id:'l11b',nome:'Metà B',tipo:'11h'},{id:'l7',nome:'Campo 7',tipo:'7'}],spogliatoi:['Spogliatoio 1','Spogliatoio 2','Spogliatoio 3','Spogliatoio 4'],fasce:['16:30-18:00','18:00-19:30','19:30-21:00']},
     {id:'imp2',nome:'MERONI',indirizzo:'Via Orsiera 25, 10098 Rivoli (TO)',campi:[{id:'m11',nome:'Campo 11',tipo:'11'},{id:'m11a',nome:'Metà A',tipo:'11h'},{id:'m11b',nome:'Metà B',tipo:'11h'},{id:'m7',nome:'Campo 7',tipo:'7'}],spogliatoi:['Spogliatoio 1','Spogliatoio 2','Spogliatoio 3','Spogliatoio 4'],fasce:['16:30-18:00','18:00-19:30','19:30-21:00']},
@@ -434,16 +500,37 @@ function isoL(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDat
 function fmtNumber(n){return (n||0).toLocaleString('it-IT')}
 function groupLabel(cat,gid){
   const gi=state.gruppoLabels[cat+gid];
+  // v2.3: per categorie a gruppo unico (U14+), non mostro la sigla del gruppo
+  if(!categoryUsesMultiGroup(cat) && categoriesGroupCount(cat)<=1){
+    if(!gi||!gi.cognome) return categoryShort(cat);
+    return gi.iniz.toUpperCase()+'.'+gi.cognome.charAt(0).toUpperCase()+gi.cognome.slice(1).toLowerCase();
+  }
   if(!gi||!gi.cognome)return cat+'-'+gid;
   return gi.iniz.toUpperCase()+'.'+gi.cognome.charAt(0).toUpperCase()+gi.cognome.slice(1).toLowerCase();
 }
 function groupLong(cat,gid){
   const gi=state.gruppoLabels[cat+gid];
+  const dis=categoryDisplay(cat);
+  if(!categoryUsesMultiGroup(cat) && categoriesGroupCount(cat)<=1){
+    if(!gi||!gi.cognome)return dis+' · tecnico non assegnato';
+    return dis+' · Tecnico '+gi.iniz+'. '+gi.cognome;
+  }
   if(!gi||!gi.cognome)return cat+'-'+gid+' · tecnico non assegnato';
   return cat+' · Tecnico '+gi.iniz+'. '+gi.cognome;
 }
+function categoriesGroupCount(cat){
+  // Conta quanti gruppi distinti sono effettivamente in uso per la categoria
+  const found=new Set();
+  (state.staff||[]).forEach(s=>{(s.incarichi||(s.ruolo?[{ruolo:s.ruolo,categoria:s.categoria,gruppo:s.gruppo}]:[])).forEach(inc=>{if(inc.categoria===cat&&inc.gruppo)found.add(inc.gruppo)})});
+  (state.players||[]).forEach(p=>{if(p.categoria===cat&&p.gruppo)found.add(p.gruppo)});
+  return found.size||1;
+}
 function groupSigla(cat,gid){
   const gi=state.gruppoLabels[cat+gid];
+  if(!categoryUsesMultiGroup(cat) && categoriesGroupCount(cat)<=1){
+    if(!gi||!gi.cognome)return categoryShort(cat);
+    return (gi.iniz+gi.cognome[0]).toUpperCase();
+  }
   if(!gi||!gi.cognome)return 'G'+(state.groups.indexOf(gid)+1);
   return (gi.iniz+gi.cognome[0]).toUpperCase();
 }
@@ -452,10 +539,35 @@ function groupChip(cat,gid){
 }
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
+/* ---------- CATEGORY HELPERS (v2.3) ---------- */
+function categoryLabel(cat){return (state.categoryLabels||{})[cat]||''}
+function categoryDisplay(cat){const lab=categoryLabel(cat);if(!cat)return '';if(cat==='PrimaSquadra')return 'Prima Squadra';return lab?cat+' · '+lab:cat}
+function categoryShort(cat){return cat==='PrimaSquadra'?'1ª Sq.':cat}
+function categoryUsesMultiGroup(cat){return ['U6','U7','U8','U9','U10','U11','U12','U13'].includes(cat)}
+function categoryIsAgonistica(cat){return ['U14','U15','U16','U17','U18','U19'].includes(cat)}
+function categoryIsSenior(cat){return cat==='PrimaSquadra'}
+function campNumInField(cat){const m=(state.modalitaGioco||{})[cat]||'';const n=parseInt((m+'').split('c')[0],10);return isNaN(n)?11:n}
+function campionatoSquadra(cat,gid){if(cat==='PrimaSquadra')return state.campionatoPrimaSquadra||'';return ((state.campionatiAgonistiche||{})[cat+'_'+gid])?.livello||''}
+function gironeSquadra(cat,gid){if(cat==='PrimaSquadra')return state.gironePrimaSquadra||'';return ((state.campionatiAgonistiche||{})[cat+'_'+gid])?.girone||''}
+function setCampionatoSquadra(cat,gid,livello,girone){if(cat==='PrimaSquadra'){state.campionatoPrimaSquadra=livello||'';if(girone!==undefined)state.gironePrimaSquadra=girone||'';return}if(!state.campionatiAgonistiche)state.campionatiAgonistiche={};const k=cat+'_'+gid;if(!livello&&!girone){delete state.campionatiAgonistiche[k];return}state.campionatiAgonistiche[k]={livello:livello||'',girone:girone||''}}
+
 function refreshGruppoSel(selId,cat){
   const el=document.getElementById(selId);if(!el)return;
   const cur=el.value;
+  // v2.3: per categorie a gruppo unico mostro solo i gruppi effettivamente in uso (default 'A')
+  if(!categoryUsesMultiGroup(cat)){
+    const used=new Set(['A']);
+    (state.staff||[]).forEach(s=>{(s.incarichi||(s.ruolo?[{ruolo:s.ruolo,categoria:s.categoria,gruppo:s.gruppo}]:[])).forEach(inc=>{if(inc.categoria===cat&&inc.gruppo)used.add(inc.gruppo)})});
+    (state.players||[]).forEach(p=>{if(p.categoria===cat&&p.gruppo)used.add(p.gruppo)});
+    const groupsToShow=[...used];
+    el.innerHTML=groupsToShow.map(g=>`<option value="${g}" ${cur===g?'selected':''}>${groupLabel(cat,g)}</option>`).join('');
+    // se c'è un solo gruppo, nascondo il select per pulire la UI
+    const wrapper=el.closest('.ff');
+    if(wrapper){if(groupsToShow.length<=1){wrapper.style.display='none';if(!el.value)el.value=groupsToShow[0]||'A'}else wrapper.style.display=''}
+    return;
+  }
   el.innerHTML=state.groups.map((g,i)=>`<option value="${g}" ${cur===g?'selected':''}>${groupLabel(cat,g)}</option>`).join('');
+  const wrapper=el.closest('.ff');if(wrapper)wrapper.style.display='';
 }
 /* ---------- TOAST ---------- */
 function toast(m,t){const el=document.createElement('div');el.className='ts '+(t||'');el.innerHTML=m;document.getElementById('tc').appendChild(el);setTimeout(()=>{el.style.animation='si .2s reverse';setTimeout(()=>el.remove(),200)},2500)}
@@ -605,7 +717,7 @@ function renderView(){
   const c=document.getElementById('vc');
   const fn=VIEWS[state.currentView];
   if(fn){c.innerHTML='';fn(c)}
-  else c.innerHTML=`<div class="vw"><div class="vh"><h1>${state.currentView}</h1></div><div class="es"><div class="ic">🚧</div><h3>Pagina in costruzione</h3><p>Questa sezione sarà disponibile nella prossima consegna v2.2.</p></div></div>`;
+  else c.innerHTML=`<div class="vw"><div class="vh"><h1>${state.currentView}</h1></div><div class="es"><div class="ic">🚧</div><h3>Pagina in costruzione</h3><p>Questa sezione sarà disponibile in una prossima consegna.</p></div></div>`;
 }
 
 /* ---------- CHART helpers ---------- */
@@ -827,12 +939,45 @@ VIEWS.parametri=function(c){
             <div class="ff"><label>Inizio</label><input type="date" id="sp_in" value="${s.inizio}"></div>
             <div class="ff"><label>Fine</label><input type="date" id="sp_fn" value="${s.fine}"></div>
           </div>
-          <h3 style="font-size:13px;margin:14px 0 6px">Categorie &amp; modalità di gioco</h3>
+          <h3 style="font-size:13px;margin:14px 0 6px">Categorie attive &amp; modalità di gioco</h3>
           <div class="tw"><table style="font-size:12px">
-            <thead><tr><th>Categoria</th><th>Modalità</th><th>Max rosa</th></tr></thead>
-            <tbody>${state.categories.map(cat=>`<tr><td><strong>${cat}</strong></td><td>${state.modalitaGioco[cat]}</td><td>${state.maxPerTeam[cat]}</td></tr>`).join('')}</tbody>
+            <thead><tr><th>Categoria</th><th>Modalità</th><th>Max rosa</th><th></th></tr></thead>
+            <tbody>${state.categories.map(cat=>`<tr><td><strong>${categoryDisplay(cat)}</strong></td><td><span class="pl">${state.modalitaGioco[cat]||'—'}</span></td><td>${state.maxPerTeam[cat]||'—'}</td><td><button class="btn btn-sm btn-d" title="Disattiva ${esc(categoryDisplay(cat))}" onclick="toggleCategoria('${cat}',false)">✕</button></td></tr>`).join('')}</tbody>
           </table></div>
+          <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <label style="font-size:12px;color:var(--g700)">Aggiungi categoria:</label>
+            <select id="sp_addCat" style="padding:5px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px">${(state.categoriesAvailable||[]).filter(c=>!state.categories.includes(c)).map(c=>`<option value="${c}">${categoryDisplay(c)}</option>`).join('')||'<option value="">— Nessuna —</option>'}</select>
+            <button class="btn btn-s btn-sm" onclick="toggleCategoria(document.getElementById('sp_addCat').value,true)">+ Attiva</button>
+          </div>
         </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Campionato Prima Squadra</h2></div>
+        <div class="fg">
+          <div class="ff"><label>Livello campionato</label><select id="sp_camp1">
+            <option value="">— Non configurato —</option>
+            ${(state.campionatiPrimaSquadraPreset||[]).map(l=>`<option value="${esc(l)}" ${state.campionatoPrimaSquadra===l?'selected':''}>${esc(l)}</option>`).join('')}
+          </select></div>
+          <div class="ff"><label>Girone</label><input id="sp_gir1" value="${esc(state.gironePrimaSquadra||'')}" placeholder="Es. A"></div>
+          <div class="ff full"><div style="font-size:11px;color:var(--g500);padding-top:4px">Modificabile anche dalla pagina Staff (incarico Tecnico Prima Squadra) e dalla pagina Calendario quando crei una partita di campionato.</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Squadre agonistiche · Campionati</h2><span class="pl">U14-U19</span></div>
+        ${(()=>{const ago=state.categories.filter(categoryIsAgonistica);if(!ago.length)return '<div class="es"><div class="ic">🏆</div><p>Nessuna categoria agonistica attivata.</p></div>';
+          // Per ogni categoria agonistica, elenco i gruppi effettivamente in uso (almeno 'A')
+          const rows=[];
+          ago.forEach(cat=>{
+            const used=new Set(['A']);
+            (state.staff||[]).forEach(s=>{(s.incarichi||[]).forEach(inc=>{if(inc.categoria===cat&&inc.gruppo)used.add(inc.gruppo)})});
+            (state.players||[]).forEach(p=>{if(p.categoria===cat&&p.gruppo)used.add(p.gruppo)});
+            [...used].sort().forEach(gid=>{
+              const k=cat+'_'+gid;const cur=(state.campionatiAgonistiche||{})[k]||{livello:'',girone:''};
+              rows.push(`<tr><td><strong>${esc(categoryDisplay(cat))}</strong></td><td>${esc(gid)}</td><td><select class="sca_liv" data-k="${k}" style="padding:4px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px"><option value="">—</option>${(state.campionatiAgonistichePreset||[]).map(l=>`<option value="${esc(l)}" ${cur.livello===l?'selected':''}>${esc(l)}</option>`).join('')}</select></td><td><input class="sca_gir" data-k="${k}" value="${esc(cur.girone)}" placeholder="Es. B" style="width:60px;padding:4px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px"></td></tr>`);
+            });
+          });
+          return `<div class="tw"><table style="font-size:12px"><thead><tr><th>Squadra</th><th>Gruppo</th><th>Livello</th><th>Girone</th></tr></thead><tbody>${rows.join('')}</tbody></table></div><div style="margin-top:10px;display:flex;gap:8px;align-items:center"><button class="btn btn-s btn-sm" onclick="saveCampionatiAgonistiche()">💾 Salva campionati squadre</button><span style="font-size:11px;color:var(--g500)">I dati restano sincronizzati con Staff e Calendario.</span></div>`;
+        })()}
       </div>
       <div class="card">
         <div class="card-h"><h2>Direttivo (Consiglio Direttivo)</h2>
@@ -865,7 +1010,42 @@ function saveParametri(){
   s.stagione=document.getElementById('sp_sta').value;
   s.inizio=document.getElementById('sp_in').value;
   s.fine=document.getElementById('sp_fn').value;
+  // v2.3: Campionato Prima Squadra
+  const c1=document.getElementById('sp_camp1');if(c1)state.campionatoPrimaSquadra=c1.value||'';
+  const g1=document.getElementById('sp_gir1');if(g1)state.gironePrimaSquadra=g1.value||'';
+  saveCampionatiAgonistiche(true);
   saveStore();toast('Parametri salvati','s');
+}
+/* ---------- CATEGORIE ATTIVE & CAMPIONATI (v2.3) ---------- */
+function toggleCategoria(cat,attiva){
+  if(!cat){toast('Seleziona una categoria','w');return}
+  if(!state.categoriesAvailable)state.categoriesAvailable=[];
+  if(!state.categoriesAvailable.includes(cat))state.categoriesAvailable.push(cat);
+  if(attiva){
+    if(state.categories.includes(cat)){toast('Categoria già attiva','w');return}
+    state.categories.push(cat);
+    // Imposto default per modalità e maxRosa se mancano
+    if(!state.modalitaGioco[cat])state.modalitaGioco[cat]=DEFAULT_STATE.modalitaGioco[cat]||'11c11';
+    if(!state.maxPerTeam[cat])state.maxPerTeam[cat]=DEFAULT_STATE.maxPerTeam[cat]||25;
+    saveStore();renderView();toast('Categoria '+categoryDisplay(cat)+' attivata','s');
+  }else{
+    // Verifica che non ci siano giocatori/staff legati a questa categoria
+    const players=(state.players||[]).filter(p=>p.categoria===cat&&!p.eliminato).length;
+    const staff=(state.staff||[]).filter(s=>(s.incarichi||[]).some(i=>i.categoria===cat)).length;
+    if((players||staff)&&!confirm(`Categoria ${categoryDisplay(cat)}: ${players} giocatori, ${staff} staff associati. Disattivarla la nasconderà ma i dati restano. Continuare?`))return;
+    state.categories=state.categories.filter(x=>x!==cat);
+    saveStore();renderView();toast('Categoria disattivata','s');
+  }
+}
+function saveCampionatiAgonistiche(silent){
+  if(!state.campionatiAgonistiche)state.campionatiAgonistiche={};
+  document.querySelectorAll('.sca_liv').forEach(sel=>{
+    const k=sel.dataset.k;const liv=sel.value;
+    const girEl=document.querySelector('.sca_gir[data-k="'+k+'"]');const gir=girEl?girEl.value:'';
+    if(!liv&&!gir)delete state.campionatiAgonistiche[k];
+    else state.campionatiAgonistiche[k]={livello:liv,girone:gir};
+  });
+  if(!silent){saveStore();toast('Campionati squadre salvati','s')}
 }
 function openDirettivo(id){
   const m=id?state.direttivo.find(x=>x.id===id):{id:null,ruolo:'Consigliere',nome:'',cognome:'',email:'',tel:'',cf:''};
@@ -971,6 +1151,30 @@ function saveOrg(id){
   closeM();saveStore();renderView();
 }
 function delOrg(id){const kids=state.organigramma.filter(o=>o.parent===id);if(kids.length&&!confirm(`Ha ${kids.length} subordinate che diventeranno radici. Continuare?`))return;state.organigramma=state.organigramma.filter(x=>x.id!==id);state.organigramma.forEach(o=>{if(o.parent===id)o.parent=null});saveStore();renderView();toast('Rimossa','s')}
+
+/* ---------- ORGANIGRAMMA: COMUNICAZIONE (v2.3) ---------- */
+function openOrgComunicazione(){
+  const org=state.organigramma||[];
+  if(!org.length){toast('Organigramma vuoto','w');return}
+  const items=org.filter(o=>(o.email&&o.email.trim())||(o.tel&&o.tel.trim()));
+  if(!items.length){toast('Nessun contatto disponibile (manca email/telefono)','w');return}
+  const list=items.map(o=>{
+    const cn=o.cognome||(o.nome&&o.nome.includes(' ')?o.nome.trim().split(/\s+/).pop():'');
+    const nm=o.cognome?o.nome:(o.nome&&o.nome.includes(' ')?o.nome.trim().split(/\s+/).slice(0,-1).join(' '):o.nome);
+    const dets=[o.email?'✉ '+esc(o.email):'',o.tel?'📞 '+esc(o.tel):''].filter(Boolean).join(' · ');
+    return `<label style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--g100);font-size:12px;cursor:pointer"><input type="checkbox" class="ocm_chk" value="${o.id}" checked><div style="flex:1"><strong>${esc(cn)} ${esc(nm)}</strong> <span style="color:var(--g500);font-size:11px">· ${esc(o.ruolo)}</span><br><span style="font-size:10px;color:var(--g500)">${dets}</span></div></label>`;
+  }).join('');
+  const defaultMsg='Gentile collega,\n\n[scrivi qui il testo della comunicazione]\n\nCordiali saluti,\nLASCARIS 1954 ASD';
+  openM('Invia comunicazione · Organigramma',`<div style="margin-bottom:10px"><div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="orgComSelAll(true)">Seleziona tutti</button><button class="btn btn-s btn-sm" onclick="orgComSelAll(false)">Deseleziona</button></div><div style="max-height:240px;overflow-y:auto;border:1px solid var(--g200);border-radius:var(--rs)">${list}</div></div><div class="ff full"><label>Oggetto email</label><input id="ocm_subj" value="Comunicazione LASCARIS 1954 ASD"></div><div class="ff full" style="margin-top:8px"><label>Messaggio</label><textarea id="ocm_msg" rows="6" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs);font:inherit;resize:vertical">${esc(defaultMsg)}</textarea></div>`,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-s" onclick="orgComCopy()">📋 Copia</button><button class="btn btn-p" onclick="orgComSendEmail()">✉ Email</button><button class="btn btn-g" onclick="orgComSendWA()">💬 WhatsApp</button><button class="btn btn-s" onclick="orgComSendSMS()">📱 SMS</button>`);
+}
+function orgComSelAll(yes){document.querySelectorAll('.ocm_chk').forEach(cb=>cb.checked=yes)}
+function orgComGetSelected(){const ids=[...document.querySelectorAll('.ocm_chk:checked')].map(cb=>cb.value);return (state.organigramma||[]).filter(o=>ids.includes(o.id))}
+function orgComGetEmails(){return orgComGetSelected().map(o=>(o.email||'').trim()).filter(Boolean)}
+function orgComGetPhones(){return orgComGetSelected().map(o=>(o.tel||'').trim()).filter(Boolean).map(t=>t.replace(/[^0-9+]/g,''))}
+function orgComCopy(){const t=document.getElementById('ocm_msg').value;navigator.clipboard.writeText(t).then(()=>toast('Testo copiato','s')).catch(()=>toast('Impossibile copiare','e'))}
+function orgComSendEmail(){const ems=orgComGetEmails();if(!ems.length){toast('Nessuna email tra i selezionati','w');return}const sub=encodeURIComponent(document.getElementById('ocm_subj').value||'Comunicazione LASCARIS 1954');const body=encodeURIComponent(document.getElementById('ocm_msg').value);window.location.href='mailto:?bcc='+ems.join(',')+'&subject='+sub+'&body='+body;toast('Apertura client email...','s')}
+function orgComSendWA(){const phones=orgComGetPhones();const t=encodeURIComponent(document.getElementById('ocm_msg').value);if(phones.length===1){window.open('https://wa.me/'+phones[0].replace(/^\+?/,'')+'?text='+t,'_blank')}else{window.open('https://wa.me/?text='+t,'_blank');if(phones.length>1)toast('WhatsApp non supporta invio multiplo: condividi manualmente','w')}}
+function orgComSendSMS(){const phones=orgComGetPhones();if(!phones.length){toast('Nessun telefono tra i selezionati','w');return}const t=encodeURIComponent(document.getElementById('ocm_msg').value);window.location.href='sms:'+phones.join(',')+'?body='+t;toast('Apertura app SMS...','s')}
 
 /* =============================================================
    VIEW: UTENTI & PERMESSI
@@ -1473,7 +1677,7 @@ function openPlayer(id){
       <div class="ff full"><label>Codice Fiscale</label><input id="pl_cf" value="${esc(p.cf)}"></div>
       <div class="ff full"><label>Indirizzo residenza</label><input id="pl_in" value="${esc(p.indirizzo)}"></div>
       <div class="ff"><label>Comune residenza</label><input id="pl_cr" value="${esc(p.comuneResidenza)}"></div>
-      <div class="ff"><label>Categoria *</label><select id="pl_ca" onchange="refreshGruppoSel('pl_gr',this.value)">${state.categories.map(x=>`<option ${p.categoria===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="ff"><label>Categoria *</label><select id="pl_ca" onchange="refreshGruppoSel('pl_gr',this.value)">${state.categories.map(x=>`<option value="${x}" ${p.categoria===x?'selected':''}>${categoryDisplay(x)}</option>`).join('')}</select></div>
       <div class="ff"><label>Gruppo *</label><select id="pl_gr">${state.groups.map((g,i)=>`<option value="${g}" ${p.gruppo===g?'selected':''}>${groupLabel(p.categoria,g)}</option>`).join('')}</select></div>
       <div class="ff full"><label>Ruolo/i <span style="font-size:9px;color:var(--g500)">(il primo selezionato = ruolo principale)</span></label><div id="pl_ru_box" style="display:flex;flex-wrap:wrap;gap:4px;padding:4px 0">${PLAYER_ROLES.map(r=>{const ruoli=p.ruoli||[p.ruolo]||[];const checked=ruoli.includes(r);const isPrimary=ruoli[0]===r;const mc=ROLE_MACRO[r]||'?';const col=ROLE_COLORS[mc]||'var(--g400)';return '<label style="font-size:11px;display:flex;align-items:center;gap:2px;background:'+(isPrimary?col:(checked?'var(--g700)':'var(--g100)'))+';color:'+(checked?'#fff':'inherit')+';padding:2px 8px;border-radius:12px;cursor:pointer;border:'+(isPrimary?'2px solid '+col:'2px solid transparent')+'"><input type="checkbox" name="pl_ruoli" value="'+r+'" '+(checked?'checked':'')+' style="display:none" onchange="updateRuoliUI()">'+r+'</label>'}).join('')}</div></div>
       <div class="ff"><label>Piede</label><select id="pl_pi"><option ${p.piede==='Destro'?'selected':''}>Destro</option><option ${p.piede==='Sinistro'?'selected':''}>Sinistro</option><option ${p.piede==='Ambidestro'?'selected':''}>Ambidestro</option></select></div>
@@ -1563,7 +1767,7 @@ VIEWS.anagrafica=function(c){
       ${!ps.length?`<div class="es"><div class="ic">📇</div><h3>Anagrafica vuota</h3><p>Inserisci il primo giocatore per popolare l'anagrafica.</p><button class="btn btn-p" onclick="openPlayer('')">+ Primo</button></div>`:`
         <div class="card"><div class="fb">
           <input id="an_s" placeholder="🔍 Cerca..." oninput="filterAnag()" style="min-width:220px">
-          <select id="an_c" onchange="filterAnag()"><option value="">Tutte categorie</option>${state.categories.map(x=>`<option>${x}</option>`).join('')}</select>
+          <select id="an_c" onchange="filterAnag()"><option value="">Tutte categorie</option>${state.categories.map(x=>`<option value="${x}">${categoryDisplay(x)}</option>`).join('')}</select>
           <select id="an_g" onchange="filterAnag()"><option value="">Tutti gruppi</option>${state.groups.map((g,i)=>`<option value="${g}">${g}</option>`).join('')}</select>
         </div>
         <div class="tw"><table id="anTbl">
@@ -1756,7 +1960,7 @@ function openAttivita(id,dataIso,impId,fascia){
     <div class="ff"><label>Ora inizio</label><input type="time" id="at_or" value="${a.ora}" onchange="calcFascia()"></div>
     <div class="ff"><label>Durata (min)</label><input type="number" id="at_du" value="${a.durata}" onchange="calcFascia()"></div>
     <div class="ff"><label>Ora fine</label><input type="time" id="at_fi" value="${calcOraFine(a.ora,a.durata)}" onchange="calcDurataFromFine()"></div>
-    <div class="ff"><label>Categoria *</label><select id="at_ca" onchange="refreshGruppoSel('at_gr',this.value);atUpdateModalita()">${state.categories.map(x=>`<option ${a.categoria===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="ff"><label>Categoria *</label><select id="at_ca" onchange="refreshGruppoSel('at_gr',this.value);atUpdateModalita()">${state.categories.map(x=>`<option value="${x}" ${a.categoria===x?'selected':''}>${categoryDisplay(x)}</option>`).join('')}</select></div>
     <div class="ff"><label>Gruppo *</label><select id="at_gr">${state.groups.map((g,i)=>`<option value="${g}" ${a.gruppo===g?'selected':''}>${groupLabel(a.categoria,g)}</option>`).join('')}</select></div>
     <div class="ff"><label>Sede</label><select id="at_sd" onchange="toggleSedeFields()"><option value="casa" ${a.sede==='trasferta'?'':'selected'}>Casa</option><option value="trasferta" ${a.sede==='trasferta'?'selected':''}>Trasferta</option></select></div><div class="ff" id="atImpBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Impianto</label><select id="at_im" onchange="atUpdateCampi()"><option value="">—</option>${state.impianti.map(i=>`<option value="${i.id}" ${a.impiantoId===i.id?'selected':''}>${esc(i.nome)}</option>`).join('')}</select></div><div class="ff full" id="atCampoBox" style="${a.sede==='trasferta'?'display:none':''}"><label>Zona di campo</label><div id="at_cp_list" style="display:flex;flex-wrap:wrap;gap:6px">${(()=>{const imp=state.impianti.find(i=>i.id===a.impiantoId);const cIds=a.campoIds||(a.campoId?[a.campoId]:[]);if(!imp)return '';const cc=imp.campi||[];return cc.map(c=>{const lbl=c.tipo==='11h'?((cc.find(p=>p.tipo==='11')||{}).nome||'Campo')+' · '+c.nome:c.nome;return '<label style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--g200);border-radius:6px;font-size:11px;cursor:pointer;background:var(--g50)"><input type=checkbox class=at_cp_chk value='+c.id+(cIds.includes(c.id)?' checked':'')+'>'+esc(lbl)+'</label>'}).join('')})()}</div></div><div id="atTrasBox" style="${a.sede==='trasferta'?'':'display:none'};display:${a.sede==='trasferta'?'flex':'none'};flex-wrap:wrap;gap:10px;width:100%"><div class="ff"><label>Impianto esterno</label><input id="at_ie" list="impEstList" value="${esc(a.impiantoEsterno||'')}" placeholder="Nome stadio/campo" oninput="autoFillImpEst()"><datalist id="impEstList">${(state.impiantiEsterni||[]).map(ie=>`<option value="${esc(ie.nome)}">`).join('')}</datalist></div><div class="ff"><label>Indirizzo</label><input id="at_il" value="${esc(a.luogoLibero||'')}" placeholder="Via, Città (Provincia)"></div></div>
     <div class="ff"><label>Fascia oraria</label><input id="at_fa" value="${a.fascia||(a.ora&&a.durata?a.ora+'-'+calcOraFine(a.ora,a.durata):''
@@ -1881,7 +2085,7 @@ VIEWS.presenze=function(c){
       <div class="vh"><div><h1>Presenze Allenamento</h1><div class="sb2">Tap-and-go · autosalvato</div></div></div>
       <div class="card">
         <div class="fb">
-          <select id="pr_c" onchange="presS.cat=this.value;renderView()">${state.categories.map(x=>`<option ${presS.cat===x?'selected':''}>${x}</option>`).join('')}</select>
+          <select id="pr_c" onchange="presS.cat=this.value;renderView()">${state.categories.map(x=>`<option value="${x}" ${presS.cat===x?'selected':''}>${categoryDisplay(x)}</option>`).join('')}</select>
           <div class="seg">${state.groups.map((g,i)=>`<button class="${presS.grp===g?'on':''}" onclick="presS.grp='${g}';renderView()">${groupLabel(presS.cat,g)}</button>`).join('')}</div>
           <input type="date" id="pr_d" value="${presS.data}" onchange="presS.data=this.value;renderView()">
         </div>
@@ -2285,7 +2489,7 @@ VIEWS.matchday=function(c){
         <h2 style="font-size:14px;margin-bottom:10px">Configurazione partita</h2>
         <div class="fg">
           <div class="ff"><label>Tipo *</label><select id="md_ti" onchange="mdS.tipo=this.value"><option ${mdS.tipo==='Campionato'?'selected':''}>Campionato</option><option ${mdS.tipo==='Amichevole'?'selected':''}>Amichevole</option><option ${mdS.tipo==='Torneo'?'selected':''}>Torneo</option><option ${mdS.tipo==='Test match'?'selected':''}>Test match</option></select></div>
-          <div class="ff"><label>Categoria *</label><select id="md_ca" onchange="mdS.cat=this.value;refreshGruppoSel('md_gr',this.value);renderView()">${state.categories.map(x=>`<option ${mdS.cat===x?'selected':''}>${x}</option>`).join('')}</select></div>
+          <div class="ff"><label>Categoria *</label><select id="md_ca" onchange="mdS.cat=this.value;refreshGruppoSel('md_gr',this.value);renderView()">${state.categories.map(x=>`<option value="${x}" ${mdS.cat===x?'selected':''}>${categoryDisplay(x)}</option>`).join('')}</select></div>
           <div class="ff"><label>Gruppo *</label><select id="md_gr" onchange="mdS.grp=this.value">${state.groups.map(g=>`<option value="${g}" ${mdS.grp===g?'selected':''}>${groupLabel(mdS.cat||state.categories[0],g)}</option>`).join('')}</select></div>
           <div class="ff"><label>Avversario</label><input id="md_av" value="${esc(mdS.avv)}" oninput="mdS.avv=this.value;const e=document.getElementById('mdAN');if(e)e.textContent=this.value||'Avversario'"></div>
           <div class="ff"><label>N° tempi</label><select id="md_np" onchange="mdS.nPeriods=+this.value;document.getElementById('mdPer').textContent='T '+mdS.period+'/'+mdS.nPeriods">${[1,2,3,4,5,6].map(n=>`<option ${mdS.nPeriods===n?'selected':''}>${n}</option>`).join('')}</select></div>
@@ -2640,7 +2844,7 @@ function mdRenderRoster(){
 }
 function mdStatPlus(pid,k,lbl){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;if(k==='tiriP'){r.stats.tiriP=(r.stats.tiriP||0)+1;r.stats.tiri=(r.stats.tiri||0)+1}else if(k==='tiriF'){r.stats.tiri=(r.stats.tiri||0)+1}else if(k==='passC'){r.stats.passC=(r.stats.passC||0)+1;r.stats.passT=(r.stats.passT||0)+1}else if(k==='passF'){r.stats.passT=(r.stats.passT||0)+1}else if(k==='drR'){r.stats.drR=(r.stats.drR||0)+1;r.stats.drT=(r.stats.drT||0)+1}else if(k==='drF'){r.stats.drT=(r.stats.drT||0)+1}else{r.stats[k]=(r.stats[k]||0)+1}mdAddEv(lbl+' · '+r.name);mdRenderRoster()}
 function mdStatDel(pid,k){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;const s=r.stats;if(k==='tiriP'){if((s.tiriP||0)>0){s.tiriP--;s.tiri=Math.max(0,(s.tiri||0)-1);mdAddEv('↩ −1 Tiro porta · '+r.name)}else{toast('Nessun tiro in porta','w');return}}else if(k==='tiriF'){const tf=(s.tiri||0)-(s.tiriP||0);if(tf>0){s.tiri=Math.max(0,(s.tiri||0)-1);mdAddEv('↩ −1 Tiro fuori · '+r.name)}else{toast('Nessun tiro fuori','w');return}}else if(k==='passC'){if((s.passC||0)>0){s.passC--;s.passT=Math.max(0,(s.passT||0)-1);mdAddEv('↩ −1 Pass riuscito · '+r.name)}else{toast('Nessun passaggio riuscito','w');return}}else if(k==='passF'){const pf=(s.passT||0)-(s.passC||0);if(pf>0){s.passT=Math.max(0,(s.passT||0)-1);mdAddEv('↩ −1 Pass sbagliato · '+r.name)}else{toast('Nessun passaggio sbagliato','w');return}}else if(k==='drR'){if((s.drR||0)>0){s.drR--;s.drT=Math.max(0,(s.drT||0)-1);mdAddEv('↩ −1 Dribb riuscito · '+r.name)}else{toast('Nessun dribbling riuscito','w');return}}else if(k==='drF'){const df=(s.drT||0)-(s.drR||0);if(df>0){s.drT=Math.max(0,(s.drT||0)-1);mdAddEv('↩ −1 Dribb perso · '+r.name)}else{toast('Nessun dribbling perso','w');return}}mdRenderRoster()}
-function mdSubIn(pid){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;const max={'U6':3,'U7':3,'U8':5,'U9':5,'U10':7,'U11':7,'U12':9,'U13':9}[mdS.cat]||9;if(mdS.roster.filter(x=>x.status==='in').length>=max){toast('Campo pieno','w');return}const re=r.status==='out';r.status='in';r.enteredAt=mdS.t;mdAddEv((re?'↺ Rientra ':'↗ Entra ')+r.name);mdRenderRoster()}
+function mdSubIn(pid){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;const max=campNumInField(mdS.cat);if(mdS.roster.filter(x=>x.status==='in').length>=max){toast('Campo pieno','w');return}const re=r.status==='out';r.status='in';r.enteredAt=mdS.t;mdAddEv((re?'↺ Rientra ':'↗ Entra ')+r.name);mdRenderRoster()}
 function mdSubOut(pid){const r=mdS.roster.find(x=>x.pid===pid);if(!r)return;r.status='out';r.minutes+=Math.max(0,Math.floor((mdS.t-(r.enteredAt||0))/60));mdAddEv('↙ Esce '+r.name+' ('+r.minutes+"')");mdRenderRoster()}
 function mdAddEv(txt){mdS.events.unshift({t:mdS.t,period:mdS.period,txt});mdRenderEv()}
 function mdRenderEv(){const el=document.getElementById('mdEv');if(!el)return;el.innerHTML=mdS.events.slice(0,50).map((e,idx)=>`<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid var(--g100)"><span class="pl" style="font-size:10px">T${e.period} · ${Math.floor(e.t/60)}'</span> <span style="flex:1">${esc(e.txt)}</span><button class="btn btn-sm btn-d" style="padding:2px 6px;font-size:10px" onclick="mdDelEvent(${idx})" title="Elimina questo evento">🗑</button></div>`).join('')||'<p style="color:var(--g500);font-size:12px">Nessun evento</p>'}
@@ -2723,21 +2927,13 @@ function mdParseOCR(text){
   mdS.oppPending=extracted.slice(0,30);
   const st=document.getElementById('mo_st');
   if(!extracted.length){
-    st.innerHTML+='<div style="padding:10px;background:#fee2e2;border-radius:var(--rs);margin-top:8px"><strong>⚠ Nessun giocatore riconosciuto</strong><br>Testo estratto grezzo:<br><pre style="font-size:10px;max-height:120px;overflow:auto;background:white;padding:6px;margin-top:4px">'+esc(text.slice(0,500))+'</pre><button class="btn btn-s btn-sm" style="margin-top:6px" onclick="mdAddOppManualFromOCR()">+ Aggiungi manualmente</button></div>';
+    st.innerHTML+='<div style="padding:10px;background:#fee2e2;border-radius:var(--rs);margin-top:8px"><strong>⚠ Nessun giocatore riconosciuto</strong><br>Testo estratto grezzo:<br><pre style="font-size:10px;max-height:120px;overflow:auto;background:white;padding:6px;margin-top:4px">'+esc(text.slice(0,500))+'</pre><button class="btn btn-s btn-sm" style="margin-top:6px" onclick="mdAddOpp()">+ Aggiungi manualmente</button></div>';
     return;
   }
   st.innerHTML+=`<div style="padding:10px;background:#dcfce7;border-radius:var(--rs);margin-top:8px;font-size:12px"><strong>✅ ${extracted.length} giocatori riconosciuti</strong></div><div style="max-height:240px;overflow-y:auto;margin-top:6px"><table style="width:100%;font-size:11px"><thead><tr><th>N°</th><th>Nome</th><th>Ruolo</th></tr></thead><tbody>${extracted.map((p,i)=>`<tr><td><input value="${p.numero}" style="width:40px" onchange="mdS.oppPending[${i}].numero=this.value"></td><td><input value="${esc(p.nome)}" style="width:100%" onchange="mdS.oppPending[${i}].nome=this.value"></td><td><select onchange="mdS.oppPending[${i}].ruolo=this.value"><option ${p.ruolo==='Portiere'?'selected':''}>Portiere</option><option ${p.ruolo==='Difensore'?'selected':''}>Difensore</option><option ${p.ruolo==='Centrocampista'?'selected':''}>Centrocampista</option><option ${p.ruolo==='Attaccante'?'selected':''}>Attaccante</option></select></td></tr>`).join('')}</tbody></table></div>`;
   document.getElementById('mFt').innerHTML='<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="mdConfirmOCR()">✓ Aggiungi</button>';
 }
-function mdShowOCR_DEPRECATED(){
-  const COGS=['Rossi','Bianchi','Verdi','Neri','Ferrari','Romano','Conti','Esposito','Ricci','Marini','Galli','Costa','Greco','Testa'];
-  const NOMS=['Marco','Luca','Alessio','Matteo','Francesco','Simone','Davide','Filippo','Leonardo','Andrea','Tommaso','Nicolò'];
-  const nums=[1,2,3,4,5,6,7,8,9,10,11,12,14,15];
-  const xn=nums.slice(0,12).map((n,i)=>({id:uid(),numero:n,nome:NOMS[i%NOMS.length]+' '+COGS[i%COGS.length],ruolo:n===1?'Portiere':n<=4?'Difensore':n<=8?'Centrocampista':'Attaccante',conf:85+Math.floor(Math.random()*15)}));
-  mdS.oppPending=xn;
-  document.getElementById('mo_st').innerHTML=`<div style="padding:10px;background:#dcfce7;border-radius:var(--rs);font-size:12px;margin-bottom:10px"><strong>✅ ${xn.length} giocatori estratti</strong></div><div style="max-height:240px;overflow-y:auto"><table style="width:100%;font-size:11px"><thead><tr><th>N°</th><th>Nome</th><th>Ruolo</th><th>Conf.</th></tr></thead><tbody>${xn.map((p,i)=>`<tr><td><input value="${p.numero}" style="width:40px" onchange="mdS.oppPending[${i}].numero=this.value"></td><td><input value="${esc(p.nome)}" style="width:100%" onchange="mdS.oppPending[${i}].nome=this.value"></td><td><select onchange="mdS.oppPending[${i}].ruolo=this.value"><option ${p.ruolo==='Portiere'?'selected':''}>Portiere</option><option ${p.ruolo==='Difensore'?'selected':''}>Difensore</option><option ${p.ruolo==='Centrocampista'?'selected':''}>Centrocampista</option><option ${p.ruolo==='Attaccante'?'selected':''}>Attaccante</option></select></td><td><span class="bdg ${p.conf>=90?'bdg-g':'bdg-y'}">${p.conf}%</span></td></tr>`).join('')}</tbody></table></div>`;
-  document.getElementById('mFt').innerHTML=`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="mdConfirmOCR()">✓ Aggiungi ${xn.length}</button>`;
-}
+/* mdShowOCR_DEPRECATED rimossa in v2.3 — codice morto */
 function mdConfirmOCR(){mdS.opp=mdS.opp.concat(mdS.oppPending||[]);closeM();mdRenderOpp();toast(mdS.oppPending.length+' giocatori importati','s')}
 function mdRenderOpp(){const el=document.getElementById('mdOpp');if(!el)return;if(!mdS.opp.length){el.innerHTML='<p style="color:var(--g500);font-size:12px">Nessun giocatore avversario</p>';return}el.innerHTML=mdS.opp.map(p=>{p.stats=p.stats||{};return `<div style="padding:8px;background:#fee2e2;border-radius:var(--rs);margin-bottom:4px"><div style="display:flex;gap:6px;align-items:center"><div style="width:22px;height:22px;border-radius:50%;background:var(--red);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px">${esc(p.numero)}</div><div style="flex:1;font-size:12px"><strong>${esc(p.nome)}</strong><span style="font-size:10px;color:var(--g500);margin-left:4px">· ${esc(p.ruolo)}</span></div><button class="btn btn-sm btn-s" style="background:#eab308;color:black;padding:3px 6px;font-size:11px" onclick="mdScoutFlag('${p.id}')" title="Segnala allo scout">🚩 Scout</button></div><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-top:6px">${[['gol','⚽'],['assist','🅰'],['tiri','🎯'],['tiriP','◎'],['drT','↻'],['drR','↻✓'],['passT','→'],['passC','→✓'],['amm','🟨'],['esp','🟥']].map(([k,i])=>`<div style="display:flex;gap:1px"><button class="btn btn-sm btn-s md-stat" style="font-size:10px;padding:2px;flex:1" onclick="mdOppEvAdd('${p.id}','${k}','${i}')">${i} ${p.stats[k]||0}</button><button class="btn btn-sm btn-s" style="font-size:10px;padding:2px 4px;background:#dc2626;color:white" onclick="mdOppEvDel('${p.id}','${k}')">−</button></div>`).join('')}</div></div>`}).join('')}
 function mdScoutFlag(oppId){
@@ -2984,7 +3180,7 @@ VIEWS.agenda=function(c){
         <div class="card"><div class="fb">
           <input type="date" id="ag_fr" onchange="filterAg()"><span>—</span><input type="date" id="ag_to" onchange="filterAg()">
           <select id="ag_mo" onchange="filterAg()"><option value="">Tutti i mesi</option>${['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'].map((n,i)=>`<option value="${i}">${n}</option>`).join('')}</select>
-          <select id="ag_ca" onchange="filterAg()"><option value="">Tutte cat</option>${state.categories.map(x=>`<option>${x}</option>`).join('')}</select>
+          <select id="ag_ca" onchange="filterAg()"><option value="">Tutte cat</option>${state.categories.map(x=>`<option value="${x}">${categoryDisplay(x)}</option>`).join('')}</select>
           <select id="ag_gr" onchange="filterAg()" disabled title="Seleziona prima una categoria"><option value="">Tutti gruppi</option></select>
           <select id="ag_ti" onchange="filterAg()"><option value="">Tutti tipi</option><option>Campionato</option><option>Torneo</option><option>Amichevole</option><option>Test match</option></select>
         </div>
@@ -3043,7 +3239,7 @@ VIEWS.programma=function(c){
         </div>
       </div>
       <div class="fb">
-        <select id="pr_ca" onchange="state._progFc=this.value;saveStore();renderView()"><option value="">Tutte categorie</option>${state.categories.map(x=>`<option ${state._progFc===x?'selected':''}>${x}</option>`).join('')}</select>
+        <select id="pr_ca" onchange="state._progFc=this.value;saveStore();renderView()"><option value="">Tutte categorie</option>${state.categories.map(x=>`<option value="${x}" ${state._progFc===x?'selected':''}>${categoryDisplay(x)}</option>`).join('')}</select>
         <select id="pr_gr" onchange="state._progFg=this.value;saveStore();renderView()" ${!state._progFc?'disabled':''} title="${!state._progFc?'Seleziona prima una categoria':''}"><option value="">Tutti gruppi</option>${state._progFc?state.groups.map(g=>`<option value="${g}" ${state._progFg===g?'selected':''}>${groupLabel(state._progFc,g)}</option>`).join(''):''}</select>
         <select id="pr_ti" onchange="state._progFt=this.value;saveStore();renderView()"><option value="">Tutti tipi</option><option ${state._progFt==='Allenamento'?'selected':''}>Allenamento</option><option ${state._progFt==='Campionato'?'selected':''}>Campionato</option><option ${state._progFt==='Torneo'?'selected':''}>Torneo</option><option ${state._progFt==='Test match'?'selected':''}>Test match</option><option ${state._progFt==='Amichevole'?'selected':''}>Amichevole</option></select>
       </div>
@@ -3072,7 +3268,7 @@ VIEWS.schede=function(c){
 };
 function renderSchedeArc(){
   if(!state.schede.length)return `<div class="es"><div class="ic">📋</div><h3>Nessuna scheda archiviata</h3><p>Le schede di allenamento che salverai saranno disponibili qui per tutti i tecnici.</p><button class="btn btn-p" onclick="schedaTab='cmp';renderView()">+ Prima scheda</button></div>`;
-  return `<div class="card"><div class="fb"><select id="ar_ca" onchange="filterSchede()"><option value="">Tutte cat</option>${state.categories.map(x=>`<option>${x}</option>`).join('')}</select><input id="ar_s" placeholder="🔍 Cerca obiettivo..." oninput="filterSchede()"></div><div class="tw"><table id="arTbl"><thead><tr><th>Data</th><th>Categoria</th><th>Tecnico</th><th>Obiettivo tecnico</th><th>Impianto</th><th>Azioni</th></tr></thead><tbody>${state.schede.slice().reverse().map(s=>`<tr data-cat="${s.categoria}" data-s="${esc((s.objTec+' '+(s.tecnico||'')).toLowerCase())}"><td>${fmtIt(s.data)}</td><td>${s.categoria}</td><td>${esc(s.tecnico)||'—'}</td><td style="font-size:12px">${esc(s.objTec)||'—'}</td><td style="font-size:11px">${esc(s.impianto)||'—'}</td><td><button class="btn btn-sm btn-s" onclick="openSchedaView('${s.id}')">👁</button> <button class="btn btn-sm btn-s" onclick="schedaForm=JSON.parse(JSON.stringify(state.schede.find(x=>x.id==='${s.id}')));schedaTab='cmp';renderView()">✎</button> <button class="btn btn-sm btn-d" onclick="delScheda('${s.id}')">🗑</button></td></tr>`).join('')}</tbody></table></div></div>`;
+  return `<div class="card"><div class="fb"><select id="ar_ca" onchange="filterSchede()"><option value="">Tutte cat</option>${state.categories.map(x=>`<option value="${x}">${categoryDisplay(x)}</option>`).join('')}</select><input id="ar_s" placeholder="🔍 Cerca obiettivo..." oninput="filterSchede()"></div><div class="tw"><table id="arTbl"><thead><tr><th>Data</th><th>Categoria</th><th>Tecnico</th><th>Obiettivo tecnico</th><th>Impianto</th><th>Azioni</th></tr></thead><tbody>${state.schede.slice().reverse().map(s=>`<tr data-cat="${s.categoria}" data-s="${esc((s.objTec+' '+(s.tecnico||'')).toLowerCase())}"><td>${fmtIt(s.data)}</td><td>${s.categoria}</td><td>${esc(s.tecnico)||'—'}</td><td style="font-size:12px">${esc(s.objTec)||'—'}</td><td style="font-size:11px">${esc(s.impianto)||'—'}</td><td><button class="btn btn-sm btn-s" onclick="openSchedaView('${s.id}')">👁</button> <button class="btn btn-sm btn-s" onclick="schedaForm=JSON.parse(JSON.stringify(state.schede.find(x=>x.id==='${s.id}')));schedaTab='cmp';renderView()">✎</button> <button class="btn btn-sm btn-d" onclick="delScheda('${s.id}')">🗑</button></td></tr>`).join('')}</tbody></table></div></div>`;
 }
 function filterSchede(){const ca=document.getElementById('ar_ca').value,s=document.getElementById('ar_s').value.toLowerCase();document.querySelectorAll('#arTbl tbody tr').forEach(r=>{let ok=true;if(ca&&r.dataset.cat!==ca)ok=false;if(s&&!r.dataset.s.includes(s))ok=false;r.style.display=ok?'':'none'})}
 const FASI={'F1 · Attivazione':['Gioco di strada','Gioco di tecnica','Gioco motorio'],'F2 · Sviluppo individuale':['Tecnica di base/estrosa','Duelli (1:1 - 2:1 - 2:2)','Motorio-coordinativo'],'F3 · Sviluppo collettivo':['Gioco di sviluppo','Gioco a tema','Gioco a ranghi ridotti'],'F4 · Partita':['Partita libera']};
@@ -3541,7 +3737,7 @@ function renderObiettivi(){return `<div class="card">
   <h2 style="font-size:14px;margin-bottom:10px">Obiettivi mensili / programmazione annuale</h2>
   <p style="color:var(--g500);font-size:12px;margin-bottom:10px">Compila gli obiettivi per categoria e mese. I tecnici potranno selezionarli dai menu a tendina durante la compilazione della scheda.</p>
   <div class="fg">
-    <div class="ff"><label>Categoria</label><select id="oc_c">${state.categories.map(x=>`<option>${x}</option>`).join('')}</select></div>
+    <div class="ff"><label>Categoria</label><select id="oc_c">${state.categories.map(x=>`<option value="${x}">${categoryDisplay(x)}</option>`).join('')}</select></div>
     <div class="ff"><label>Mese</label><select id="oc_m">${['Settembre','Ottobre','Novembre','Dicembre','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno'].map(x=>`<option>${x}</option>`).join('')}</select></div>
   </div>
   <div class="fg" style="margin-top:10px">
