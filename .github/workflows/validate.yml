@@ -1,0 +1,146 @@
+# =================================================================
+# LASCARIS 1954 ASD · CI di validazione sintassi · v1.0
+# =================================================================
+# Questo workflow gira automaticamente ad ogni push e ad ogni
+# pull request sul branch main. Verifica:
+#   1. Che il file index.html esista
+#   2. Che il JavaScript inline sia sintatticamente valido (node --check)
+#   3. Che alcune funzioni-chiave siano definite (smoke test)
+#   4. Che non siano state introdotte chiamate a funzioni inesistenti
+#
+# Se uno qualsiasi di questi controlli fallisce, il job va in errore
+# e GitHub blocca visivamente il commit con una "X" rossa nel listato
+# dei commit, segnalando subito che c'è qualcosa da sistemare.
+# Il deploy di GitHub Pages avviene comunque in parallelo, ma il
+# fallimento del job ti avvisa che la versione live è rotta e va
+# subito ripristinata via Revert (vedi guida operativa, sezione 9).
+# =================================================================
+ 
+name: Validazione gestionale Lascaris
+ 
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # consente di avviare manualmente dal tab Actions
+ 
+jobs:
+  syntax-check:
+    name: Controllo sintassi e funzioni
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+ 
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+ 
+      - name: Verifica presenza index.html
+        run: |
+          if [ ! -f index.html ]; then
+            echo "::error::File index.html mancante nella root del repo"
+            exit 1
+          fi
+          echo "✓ index.html trovato ($(wc -c < index.html) byte, $(wc -l < index.html) righe)"
+ 
+      - name: Estrai JavaScript inline
+        run: |
+          python3 << 'EOF'
+          import re, sys
+          with open('index.html', 'r', encoding='utf-8') as f:
+              content = f.read()
+          # Trova solo gli script inline (senza attributo src)
+          blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', content, re.DOTALL)
+          if not blocks:
+              print('::error::Nessun script inline trovato in index.html')
+              sys.exit(1)
+          combined = '\n;\n'.join(blocks)
+          with open('inline.js', 'w', encoding='utf-8') as o:
+              o.write(combined)
+          print(f'✓ Estratti {len(blocks)} blocchi script, {len(combined)} caratteri')
+          EOF
+ 
+      - name: Validazione sintassi JavaScript (node --check)
+        run: |
+          if ! node --check inline.js 2>err.log; then
+            echo "::error::Sintassi JavaScript NON valida — il deploy è da considerarsi rotto"
+            cat err.log
+            exit 1
+          fi
+          echo "✓ Sintassi JavaScript valida"
+ 
+      - name: Smoke test funzioni-chiave
+        run: |
+          MISSING=""
+          for fn in loadStore saveStore renderView buildSidebar doLogin enterApp \
+                    categoryDisplay categoryUsesMultiGroup migrateStateV23 \
+                    openOrgComunicazione mdAddOpp toggleCategoria; do
+            if ! grep -qE "function[[:space:]]+${fn}[[:space:]]*\(" index.html; then
+              MISSING="$MISSING $fn"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::Funzioni mancanti:$MISSING"
+            exit 1
+          fi
+          echo "✓ Tutte le funzioni-chiave sono definite"
+ 
+      - name: Controllo onclick orfani
+        run: |
+          python3 << 'EOF'
+          import re, sys
+          with open('index.html', 'r', encoding='utf-8') as f:
+              c = f.read()
+          declared = set(re.findall(r'\bfunction\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*\(', c))
+          declared |= set(re.findall(r'\b(?:const|let|var)\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*=\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>)', c))
+          builtins = {'event','Number','String','alert','confirm','prompt','this','window','document',
+                      'console','Date','Array','Object','JSON','Math','Boolean','Promise','RegExp',
+                      'closest','find','forEach','getDate','getTime','if','open','parse','replace',
+                      'setDate','stopPropagation','stringify','getElementById','querySelector',
+                      'querySelectorAll','addEventListener','split','slice','map','filter','push',
+                      'includes','indexOf','toLowerCase','toUpperCase','trim','setTimeout','setInterval'}
+          onclicks = re.findall(r'onclick=[\"\']([^\"\']+)', c)
+          called = set()
+          for oc in onclicks:
+              for fn in re.findall(r'\b([a-zA-Z_][a-zA-Z_0-9]*)\s*\(', oc):
+                  called.add(fn)
+          missing = called - declared - builtins
+          if missing:
+              print(f'::error::Funzioni richiamate da onclick ma non definite: {sorted(missing)}')
+              sys.exit(1)
+          print('✓ Nessuna funzione orfana negli onclick')
+          EOF
+ 
+      - name: Verifica struttura HTML
+        run: |
+          python3 << 'EOF'
+          import re, sys
+          with open('index.html', 'r', encoding='utf-8') as f:
+              c = f.read()
+          checks = [
+              (r'<html[^>]*>', '</html>', 'tag html'),
+              (r'<head[^>]*>', '</head>', 'tag head'),
+              (r'<body[^>]*>', '</body>', 'tag body'),
+          ]
+          for open_p, close_p, label in checks:
+              if not re.search(open_p, c) or close_p not in c:
+                  print(f'::error::{label} mal formato')
+                  sys.exit(1)
+          opens = len(re.findall(r'<script[^>]*>', c))
+          closes = len(re.findall(r'</script>', c))
+          if opens != closes:
+              print(f'::error::Tag script sbilanciati: {opens} aperti vs {closes} chiusi')
+              sys.exit(1)
+          print(f'✓ HTML strutturalmente corretto ({opens} script bilanciati)')
+          EOF
+ 
+      - name: Riepilogo
+        if: success()
+        run: |
+          echo "================================================="
+          echo "  ✓ TUTTI I CONTROLLI PASSATI"
+          echo "  Il file index.html è pronto per essere servito."
+          echo "================================================="
