@@ -134,7 +134,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="description" content="Gestionale LASCARIS 1954 ASD - Calcio dilettantistico dal Settore Giovanile alla Prima Squadra">
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.6</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.6.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -319,14 +319,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Sportivo · v2.6</div>
+    <div class="sub">Gestionale Sportivo · v2.6.1</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.6</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.6.1</div>
   </div>
 </div>
 
@@ -2716,22 +2716,60 @@ let dsS={matchId:'',valevolePer:'',convocati:[],staffAmmessi:[]};
 const DS_MAX_CONVOCATI=20;
 
 VIEWS.distinta=function(c){
+  // v2.7 fix: tutte le partite del calendario (non solo future) + select dropdown
+  // Un match è considerato gara se tipo è in TIPI_PARTITA, indipendentemente da data o disputata
+  const TIPI_PARTITA=['Partita','Campionato','Torneo','Amichevole','Test match'];
   const oggi=today();
-  const partite=state.attivita.filter(a=>['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)&&!a.disputata&&a.data>=oggi).sort((a,b)=>a.data.localeCompare(b.data));
+  // Tutte le partite, ordinate per data decrescente (più recenti prima)
+  const tuttePartite=(state.attivita||[]).filter(a=>TIPI_PARTITA.includes(a.tipo)).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  const partiteFuture=tuttePartite.filter(a=>(a.data||'')>=oggi&&!a.disputata).sort((a,b)=>(a.data||'').localeCompare(b.data||''));
+  const partitePassate=tuttePartite.filter(a=>(a.data||'')<oggi||a.disputata);
+  // Validazione matchId: se punta a partita non esistente, lo resetto
+  if(dsS.matchId&&!state.attivita.find(x=>x.id===dsS.matchId)){dsS.matchId='';dsS.convocati=[];dsS.staffAmmessi=[]}
   const m=dsS.matchId?state.attivita.find(x=>x.id===dsS.matchId):null;
+  if(!dsS.showPassate)dsS.showPassate=false;
+  // Lista partite mostrate nel select in base al toggle
+  const partiteVisibili=dsS.showPassate?tuttePartite:partiteFuture;
+  const partiteOpt=mp=>{
+    const dataStr=mp.data?fmtIt(mp.data):'(senza data)';
+    const cat=esc(categoryDisplay(mp.categoria||''));
+    const grp=mp.gruppo?esc(groupLabel(mp.categoria,mp.gruppo)):'';
+    const tipo=esc(mp.tipo||'');
+    const avv=mp.avversario?' vs '+esc(mp.avversario):'';
+    const ora=mp.ora?' · '+mp.ora:'';
+    const stato=mp.disputata?' [DISPUTATA]':((mp.data||'')<oggi?' [PASSATA]':'');
+    return `<option value="${mp.id}" ${dsS.matchId===mp.id?'selected':''}>${dataStr}${ora} · ${cat} ${grp} · ${tipo}${avv}${stato}</option>`;
+  };
   c.innerHTML=`
     <div class="vw">
       <div class="vh"><div><h1>Distinta Gara FIGC</h1><div class="sb2">Compilazione distinta ufficiale · max ${DS_MAX_CONVOCATI} calciatori · stampa PDF su carta intestata</div></div>
         ${m?`<button class="btn btn-p" onclick="dsGenPDF()">📄 Genera distinta PDF</button>`:''}
       </div>
       <div class="card">
-        <h2 style="font-size:14px;margin-bottom:10px">1️⃣ Seleziona partita</h2>
-        ${!partite.length?`<div class="es" style="padding:20px"><p>Nessuna partita futura in agenda.</p><button class="btn btn-p btn-sm" onclick="goto('calendario')">Vai al Calendario</button></div>`:`<div style="max-height:200px;overflow-y:auto">${partite.map(mp=>`<label style="display:flex;gap:8px;padding:8px;border:1px solid var(--g200);border-radius:var(--rs);margin-bottom:4px;cursor:pointer;${dsS.matchId===mp.id?'background:#dbeafe;border-color:var(--blue)':''}"><input type="radio" name="ds_m" value="${mp.id}" ${dsS.matchId===mp.id?'checked':''} onchange="dsSelectMatch('${mp.id}')"><div style="flex:1;font-size:12px"><strong>${fmtIt(mp.data)}</strong> · ${esc(categoryDisplay(mp.categoria))} ${groupLabel(mp.categoria,mp.gruppo)} · ${esc(mp.tipo)}${mp.avversario?' vs '+esc(mp.avversario):''}<br><span style="color:var(--g500);font-size:10px">${mp.ora||''} · ${mp.sede==='trasferta'?'trasferta @ '+esc(mp.impiantoEsterno||mp.luogoLibero||''):'casa @ '+((state.impianti.find(i=>i.id===mp.impiantoId)||{}).nome||'')}</span></div></label>`).join('')}</div>`}
+        <h2 style="font-size:14px;margin-bottom:6px">1️⃣ Seleziona partita dal calendario</h2>
+        <p style="font-size:11px;color:var(--g500);margin-bottom:10px">Le partite mostrate vengono dall'Agenda Partite del modulo Calendario. ${partiteFuture.length} future · ${partitePassate.length} passate/disputate.</p>
+        ${!tuttePartite.length?`<div class="es" style="padding:20px"><div class="ic">📅</div><h3>Nessuna partita in agenda</h3><p>Aggiungi una partita dal Calendario per poter compilare la distinta.</p><button class="btn btn-p btn-sm" onclick="goto('calendario')">Vai al Calendario</button></div>`:`
+          <div class="fg">
+            <div class="ff full"><label>Partita</label><select id="ds_match" onchange="dsSelectMatch(this.value)" style="font-size:13px">
+              <option value="">— Seleziona una partita —</option>
+              ${partiteVisibili.map(partiteOpt).join('')}
+            </select></div>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer">
+              <input type="checkbox" ${dsS.showPassate?'checked':''} onchange="dsTogglePassate(this.checked)">
+              Mostra anche partite passate o già disputate (${partitePassate.length})
+            </label>
+            <button class="btn btn-s btn-sm" style="margin-left:auto" onclick="goto('calendario')">📅 Vai al Calendario</button>
+          </div>
+          ${m?`<div style="margin-top:10px;padding:8px;background:#dbeafe;border-radius:var(--rs);font-size:12px"><strong>✓ Partita selezionata:</strong> ${fmtIt(m.data)} · ${esc(categoryDisplay(m.categoria))} ${groupLabel(m.categoria,m.gruppo)} · ${esc(m.tipo)}${m.avversario?' vs '+esc(m.avversario):''}</div>`:''}
+        `}
       </div>
       ${m?dsRenderDettagli(m):''}
     </div>
   `;
 };
+function dsTogglePassate(v){dsS.showPassate=!!v;saveStore();renderView()}
 function dsRenderDettagli(m){
   // rosa per categoria/gruppo
   const rosa=state.players.filter(p=>!p.eliminato&&p.categoria===m.categoria&&p.gruppo===m.gruppo).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it'));
@@ -2807,6 +2845,8 @@ function dsRenderDettagli(m){
 }
 
 function dsSelectMatch(mid){
+  if(!mid){dsS.matchId='';dsS.convocati=[];dsS.staffAmmessi=[];dsS.valevolePer='';saveStore();renderView();return}
+  if(!state.attivita.find(x=>x.id===mid)){toast('Partita non trovata','e');return}
   dsS.matchId=mid;
   dsS.convocati=[];
   dsS.staffAmmessi=[];
