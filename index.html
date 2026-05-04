@@ -1,10 +1,44 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.3
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.4
 ================================================================================
   CHANGELOG
   ----------
+  v2.4 · 2026-05-02 · UX rifinitura post-deploy (Batch 1.6)
+    · NEW  Convocazioni multi-partita: selezione checkbox di più partite,
+           gli stessi convocati e messaggio si applicano a tutto il weekend.
+           Header informativo che ricorda all'utente quante partite sono
+           attive contemporaneamente.
+    · FIX  Convocazioni: filtro `data >= today()` per nascondere le
+           partite passate dalla lista (anche se non marcate disputata).
+    · FIX  Convocazioni: lista convocabili ordinata alfabeticamente per
+           cognome (locale 'it' per gestione corretta degli accenti).
+    · FIX  Convocazioni: il messaggio modificato manualmente ora persiste
+           via `convS.msgCustom`. Pulsante "↺ Default" per ripristinare.
+    · NEW  Convocazioni: toggle "Mostra giocatori di altri gruppi" per
+           includere atleti aggregati da categoria limitrofa, con badge
+           visivo che li distingue dalla rosa principale.
+    · NEW  Infortuni: 4 filtri sopra il select giocatore (cognome, categoria,
+           gruppo, anno nascita) + pulsante Pulisci filtri. Sostituiscono
+           la lista piatta di tutti i giocatori in rosa.
+    · NEW  Organigramma: scheda carica estesa con codice fiscale, ruolo
+           statutario (Presidente CdA, Consigliere, Sindaco...), data
+           inizio e fine mandato.
+    · NEW  Organigramma: tabella "Elenco completo" mostra anche carica
+           statutaria (badge), CF e mandato.
+    · NEW  Organigramma: ruoli organigramma inseriti in input libero
+           vengono auto-aggiunti al `funzionigramma` per autocompletamento
+           futuro (UX più chiara: hint "scrivine uno nuovo").
+    · NEW  Parametri Società: card "Liste preset modificabili" con tre
+           colonne editabili — Ruoli organigramma (funzionigramma),
+           Ruoli statutari (ruoliStatutariPreset), Campionati Prima Squadra
+           (campionatiPrimaSquadraPreset). Add/remove inline con conferma.
+    · NEW  Helper `addPresetItem(key,inputId)` e `deletePresetItem(key,value)`
+           per la gestione delle liste preset.
+    · NEW  Migrazione `migrateStateV23` estesa per inizializzare
+           `ruoliStatutariPreset` se mancante nei dati esistenti.
+
   v2.3 · 2026-04-30 · Estensione dilettantismo + bug-fix critici
     · FIX  Organigramma: implementata `openOrgComunicazione()` (era richiamata
            ma non definita) — invio comunicazioni email/WhatsApp/SMS in BCC
@@ -48,7 +82,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="description" content="Gestionale LASCARIS 1954 ASD - Calcio dilettantistico dal Settore Giovanile alla Prima Squadra">
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.3</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.4</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -233,14 +267,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Sportivo · v2.3</div>
+    <div class="sub">Gestionale Sportivo · v2.4</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.3</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.4</div>
   </div>
 </div>
 
@@ -305,6 +339,8 @@ function migrateStateV23(d){
   if(!d.campionatiPrimaSquadraPreset) d.campionatiPrimaSquadraPreset=JSON.parse(JSON.stringify(DEFAULT_STATE.campionatiPrimaSquadraPreset));
   if(!d.campionatiAgonistiche) d.campionatiAgonistiche={};
   if(!d.campionatiAgonistichePreset) d.campionatiAgonistichePreset=JSON.parse(JSON.stringify(DEFAULT_STATE.campionatiAgonistichePreset));
+  // 3) ruoli statutari preset (v2.4)
+  if(!d.ruoliStatutariPreset) d.ruoliStatutariPreset=JSON.parse(JSON.stringify(DEFAULT_STATE.ruoliStatutariPreset));
 }
 
 function loadStore(){
@@ -415,6 +451,7 @@ const DEFAULT_STATE={
   campionatiPrimaSquadraPreset:['Eccellenza','Promozione','Prima Categoria','Seconda Categoria','Terza Categoria'],
   campionatiAgonistiche:{},
   campionatiAgonistichePreset:['Provinciale','Regionale','Élite','Nazionale'],
+  ruoliStatutariPreset:['Presidente CdA','Vicepresidente','Consigliere','Segretario','Tesoriere','Sindaco','Revisore dei Conti'],
   impianti:[
     {id:'imp1',nome:'LASCARIS',indirizzo:'Via Claviere 16, 10044 Pianezza (TO)',campi:[{id:'l11',nome:'Campo 11',tipo:'11'},{id:'l11a',nome:'Metà A',tipo:'11h'},{id:'l11b',nome:'Metà B',tipo:'11h'},{id:'l7',nome:'Campo 7',tipo:'7'}],spogliatoi:['Spogliatoio 1','Spogliatoio 2','Spogliatoio 3','Spogliatoio 4'],fasce:['16:30-18:00','18:00-19:30','19:30-21:00']},
     {id:'imp2',nome:'MERONI',indirizzo:'Via Orsiera 25, 10098 Rivoli (TO)',campi:[{id:'m11',nome:'Campo 11',tipo:'11'},{id:'m11a',nome:'Metà A',tipo:'11h'},{id:'m11b',nome:'Metà B',tipo:'11h'},{id:'m7',nome:'Campo 7',tipo:'7'}],spogliatoi:['Spogliatoio 1','Spogliatoio 2','Spogliatoio 3','Spogliatoio 4'],fasce:['16:30-18:00','18:00-19:30','19:30-21:00']},
@@ -980,6 +1017,27 @@ VIEWS.parametri=function(c){
         })()}
       </div>
       <div class="card">
+        <div class="card-h"><h2>Liste preset modificabili</h2><span class="pl">v2.4</span></div>
+        <p style="font-size:11px;color:var(--g500);margin-bottom:10px">Personalizza le liste suggerite usate dai vari moduli del gestionale. I valori già inseriti nei record esistenti non vengono cancellati anche se rimuovi una voce dalla lista.</p>
+        <div class="grid g3" style="gap:10px">
+          <div>
+            <h3 style="font-size:12px;margin-bottom:6px">Ruoli organigramma <span style="color:var(--g500);font-weight:normal">(autocompletamento campo Ruolo)</span></h3>
+            <div id="prListFun" style="max-height:160px;overflow-y:auto;border:1px solid var(--g200);border-radius:var(--rs);padding:4px;margin-bottom:6px;font-size:11px">${Object.keys(state.funzionigramma||{}).sort().map(r=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 6px;border-bottom:1px solid var(--g100)"><span>${esc(r)}</span><button class="btn btn-sm btn-d" style="padding:1px 6px" onclick="deletePresetItem('funzionigramma','${esc(r)}')" title="Rimuovi">×</button></div>`).join('')||'<p style="color:var(--g500);padding:6px">(vuoto)</p>'}</div>
+            <div style="display:flex;gap:4px"><input id="prAddFun" placeholder="Nuovo ruolo organigramma" style="flex:1;padding:4px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px"><button class="btn btn-s btn-sm" onclick="addPresetItem('funzionigramma','prAddFun')">+</button></div>
+          </div>
+          <div>
+            <h3 style="font-size:12px;margin-bottom:6px">Ruoli statutari <span style="color:var(--g500);font-weight:normal">(carica formale)</span></h3>
+            <div id="prListStat" style="max-height:160px;overflow-y:auto;border:1px solid var(--g200);border-radius:var(--rs);padding:4px;margin-bottom:6px;font-size:11px">${(state.ruoliStatutariPreset||[]).map(r=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 6px;border-bottom:1px solid var(--g100)"><span>${esc(r)}</span><button class="btn btn-sm btn-d" style="padding:1px 6px" onclick="deletePresetItem('ruoliStatutariPreset','${esc(r)}')" title="Rimuovi">×</button></div>`).join('')||'<p style="color:var(--g500);padding:6px">(vuoto)</p>'}</div>
+            <div style="display:flex;gap:4px"><input id="prAddStat" placeholder="Nuovo ruolo statutario" style="flex:1;padding:4px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px"><button class="btn btn-s btn-sm" onclick="addPresetItem('ruoliStatutariPreset','prAddStat')">+</button></div>
+          </div>
+          <div>
+            <h3 style="font-size:12px;margin-bottom:6px">Campionati Prima Squadra <span style="color:var(--g500);font-weight:normal">(livelli scelta)</span></h3>
+            <div id="prListCamp" style="max-height:160px;overflow-y:auto;border:1px solid var(--g200);border-radius:var(--rs);padding:4px;margin-bottom:6px;font-size:11px">${(state.campionatiPrimaSquadraPreset||[]).map(r=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 6px;border-bottom:1px solid var(--g100)"><span>${esc(r)}</span><button class="btn btn-sm btn-d" style="padding:1px 6px" onclick="deletePresetItem('campionatiPrimaSquadraPreset','${esc(r)}')" title="Rimuovi">×</button></div>`).join('')||'<p style="color:var(--g500);padding:6px">(vuoto)</p>'}</div>
+            <div style="display:flex;gap:4px"><input id="prAddCamp" placeholder="Nuovo campionato" style="flex:1;padding:4px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px"><button class="btn btn-s btn-sm" onclick="addPresetItem('campionatiPrimaSquadraPreset','prAddCamp')">+</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
         <div class="card-h"><h2>Direttivo (Consiglio Direttivo)</h2>
           <div style="display:flex;gap:6px">
             <button class="btn btn-s btn-sm" onclick="openConvocazione()">📢 Convocazione</button>
@@ -1047,6 +1105,31 @@ function saveCampionatiAgonistiche(silent){
   });
   if(!silent){saveStore();toast('Campionati squadre salvati','s')}
 }
+/* v2.4 B1.6.8/9: editor liste preset (funzionigramma, ruoliStatutariPreset, campionatiPrimaSquadraPreset) */
+function addPresetItem(key,inputId){
+  const el=document.getElementById(inputId);if(!el)return;
+  const v=el.value.trim();
+  if(!v){toast('Inserisci un valore','w');return}
+  if(key==='funzionigramma'){
+    if(!state.funzionigramma)state.funzionigramma={};
+    if(state.funzionigramma[v]){toast('Già presente','w');return}
+    state.funzionigramma[v]={ordine:99,parent:null};
+  }else{
+    if(!state[key])state[key]=[];
+    if(state[key].includes(v)){toast('Già presente','w');return}
+    state[key].push(v);
+  }
+  el.value='';saveStore();renderView();toast('Aggiunto','s');
+}
+function deletePresetItem(key,value){
+  if(!confirm(`Rimuovere "${value}" dalla lista?`))return;
+  if(key==='funzionigramma'){
+    if(state.funzionigramma)delete state.funzionigramma[value];
+  }else{
+    if(state[key])state[key]=state[key].filter(x=>x!==value);
+  }
+  saveStore();renderView();toast('Rimosso','s');
+}
 function openDirettivo(id){
   const m=id?state.direttivo.find(x=>x.id===id):{id:null,ruolo:'Consigliere',nome:'',cognome:'',email:'',tel:'',cf:''};
   if(id&&!m){toast('Membro non trovato','e');return}
@@ -1099,8 +1182,13 @@ VIEWS.organigramma=function(c){
       ${!org.length?`<div class="es"><div class="ic">🏛</div><h3>Organigramma vuoto</h3><p>Aggiungi la prima carica societaria.</p><button class="btn btn-p" onclick="openOrg('')">+ Prima carica</button></div>`:`
         <div class="card" style="padding:0"><div class="org">${roots.map(node).join('')||'<p style="color:var(--g500);padding:20px">Nessun nodo radice</p>'}</div></div>
         <div class="card"><div class="card-h"><h3 style="font-size:13px">Elenco completo</h3><button class="btn btn-p btn-sm" onclick="openOrgComunicazione()">📧 Invia comunicazione</button></div><div class="tw"><table>
-          <thead><tr><th>Cognome</th><th>Nome</th><th>Ruolo</th><th>Email</th><th>Telefono</th><th>Azioni</th></tr></thead>
-          <tbody>${org.map(o=>{const cn=o.cognome||(o.nome&&o.nome.includes(' ')?o.nome.trim().split(/\s+/).pop():'');const nm=o.cognome?o.nome:(o.nome&&o.nome.includes(' ')?o.nome.trim().split(/\s+/).slice(0,-1).join(' '):o.nome);return `<tr><td><strong>${esc(cn)}</strong></td><td>${esc(nm)}</td><td>${esc(o.ruolo)}</td><td style="font-size:11px">${esc(o.email)||'—'}</td><td style="font-size:11px">${esc(o.tel)||'—'}</td><td><button class="btn btn-sm btn-s" onclick="openOrg('${o.id}')">✎</button> <button class="btn btn-sm btn-d" onclick="delOrg('${o.id}')">🗑</button></td></tr>`}).join('')}</tbody>
+          <thead><tr><th>Cognome</th><th>Nome</th><th>Ruolo</th><th>Carica statutaria</th><th>Email</th><th>Telefono</th><th>C.F.</th><th>Mandato</th><th>Azioni</th></tr></thead>
+          <tbody>${org.map(o=>{
+            const cn=o.cognome||(o.nome&&o.nome.includes(' ')?o.nome.trim().split(/\s+/).pop():'');
+            const nm=o.cognome?o.nome:(o.nome&&o.nome.includes(' ')?o.nome.trim().split(/\s+/).slice(0,-1).join(' '):o.nome);
+            const mandato=(o.mandatoInizio||o.mandatoFine)?(fmtIt(o.mandatoInizio)+' → '+fmtIt(o.mandatoFine)):'—';
+            return `<tr><td><strong>${esc(cn)}</strong></td><td>${esc(nm)}</td><td>${esc(o.ruolo)}</td><td style="font-size:11px">${o.ruoloStatutario?'<span class="bdg bdg-k">'+esc(o.ruoloStatutario)+'</span>':'—'}</td><td style="font-size:11px">${esc(o.email)||'—'}</td><td style="font-size:11px">${esc(o.tel)||'—'}</td><td style="font-family:monospace;font-size:10px">${esc(o.cf)||'—'}</td><td style="font-size:10px">${mandato}</td><td><button class="btn btn-sm btn-s" onclick="openOrg('${o.id}')">✎</button> <button class="btn btn-sm btn-d" onclick="delOrg('${o.id}')">🗑</button></td></tr>`;
+          }).join('')}</tbody>
         </table></div></div>
       `}
     </div>
@@ -1128,15 +1216,21 @@ async function exportOrgPDF(){
 }
 
 function openOrg(id){
-  const o=id?state.organigramma.find(x=>x.id===id):{id:null,ruolo:'',nome:'',cognome:'',email:'',tel:'',parent:''};
+  const o=id?state.organigramma.find(x=>x.id===id):{id:null,ruolo:'',ruoloStatutario:'',nome:'',cognome:'',email:'',tel:'',cf:'',mandatoInizio:'',mandatoFine:'',parent:''};
   // Migrazione: se esiste solo "nome" come campo unico, splitto
   if(!o.cognome&&o.nome&&o.nome.includes(' ')){const p=o.nome.trim().split(/\s+/);o.cognome=p.pop();o.nome=p.join(' ')}
+  // v2.4: ruoli statutari standard (modificabili in Parametri)
+  const ruoliStat=state.ruoliStatutariPreset||['Presidente CdA','Vicepresidente','Consigliere','Segretario','Tesoriere','Sindaco','Revisore dei Conti'];
   openM(id?'Modifica carica':'Nuova carica',`<div class="fg">
     <div class="ff"><label>Nome *</label><input id="or_nm" value="${esc(o.nome)}"></div>
     <div class="ff"><label>Cognome *</label><input id="or_cn" value="${esc(o.cognome||'')}"></div>
-    <div class="ff full"><label>Ruolo *</label><input id="or_ru" list="rlist" value="${esc(o.ruolo)}" placeholder="Es. Presidente, DS, Responsabile..."><datalist id="rlist">${Object.keys(state.funzionigramma).map(r=>`<option value="${r}">`).join('')}</datalist></div>
+    <div class="ff full"><label>Ruolo organigramma *</label><input id="or_ru" list="rlist" value="${esc(o.ruolo)}" placeholder="Es. Presidente, DS, Responsabile... oppure scrivine uno nuovo"><datalist id="rlist">${Object.keys(state.funzionigramma||{}).map(r=>`<option value="${r}">`).join('')}</datalist></div>
+    <div class="ff full"><label>Ruolo statutario <span style="color:var(--g500);font-weight:normal">(carica formale ai sensi dello Statuto)</span></label><input id="or_rust" list="rstlist" value="${esc(o.ruoloStatutario||'')}" placeholder="Es. Presidente CdA, Consigliere, Sindaco..."><datalist id="rstlist">${ruoliStat.map(r=>`<option value="${esc(r)}">`).join('')}</datalist></div>
     <div class="ff"><label>Email</label><input type="email" id="or_em" value="${esc(o.email)}"></div>
     <div class="ff"><label>Telefono</label><input id="or_tl" value="${esc(o.tel)}"></div>
+    <div class="ff full"><label>Codice Fiscale</label><input id="or_cf" value="${esc(o.cf||'')}" maxlength="16" style="text-transform:uppercase;font-family:monospace" placeholder="RSSMRC80A01H501Z"></div>
+    <div class="ff"><label>Inizio mandato</label><input type="date" id="or_mi" value="${o.mandatoInizio||''}"></div>
+    <div class="ff"><label>Fine mandato</label><input type="date" id="or_mf" value="${o.mandatoFine||''}"></div>
     <div class="ff full"><label>Riferisce a</label><select id="or_pa" onchange="updateOrgSiblings()"><option value="">— Nessuno (vertice) —</option>${state.organigramma.filter(x=>x.id!==id).map(x=>`<option value="${x.id}" ${x.id===o.parent?'selected':''}>${esc(x.ruolo)} · ${esc(x.cognome||'')} ${esc(x.nome)}</option>`).join('')}</select></div><div class="ff full"><label>Posizione tra pari (stesso livello)</label><select id="or_pos"><option value="last">Alla fine (default)</option><option value="first">Prima di tutti</option></select><div id="or_sibl" style="margin-top:6px"></div></div>
   </div>`,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveOrg('${id||''}')">Salva</button>`);
 }
@@ -1145,7 +1239,20 @@ function saveOrg(id){
   const nomeVal=document.getElementById('or_nm').value.trim();
   const cognomeVal=document.getElementById('or_cn').value.trim();
   if(!ruolo||!nomeVal||!cognomeVal){toast('Ruolo, Nome e Cognome obbligatori','e');return}
-  const pos=document.getElementById('or_pos').value;const parent=document.getElementById('or_pa').value||null;const siblings=state.organigramma.filter(x=>x.parent===parent&&x.id!==id).sort((a,b)=>(a.ordine||0)-(b.ordine||0));let ordine;if(pos==='first')ordine=siblings.length?(siblings[0].ordine||0)-1:0;else if(pos.startsWith('after:')){const afid=pos.slice(6);const idx=siblings.findIndex(s=>s.id===afid);ordine=idx>=0?(siblings[idx].ordine||0)+0.5:siblings.length;}else ordine=siblings.length?(siblings[siblings.length-1].ordine||0)+1:0;const data={ruolo,nome:nomeVal,cognome:cognomeVal,email:document.getElementById('or_em').value,tel:document.getElementById('or_tl').value,parent,ordine};
+  const pos=document.getElementById('or_pos').value;const parent=document.getElementById('or_pa').value||null;const siblings=state.organigramma.filter(x=>x.parent===parent&&x.id!==id).sort((a,b)=>(a.ordine||0)-(b.ordine||0));let ordine;if(pos==='first')ordine=siblings.length?(siblings[0].ordine||0)-1:0;else if(pos.startsWith('after:')){const afid=pos.slice(6);const idx=siblings.findIndex(s=>s.id===afid);ordine=idx>=0?(siblings[idx].ordine||0)+0.5:siblings.length;}else ordine=siblings.length?(siblings[siblings.length-1].ordine||0)+1:0;
+  const data={
+    ruolo,
+    ruoloStatutario:document.getElementById('or_rust').value.trim(),
+    nome:nomeVal,cognome:cognomeVal,
+    email:document.getElementById('or_em').value,
+    tel:document.getElementById('or_tl').value,
+    cf:document.getElementById('or_cf').value.trim().toUpperCase(),
+    mandatoInizio:document.getElementById('or_mi').value,
+    mandatoFine:document.getElementById('or_mf').value,
+    parent,ordine
+  };
+  // v2.4: se è stato inserito un ruolo organigramma nuovo, lo aggiungo al funzionigramma per autocompletamento futuro
+  if(ruolo && state.funzionigramma && !state.funzionigramma[ruolo]) state.funzionigramma[ruolo]={ordine:99,parent:null};
   if(id){const o=state.organigramma.find(x=>x.id===id);Object.assign(o,data);toast('Aggiornato','s')}
   else{state.organigramma.push({id:uid(),...data});toast('Aggiunto','s')}
   closeM();saveStore();renderView();
@@ -2162,8 +2269,23 @@ VIEWS.infortuni=function(c){
 function openInf(id){
   const i=id?state.infortuni.find(x=>x.id===id):{id:null,playerId:'',data:today(),tipo:'Muscolare',sede:state.sediAnatomiche[0],mecc:'Contrasto',grav:'Minor (<7gg)',contesto:'Allenamento',recidiva:false,note:'',dataRientro:''};
   const ps=state.players.filter(p=>!p.eliminato);
+  // v2.4 B1.6.6: pre-filtri popolati dal giocatore corrente (se modifica) o vuoti
+  const cur=i.playerId?ps.find(p=>p.id===i.playerId):null;
+  const fCat=cur?cur.categoria:'';const fGrp=cur?cur.gruppo:'';
+  const anniSet=new Set();ps.forEach(p=>{if(p.nascita){const y=p.nascita.slice(0,4);if(y)anniSet.add(y)}});
+  const anniList=[...anniSet].sort().reverse();
   openM(id?'Modifica infortunio':'Nuovo infortunio',`<div class="fg">
-    <div class="ff full"><label>Giocatore *</label><select id="in_pl">${ps.length?'<option value="">—</option>'+ps.map(p=>`<option value="${p.id}" ${i.playerId===p.id?'selected':''}>${esc(p.cognome)} ${esc(p.nome)} (${p.categoria} ${groupLabel(p.categoria,p.gruppo)})</option>`).join(''):'<option value="">Nessun giocatore — aggiungi prima un giocatore</option>'}</select></div>
+    <div class="ff full" style="background:var(--g50);padding:8px;border-radius:var(--rs);border:1px solid var(--g200)">
+      <label style="font-weight:700;color:var(--g700);margin-bottom:4px;display:block">Filtra giocatori</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:6px">
+        <input id="inF_q" placeholder="Cognome / nome" oninput="inFilterPlayers()" style="padding:6px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px">
+        <select id="inF_ca" onchange="inFilterPlayers()" style="padding:6px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px"><option value="">Tutte categorie</option>${state.categories.map(x=>`<option value="${x}" ${fCat===x?'selected':''}>${categoryDisplay(x)}</option>`).join('')}</select>
+        <select id="inF_gr" onchange="inFilterPlayers()" style="padding:6px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px"><option value="">Tutti gruppi</option>${state.groups.map(g=>`<option value="${g}" ${fGrp===g?'selected':''}>${g}</option>`).join('')}</select>
+        <select id="inF_an" onchange="inFilterPlayers()" style="padding:6px 8px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px"><option value="">Tutti anni</option>${anniList.map(y=>`<option value="${y}">${y}</option>`).join('')}</select>
+      </div>
+      <button class="btn btn-sm btn-s" onclick="document.getElementById('inF_q').value='';document.getElementById('inF_ca').value='';document.getElementById('inF_gr').value='';document.getElementById('inF_an').value='';inFilterPlayers()" type="button">Pulisci filtri</button>
+    </div>
+    <div class="ff full"><label>Giocatore *</label><select id="in_pl" data-current="${i.playerId||''}">${ps.length?'<option value="">— Seleziona dalla lista —</option>'+ps.map(p=>`<option value="${p.id}" ${i.playerId===p.id?'selected':''}>${esc(p.cognome)} ${esc(p.nome)} (${categoryShort(p.categoria)} ${groupLabel(p.categoria,p.gruppo)})</option>`).join(''):'<option value="">Nessun giocatore — aggiungi prima un giocatore</option>'}</select></div>
     <div class="ff"><label>Data *</label><input type="date" id="in_da" value="${i.data}"></div>
     <div class="ff"><label>Tipo</label><select id="in_ti">${state.tipiInfortunio.map(t=>`<option ${i.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
     <div class="ff"><label>Sede</label><select id="in_se">${state.sediAnatomiche.map(s=>`<option ${i.sede===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -2185,6 +2307,32 @@ function saveInf(id){
   closeM();saveStore();renderView();toast('Infortunio salvato','s');
 }
 function delInf(id){if(!confirm('Eliminare?'))return;state.infortuni=state.infortuni.filter(x=>x.id!==id);saveStore();renderView();toast('Eliminato','s')}
+function inFilterPlayers(){
+  // v2.4 B1.6.6: filtra dinamicamente il select giocatore in base ai 4 input filtro
+  const q=(document.getElementById('inF_q')?.value||'').trim().toLowerCase();
+  const cat=document.getElementById('inF_ca')?.value||'';
+  const grp=document.getElementById('inF_gr')?.value||'';
+  const an=document.getElementById('inF_an')?.value||'';
+  const sel=document.getElementById('in_pl');if(!sel)return;
+  const cur=sel.value;
+  const ps=state.players.filter(p=>{
+    if(p.eliminato)return false;
+    if(cat&&p.categoria!==cat)return false;
+    if(grp&&p.gruppo!==grp)return false;
+    if(an&&(p.nascita||'').slice(0,4)!==an)return false;
+    if(q){
+      const full=((p.cognome||'')+' '+(p.nome||'')).toLowerCase();
+      if(!full.includes(q))return false;
+    }
+    return true;
+  }).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it'));
+  if(!ps.length){
+    sel.innerHTML='<option value="">— Nessun giocatore con questi filtri —</option>';
+    return;
+  }
+  sel.innerHTML='<option value="">— Seleziona ('+ps.length+') —</option>'+
+    ps.map(p=>`<option value="${p.id}" ${cur===p.id?'selected':''}>${esc(p.cognome)} ${esc(p.nome)} (${categoryShort(p.categoria)} ${groupLabel(p.categoria,p.gruppo)})</option>`).join('');
+}
 
 /* =============================================================
    VIEW: TIPPS (4 voci separate)
@@ -4166,72 +4314,203 @@ Si raccomanda puntualità e kit completo.
 Assenze da comunicare al Mister entro venerdì 18:00.
 
 Staff LASCARIS 1954 ASD`;
-let convS={matchId:'',convocati:[],ritrovo:'09:30',divisa:'Gara bianca',note:''};
+/* convS v2.4: matchIds[] (multi), msgCustom override, convCrossGroup toggle */
+let convS={matchIds:[],convocati:[],convCrossGroup:false,ritrovo:'09:30',divisa:'Gara bianca',note:'',msgCustom:''};
+/* ====== VIEW: CONVOCAZIONI (v2.4) — multi-partita, multi-gruppo, msg persistente ====== */
 VIEWS.convocazioni=function(c){
-  const partite=state.attivita.filter(a=>['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)&&!a.disputata).sort((a,b)=>a.data.localeCompare(b.data));
+  // v2.4 B1.6.1: filtro data >= oggi AND non disputata
+  const oggi=today();
+  const partite=state.attivita
+    .filter(a=>['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)
+               && !a.disputata && a.data>=oggi)
+    .sort((a,b)=>a.data.localeCompare(b.data));
+  // Migrazione: se arriviamo da v2.3 con matchId stringa, lo convertiamo in matchIds[]
+  if(typeof convS.matchId==='string' && convS.matchId && !convS.matchIds.length){convS.matchIds=[convS.matchId];delete convS.matchId}
   c.innerHTML=`
     <div class="vw">
-      <div class="vh"><div><h1>Convocazioni</h1><div class="sb2">Seleziona convocati · invia via Email, WhatsApp, SMS</div></div></div>
+      <div class="vh"><div><h1>Convocazioni</h1><div class="sb2">Seleziona una o più partite · invia via Email, WhatsApp, SMS</div></div></div>
       ${!partite.length?`<div class="es"><div class="ic">📢</div><h3>Nessuna partita futura in agenda</h3><p>Aggiungi partite dal Calendario per poter preparare convocazioni.</p><button class="btn btn-p" onclick="goto('calendario')">Vai al Calendario</button></div>`:`
         <div class="grid g2">
           <div class="card">
-            <h2 style="font-size:14px;margin-bottom:10px">1️⃣ Seleziona partita</h2>
-            <div style="max-height:200px;overflow-y:auto">${partite.slice(0,20).map(m=>`<label style="display:flex;gap:8px;padding:8px;border:1px solid var(--g200);border-radius:var(--rs);margin-bottom:4px;cursor:pointer;${convS.matchId===m.id?'background:#dbeafe;border-color:var(--blue)':''}"><input type="radio" name="cv_m" value="${m.id}" ${convS.matchId===m.id?'checked':''} onchange="convS.matchId='${m.id}';convS.convocati=[];convAutoRitrovo();renderView()"><div style="flex:1;font-size:12px"><strong>${fmtIt(m.data)}</strong> · ${m.categoria} ${groupLabel(m.categoria,m.gruppo)} · ${esc(m.tipo)}${m.avversario?' vs '+esc(m.avversario):''}<br><span style="color:var(--g500);font-size:10px">${m.ora||''} ${m.sede==='trasferta'?'(trasferta: '+esc(m.impiantoEsterno||m.luogoLibero||'')+')':(state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||''}</span></div></label>`).join('')}</div>
+            <div class="card-h"><h2 style="font-size:14px">1️⃣ Seleziona partite</h2>
+              <div><button class="btn btn-sm btn-s" onclick="convToggleAllMatches(true)">Tutte</button> <button class="btn btn-sm btn-s" onclick="convToggleAllMatches(false)">Nessuna</button></div>
+            </div>
+            <p style="font-size:11px;color:var(--g500);margin-bottom:8px">Selezionane più di una per applicare gli stessi convocati a tutto un weekend.</p>
+            <div style="max-height:240px;overflow-y:auto">${partite.slice(0,40).map(m=>{
+              const sel=convS.matchIds.includes(m.id);
+              return `<label style="display:flex;gap:8px;padding:8px;border:1px solid var(--g200);border-radius:var(--rs);margin-bottom:4px;cursor:pointer;${sel?'background:#dbeafe;border-color:var(--blue)':''}">
+                <input type="checkbox" ${sel?'checked':''} onchange="convToggleMatch('${m.id}')">
+                <div style="flex:1;font-size:12px"><strong>${fmtIt(m.data)}</strong> · ${esc(categoryDisplay(m.categoria))} ${groupLabel(m.categoria,m.gruppo)} · ${esc(m.tipo)}${m.avversario?' vs '+esc(m.avversario):''}<br><span style="color:var(--g500);font-size:10px">${m.ora||''} ${m.sede==='trasferta'?'(trasferta: '+esc(m.impiantoEsterno||m.luogoLibero||'')+')':(state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||''}</span></div>
+              </label>`;
+            }).join('')}</div>
+            ${convS.matchIds.length>1?`<div style="margin-top:10px;padding:8px;background:#fef3c7;border-radius:var(--rs);font-size:11px;color:#854d0e"><strong>📌 ${convS.matchIds.length} partite selezionate</strong> — gli stessi convocati e lo stesso messaggio verranno applicati a tutte. Verifica che le squadre coinvolte abbiano giocatori sovrapponibili.</div>`:''}
           </div>
           <div class="card">
             <h2 style="font-size:14px;margin-bottom:10px">2️⃣ Dettagli aggiuntivi</h2>
             <div class="fg">
-              <div class="ff"><label>Ritrovo</label><input type="time" id="cv_rit" value="${convS.ritrovo}" onchange="convS.ritrovo=this.value"></div>
-              <div class="ff"><label>Divisa</label><select id="cv_div" onchange="convS.divisa=this.value"><option ${convS.divisa==='Gara bianca'?'selected':''}>Gara bianca</option><option ${convS.divisa==='Gara nera'?'selected':''}>Gara nera</option><option ${convS.divisa==='Portiere'?'selected':''}>Portiere</option></select></div>
-              <div class="ff full"><label>Note aggiuntive</label><textarea id="cv_note" rows="2" oninput="convS.note=this.value">${esc(convS.note)}</textarea></div>
+              <div class="ff"><label>Ritrovo</label><input type="time" id="cv_rit" value="${convS.ritrovo}" onchange="convS.ritrovo=this.value;convResetMsgIfDefault()"></div>
+              <div class="ff"><label>Divisa</label><select id="cv_div" onchange="convS.divisa=this.value;convResetMsgIfDefault()"><option ${convS.divisa==='Gara bianca'?'selected':''}>Gara bianca</option><option ${convS.divisa==='Gara nera'?'selected':''}>Gara nera</option><option ${convS.divisa==='Portiere'?'selected':''}>Portiere</option></select></div>
+              <div class="ff full"><label>Note aggiuntive</label><textarea id="cv_note" rows="2" oninput="convS.note=this.value;convResetMsgIfDefault()">${esc(convS.note)}</textarea></div>
             </div>
           </div>
         </div>
-        ${convS.matchId?renderConvSelect():'<div class="card"><p style="color:var(--g500);text-align:center;padding:20px">Seleziona una partita per procedere con la selezione dei convocati</p></div>'}
+        ${convS.matchIds.length?renderConvSelect():'<div class="card"><p style="color:var(--g500);text-align:center;padding:20px">Seleziona almeno una partita per procedere con la selezione dei convocati</p></div>'}
       `}
     </div>
   `;
 };
+
+function convToggleMatch(mid){
+  const i=convS.matchIds.indexOf(mid);
+  if(i>=0)convS.matchIds.splice(i,1);
+  else convS.matchIds.push(mid);
+  // Reset convocati che non sono più validi (se cambia drasticamente la rosa)
+  // Non resettiamo: l'utente potrebbe voler tenere i convocati comuni
+  if(convS.matchIds.length===1)convAutoRitrovo();
+  // Reset messaggio se era ancora il default (auto-rigenera con i nuovi dati partita)
+  convResetMsgIfDefault();
+  saveStore();renderView();
+}
+function convToggleAllMatches(yes){
+  const oggi=today();
+  const partite=state.attivita.filter(a=>['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)&&!a.disputata&&a.data>=oggi);
+  convS.matchIds=yes?partite.map(p=>p.id):[];
+  if(yes&&convS.matchIds.length===1)convAutoRitrovo();
+  convResetMsgIfDefault();
+  saveStore();renderView();
+}
+function convGetMatches(){return convS.matchIds.map(id=>state.attivita.find(x=>x.id===id)).filter(Boolean)}
+
+function convGetRosa(){
+  // Unione di giocatori delle squadre (categoria+gruppo) coinvolte nelle partite selezionate
+  const matches=convGetMatches();
+  if(!matches.length)return [];
+  const pairs=new Set(matches.map(m=>m.categoria+'|'+m.gruppo));
+  const cats=new Set(matches.map(m=>m.categoria));
+  const result=state.players.filter(p=>{
+    if(p.eliminato)return false;
+    if(pairs.has(p.categoria+'|'+p.gruppo))return true;
+    if(convS.convCrossGroup && cats.has(p.categoria))return true;
+    return false;
+  });
+  // v2.4 B1.6.2: ordine alfabetico per cognome (poi nome)
+  result.sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it')||(a.nome||'').localeCompare(b.nome||'','it'));
+  return result;
+}
+
 function renderConvSelect(){
-  const m=state.attivita.find(x=>x.id===convS.matchId);if(!m)return'';
-  const rosa=state.players.filter(p=>!p.eliminato&&p.categoria===m.categoria&&p.gruppo===m.gruppo);
-  if(!rosa.length)return`<div class="card"><p style="color:var(--red);text-align:center;padding:20px">Nessun giocatore in rosa per ${m.categoria} ${groupLabel(m.categoria,m.gruppo)}</p></div>`;
-  const count=convS.convocati.length;
+  const matches=convGetMatches();if(!matches.length)return'';
+  const rosa=convGetRosa();
+  if(!rosa.length){
+    const labels=matches.map(m=>esc(categoryDisplay(m.categoria))+' '+groupLabel(m.categoria,m.gruppo)).join(', ');
+    return`<div class="card"><p style="color:var(--red);text-align:center;padding:20px">Nessun giocatore in rosa per: ${labels}</p></div>`;
+  }
+  const count=convS.convocati.filter(pid=>rosa.find(p=>p.id===pid)).length;
+  const msgIsCustom=!!convS.msgCustom;
   return`
     <div class="grid g2">
       <div class="card">
-        <div class="card-h"><h2 style="font-size:14px">3️⃣ Convocati (${count}/${rosa.length})</h2><div><button class="btn btn-sm btn-s" onclick="convAll(true)">Tutti</button> <button class="btn btn-sm btn-s" onclick="convAll(false)">Nessuno</button></div></div>
-        <div style="max-height:340px;overflow-y:auto">${rosa.map(p=>`<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--g100);cursor:pointer;font-size:12px"><input type="checkbox" ${convS.convocati.includes(p.id)?'checked':''} onchange="toggleConv('${p.id}')"><strong>${esc(p.cognome)} ${esc(p.nome)}</strong><span style="color:var(--g500);margin-left:auto">${esc(p.ruolo)}</span></label>`).join('')}</div>
+        <div class="card-h"><h2 style="font-size:14px">3️⃣ Convocati (${count}/${rosa.length})</h2>
+          <div><button class="btn btn-sm btn-s" onclick="convAll(true)">Tutti</button> <button class="btn btn-sm btn-s" onclick="convAll(false)">Nessuno</button></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;padding:6px;background:var(--g50);border-radius:var(--rs);font-size:11px;margin-bottom:8px;cursor:pointer">
+          <input type="checkbox" ${convS.convCrossGroup?'checked':''} onchange="convS.convCrossGroup=this.checked;saveStore();renderView()">
+          <span>Mostra anche giocatori di altri gruppi della stessa categoria <span style="color:var(--g500)">(per promozioni/aggregazioni)</span></span>
+        </label>
+        <div style="max-height:340px;overflow-y:auto">${rosa.map(p=>{
+          const matches=convGetMatches();
+          const matchPairs=new Set(matches.map(m=>m.categoria+'|'+m.gruppo));
+          const isCross=!matchPairs.has(p.categoria+'|'+p.gruppo);
+          return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--g100);cursor:pointer;font-size:12px;${isCross?'background:#fef3c7':''}">
+            <input type="checkbox" ${convS.convocati.includes(p.id)?'checked':''} onchange="toggleConv('${p.id}')">
+            <strong>${esc(p.cognome)} ${esc(p.nome)}</strong>
+            ${isCross?`<span class="bdg bdg-y" style="margin-left:6px">${esc(categoryShort(p.categoria))} ${esc(groupLabel(p.categoria,p.gruppo))}</span>`:''}
+            <span style="color:var(--g500);margin-left:auto;font-size:10px">${esc((p.ruoli||[p.ruolo]||[]).join(', '))}</span>
+          </label>`;
+        }).join('')}</div>
       </div>
       <div class="card">
-        <h2 style="font-size:14px;margin-bottom:10px">4️⃣ Anteprima messaggio</h2>
-        <textarea id="cv_msg" rows="18" style="font-family:monospace;font-size:11px;width:100%">${esc(buildConvMsg())}</textarea>
+        <div class="card-h"><h2 style="font-size:14px">4️⃣ Anteprima messaggio</h2>
+          ${msgIsCustom?`<button class="btn btn-sm btn-s" onclick="convResetMsg()" title="Ripristina il messaggio default">↺ Default</button>`:''}
+        </div>
+        ${msgIsCustom?'<p style="font-size:11px;color:#854d0e;background:#fef3c7;padding:6px 8px;border-radius:var(--rs);margin-bottom:6px">✎ Messaggio personalizzato (modifiche manuali). Le modifiche non si perderanno cambiando convocati o partite.</p>':''}
+        <textarea id="cv_msg" rows="18" style="font-family:monospace;font-size:11px;width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)" oninput="convS.msgCustom=this.value;saveStore()">${esc(convS.msgCustom||buildConvMsg())}</textarea>
         <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-p btn-sm" onclick="convCopy()">📋 Copia testo</button>
           <button class="btn btn-s btn-sm" onclick="convSendEmail()">📧 Email</button>
           <button class="btn btn-s btn-sm" onclick="convSendWA()">📱 WhatsApp</button>
           <button class="btn btn-s btn-sm" onclick="convSendSMS()">📲 SMS</button>
         </div>
-        <p style="color:var(--g500);font-size:10px;margin-top:8px">Email/WhatsApp/SMS aprono l'app del dispositivo con testo precompilato</p>
+        <p style="color:var(--g500);font-size:10px;margin-top:8px">Email/WhatsApp/SMS aprono l'app del dispositivo con testo precompilato. ${convS.matchIds.length>1?'Con più partite selezionate il messaggio elenca tutte le competizioni.':''}</p>
       </div>
     </div>
   `;
 }
-function convAutoRitrovo(){const m=state.attivita.find(x=>x.id===convS.matchId);if(!m||!m.ora)return;const[h,mn]=m.ora.split(':').map(Number);let rH=h,rM=mn-60;if(rM<0){rM+=60;rH--}if(rH<0)rH+=24;convS.ritrovo=pad(rH)+':'+pad(rM)}
-function toggleConv(pid){const i=convS.convocati.indexOf(pid);if(i>=0)convS.convocati.splice(i,1);else convS.convocati.push(pid);saveStore();renderView()}
-function convAll(yes){const m=state.attivita.find(x=>x.id===convS.matchId);const rosa=state.players.filter(p=>!p.eliminato&&p.categoria===m.categoria&&p.gruppo===m.gruppo);convS.convocati=yes?rosa.map(p=>p.id):[];saveStore();renderView()}
+function convAutoRitrovo(){
+  const m=convGetMatches()[0];
+  if(!m||!m.ora)return;
+  const[h,mn]=m.ora.split(':').map(Number);let rH=h,rM=mn-60;
+  if(rM<0){rM+=60;rH--}if(rH<0)rH+=24;
+  convS.ritrovo=pad(rH)+':'+pad(rM);
+}
+function toggleConv(pid){const i=convS.convocati.indexOf(pid);if(i>=0)convS.convocati.splice(i,1);else convS.convocati.push(pid);convResetMsgIfDefault();saveStore();renderView()}
+function convAll(yes){const rosa=convGetRosa();convS.convocati=yes?rosa.map(p=>p.id):[];convResetMsgIfDefault();saveStore();renderView()}
+function convResetMsg(){convS.msgCustom='';saveStore();renderView();toast('Messaggio default ripristinato','s')}
+function convResetMsgIfDefault(){
+  // Se il textarea esiste e contiene esattamente il default attuale, rigenerare. Altrimenti non toccare.
+  const el=document.getElementById('cv_msg');
+  if(!el)return;
+  if(!convS.msgCustom){
+    // Era default, rigenero
+    el.value=buildConvMsg();
+  }
+  // Se msgCustom è settato, l'utente ha personalizzato → non tocchiamo
+}
 function buildConvMsg(){
-  const m=state.attivita.find(x=>x.id===convS.matchId);if(!m)return CONV_TEMPLATE;
-  const d=new Date(m.data);
+  const matches=convGetMatches();
+  if(!matches.length)return CONV_TEMPLATE;
   const giorni=['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-  const impNome=m.sede==='trasferta'?(m.impiantoEsterno||m.luogoLibero||'Trasferta'):((state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||'Da definire');
-  const lista=convS.convocati.map((pid,idx)=>{const p=state.players.find(x=>x.id===pid);return p?(idx+1)+'. '+p.cognome+' '+p.nome:''}).filter(Boolean).join('\n');
-  return CONV_TEMPLATE.replace('{GIORNO}',giorni[d.getDay()]).replace('{DATA}',fmtIt(m.data)).replace('{RITROVO}',convS.ritrovo).replace('{ORA}',m.ora||'').replace('{IMPIANTO}',impNome).replace('{AVVERSARIO}',m.avversario||'—').replace('{DIVISA}',convS.divisa).replace('{LISTA_CONVOCATI}',lista||'(nessuno)').replace('{NOTE}',convS.note||'');
+  // Lista convocati condivisa, ordinata
+  const convocatiOrdinati=convS.convocati
+    .map(pid=>state.players.find(x=>x.id===pid))
+    .filter(Boolean)
+    .sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it')||(a.nome||'').localeCompare(b.nome||'','it'));
+  const lista=convocatiOrdinati.map((p,idx)=>(idx+1)+'. '+p.cognome+' '+p.nome).join('\n')||'(nessuno)';
+  if(matches.length===1){
+    const m=matches[0];const d=new Date(m.data);
+    const impNome=m.sede==='trasferta'?(m.impiantoEsterno||m.luogoLibero||'Trasferta'):((state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||'Da definire');
+    return CONV_TEMPLATE
+      .replace('{GIORNO}',giorni[d.getDay()])
+      .replace('{DATA}',fmtIt(m.data))
+      .replace('{RITROVO}',convS.ritrovo)
+      .replace('{ORA}',m.ora||'')
+      .replace('{IMPIANTO}',impNome)
+      .replace('{AVVERSARIO}',m.avversario||'—')
+      .replace('{DIVISA}',convS.divisa)
+      .replace('{LISTA_CONVOCATI}',lista)
+      .replace('{NOTE}',convS.note||'');
+  }
+  // Multi-partita: una sezione per ognuna
+  let txt='CONVOCAZIONE LASCARIS 1954 ASD\n=================================\n\n';
+  matches.forEach((m,idx)=>{
+    const d=new Date(m.data);
+    const impNome=m.sede==='trasferta'?(m.impiantoEsterno||m.luogoLibero||'Trasferta'):((state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||'Da definire');
+    txt+=`Impegno ${idx+1}/${matches.length}: ${categoryDisplay(m.categoria)} ${groupLabel(m.categoria,m.gruppo)} · ${m.tipo}\n`;
+    txt+=`  ${giorni[d.getDay()]} ${fmtIt(m.data)} · ore ${m.ora||'—'} · ritrovo ${convS.ritrovo}\n`;
+    txt+=`  ${m.sede==='trasferta'?'Trasferta @ ':'Casa @ '}${impNome}\n`;
+    if(m.avversario)txt+=`  vs ${m.avversario}\n`;
+    txt+='\n';
+  });
+  txt+='Divisa: '+convS.divisa+'\n\n';
+  txt+='CONVOCATI\n---------\n'+lista+'\n';
+  if(convS.note)txt+='\nNote: '+convS.note+'\n';
+  txt+='\nLo Staff Tecnico\nLASCARIS 1954 ASD';
+  return txt;
 }
 function convGetEmails(){return convS.convocati.map(pid=>(state.players.find(p=>p.id===pid)||{}).genitore1?.email).filter(Boolean)}
 function convGetPhones(){return convS.convocati.map(pid=>(state.players.find(p=>p.id===pid)||{}).genitore1?.tel).filter(Boolean).map(t=>t.replace(/[^0-9+]/g,''))}
 function convCopy(){const t=document.getElementById('cv_msg').value;navigator.clipboard.writeText(t).then(()=>toast('Testo copiato negli appunti','s')).catch(()=>toast('Impossibile copiare','e'))}
-function convSendEmail(){const ems=convGetEmails();if(!ems.length){toast('Nessuna email nei contatti genitori','w');return}const sub=encodeURIComponent('Convocazione LASCARIS 1954');const body=encodeURIComponent(document.getElementById('cv_msg').value);window.location.href='mailto:'+ems.join(',')+'?subject='+sub+'&body='+body;toast('Apertura client email...','s')}
+function convSendEmail(){const ems=convGetEmails();if(!ems.length){toast('Nessuna email nei contatti genitori','w');return}const sub=encodeURIComponent('Convocazione LASCARIS 1954');const body=encodeURIComponent(document.getElementById('cv_msg').value);window.location.href='mailto:?bcc='+ems.join(',')+'&subject='+sub+'&body='+body;toast('Apertura client email...','s')}
 function convSendWA(){const t=encodeURIComponent(document.getElementById('cv_msg').value);const phones=convGetPhones();if(phones.length===1)window.open('https://wa.me/'+phones[0].replace(/^\+?/,'')+'?text='+t,'_blank');else window.open('https://wa.me/?text='+t,'_blank');toast('Apertura WhatsApp...','s')}
 function convSendSMS(){const phones=convGetPhones();const t=encodeURIComponent(document.getElementById('cv_msg').value);window.location.href='sms:'+phones.join(',')+'?body='+t;toast('Apertura app SMS...','s')}
 
