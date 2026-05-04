@@ -1,10 +1,39 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.4
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.5
 ================================================================================
   CHANGELOG
   ----------
+  v2.5 · 2026-05-04 · Documenti minore vs adulto (Batch 1.7)
+    · NEW  Helper età: calcAge(iso), isMinore(p) (<18), isDetrazioneEta(p)
+           (fascia 5-18 inclusa per detrazione IRPEF 19%), ageBadge(p).
+    · NEW  docBody con doppi template per ognuno dei 7 documenti:
+           - nulla_osta_minore / nulla_osta_adulto (settore giovanile vs
+             art. 95 NOIF dilettanti)
+           - prestito_minore / prestito_adulto (Settore Giovanile Scolastico
+             vs art. 103 NOIF FIGC)
+           - ric_730_minore (con esplicita modalità tracciata L.232/2016)
+           - ric_fisc generica per minorenni e maggiorenni
+           - cert_anagr_minore (richiesta del genitore) / cert_anagr_adulto
+             (richiesta diretta del tesserato)
+           - lib_privacy_minore (informativa al genitore) /
+             lib_privacy_adulto (informativa al tesserato)
+           - lib_foto_minore (autorizzazione del genitore) /
+             lib_foto_adulto (autorizzazione del tesserato)
+    · NEW  Selezione automatica template via isMinore(p) — il sistema sceglie
+           "Minore" o "Adulto" senza chiedere all'utente.
+    · NEW  Blocco hard di ric_730 fuori fascia 5-18 anni con toast esplicativo
+           che indirizza a "Ricevuta fiscale" generica.
+    · NEW  Conferma soft per documenti senza data di nascita: l'utente sa che
+           il sistema assumerà "minore" come default conservativo.
+    · NEW  Tag versione MINORE/ADULTO in italico sotto il titolo del PDF —
+           chi riceve il documento sa subito quale ramo è stato usato.
+    · NEW  Pagina Documenti: badge età/template visibile sotto il select
+           giocatore (Minore N anni · Adulto N anni · ⚠ età sconosciuta).
+    · NEW  Note inline su card Ric. 730 che spiega il limite età.
+    · CHG  Lista giocatori in select Documenti ordinata alfabeticamente.
+
   v2.4 · 2026-05-02 · UX rifinitura post-deploy (Batch 1.6)
     · NEW  Convocazioni multi-partita: selezione checkbox di più partite,
            gli stessi convocati e messaggio si applicano a tutto il weekend.
@@ -82,7 +111,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="description" content="Gestionale LASCARIS 1954 ASD - Calcio dilettantistico dal Settore Giovanile alla Prima Squadra">
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.4</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.5</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -267,14 +296,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Sportivo · v2.4</div>
+    <div class="sub">Gestionale Sportivo · v2.5</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.4</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.5</div>
   </div>
 </div>
 
@@ -575,6 +604,24 @@ function groupChip(cat,gid){
   return `<span class="gc" title="${groupLong(cat,gid)}">${cat} ${groupLabel(cat,gid)}</span>`;
 }
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+/* ---------- AGE HELPERS (v2.5) ---------- */
+function calcAge(iso){
+  if(!iso)return null;
+  const d=new Date(iso);if(isNaN(d.getTime()))return null;
+  const t=new Date();
+  let a=t.getFullYear()-d.getFullYear();
+  const m=t.getMonth()-d.getMonth();
+  if(m<0||(m===0&&t.getDate()<d.getDate()))a--;
+  return a;
+}
+function isMinore(p){const a=calcAge(p&&p.nascita);return a===null?true:a<18}
+function isDetrazioneEta(p){const a=calcAge(p&&p.nascita);return a!==null && a>=5 && a<=18}
+function ageBadge(p){
+  const a=calcAge(p&&p.nascita);
+  if(a===null)return '<span class="bdg bdg-y" title="Data di nascita mancante">⚠ età sconosciuta</span>';
+  return isMinore(p)?`<span class="bdg bdg-b" title="Tesserato minorenne — i template di consenso useranno la firma del genitore">👶 Minore · ${a} anni</span>`:`<span class="bdg bdg-k" title="Tesserato maggiorenne — i template di consenso useranno la firma diretta">🧑 Adulto · ${a} anni</span>`;
+}
 
 /* ---------- CATEGORY HELPERS (v2.3) ---------- */
 function categoryLabel(cat){return (state.categoryLabels||{})[cat]||''}
@@ -4529,16 +4576,21 @@ const DOCS_TEMPLATES=[
 // Custom uploaded templates
 if(!state.documentiCustom)state.documentiCustom=[];
 VIEWS.documenti=function(c){
+  // v2.5: indicatore età/template selezionato
   c.innerHTML=`
     <div class="vw">
       <div class="vh"><div><h1>Documenti</h1><div class="sb2">Template personalizzati con dati giocatore · carta intestata LASCARIS</div></div></div>
       <div class="card">
-        <p style="color:var(--g500);font-size:12px;margin-bottom:10px">Seleziona un giocatore e un tipo documento. Il sistema compila automaticamente il template con i suoi dati anagrafici e genera un PDF scaricabile su carta intestata LASCARIS.</p>
+        <p style="color:var(--g500);font-size:12px;margin-bottom:10px">Seleziona un giocatore e un tipo documento. Il sistema compila automaticamente il template con i suoi dati anagrafici, sceglie la versione corretta in base all'età (Minore/Adulto) e genera un PDF scaricabile su carta intestata LASCARIS.</p>
         <div class="fg">
-          <div class="ff full"><label>Giocatore *</label><select id="dc_pl"><option value="">— Seleziona giocatore —</option>${state.players.filter(p=>!p.eliminato).map(p=>`<option value="${p.id}">${esc(p.cognome)} ${esc(p.nome)} (${p.categoria} ${groupLabel(p.categoria,p.gruppo)})</option>`).join('')}</select></div>
+          <div class="ff full"><label>Giocatore *</label><select id="dc_pl" onchange="docUpdateAgeBadge()"><option value="">— Seleziona giocatore —</option>${state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it')).map(p=>`<option value="${p.id}">${esc(p.cognome)} ${esc(p.nome)} (${categoryShort(p.categoria)} ${groupLabel(p.categoria,p.gruppo)})</option>`).join('')}</select></div>
         </div>
+        <div id="dc_ageBox" style="margin-top:8px;font-size:12px"></div>
       </div>
-      <div class="grid ga">${DOCS_TEMPLATES.map(t=>`<div class="card" style="margin:0"><div style="font-size:32px;text-align:center;margin-bottom:8px">${t.icon}</div><h3 style="font-size:13px;text-align:center;margin-bottom:4px">${esc(t.nome)}</h3><p style="font-size:11px;color:var(--g500);text-align:center;line-height:1.4;min-height:30px">${esc(t.desc)}</p><button class="btn btn-p btn-sm" style="width:100%;margin-top:8px" onclick="genDoc('${t.id}')">📄 Genera PDF</button></div>`).join('')}</div>
+      <div class="grid ga">${DOCS_TEMPLATES.map(t=>{
+        const noteRic730=t.id==='ric_730'?`<p style="font-size:10px;color:var(--orange);text-align:center;margin-top:4px">⚠ Solo età 5-18 anni (detrazione IRPEF 19%)</p>`:'';
+        return `<div class="card" style="margin:0"><div style="font-size:32px;text-align:center;margin-bottom:8px">${t.icon}</div><h3 style="font-size:13px;text-align:center;margin-bottom:4px">${esc(t.nome)}</h3><p style="font-size:11px;color:var(--g500);text-align:center;line-height:1.4;min-height:30px">${esc(t.desc)}</p>${noteRic730}<button class="btn btn-p btn-sm" style="width:100%;margin-top:8px" onclick="genDoc('${t.id}')">📄 Genera PDF</button></div>`;
+      }).join('')}</div>
       <div class="card">
         <div class="card-h"><h3 style="font-size:13px">📎 Template custom caricati dall'admin</h3>
           <label class="btn btn-p btn-sm" style="cursor:pointer">+ Carica .docx<input type="file" accept=".docx" style="display:none" onchange="uploadCustomDoc(event)"></label>
@@ -4550,6 +4602,21 @@ VIEWS.documenti=function(c){
   `;
 };
 function genDocFromPlayer(pid,tipo){const el=document.getElementById('dc_pl');if(el)el.value=pid;const p=state.players.find(x=>x.id===pid);if(!p){toast('Giocatore non trovato','e');return}const backup=document.getElementById('dc_pl');const tmpSel=document.createElement('select');tmpSel.id='dc_pl';const opt=document.createElement('option');opt.value=pid;tmpSel.appendChild(opt);tmpSel.value=pid;if(!backup){document.body.appendChild(tmpSel)}else{backup.value=pid}genDoc(tipo);if(!backup&&tmpSel.parentNode)tmpSel.parentNode.removeChild(tmpSel)}
+function docUpdateAgeBadge(){
+  const box=document.getElementById('dc_ageBox');if(!box)return;
+  const pid=document.getElementById('dc_pl').value;
+  if(!pid){box.innerHTML='';return}
+  const p=state.players.find(x=>x.id===pid);if(!p){box.innerHTML='';return}
+  const eta=calcAge(p.nascita);
+  const minore=isMinore(p);
+  const det=isDetrazioneEta(p);
+  const badge=ageBadge(p);
+  let nota='';
+  if(eta===null){nota='<p style="margin-top:6px;font-size:11px;color:#854d0e;background:#fef3c7;padding:6px 8px;border-radius:var(--rs)">⚠ Senza data di nascita il sistema assume "Minore" e userà il template con firma del genitore. Inserisci la data nella scheda anagrafica per evitare ambiguità.</p>';}
+  else if(minore){nota='<p style="margin-top:6px;font-size:11px;color:var(--g700)">→ I template di consenso/firma useranno la versione <strong>Minore</strong> (firma esercente potestà genitoriale).'+(det?' Ricevuta 730 disponibile.':'')+'</p>';}
+  else{nota='<p style="margin-top:6px;font-size:11px;color:var(--g700)">→ I template di consenso/firma useranno la versione <strong>Adulto</strong> (firma diretta del tesserato).'+(det?' Ricevuta 730 ancora disponibile (fascia 5-18 inclusa).':' Ricevuta 730 <strong>non applicabile</strong> (fuori fascia 5-18 anni) — usa Ricevuta fiscale generica.')+'</p>';}
+  box.innerHTML=badge+nota;
+}
 
 
 function uploadCustomDoc(ev){
@@ -4587,6 +4654,17 @@ function genDoc(tipo){
   if(!pid){toast('Seleziona un giocatore','e');return}
   const p=state.players.find(x=>x.id===pid);if(!p){toast('Giocatore non trovato','e');return}
   if(!window.jspdf){toast('Libreria PDF non caricata','e');return}
+  // v2.5: blocco fiscalmente corretto su ric_730
+  if(tipo==='ric_730' && !isDetrazioneEta(p)){
+    const eta=calcAge(p.nascita);
+    const msg=eta===null?'Data di nascita mancante: la detrazione 19% (art. 15 c.1 i-quinquies DPR 917/86) si applica solo a tesserati 5-18 anni. Inserisci la data di nascita o usa "Ricevuta fiscale" generica.':`Tesserato di ${eta} anni: la detrazione IRPEF 19% si applica solo a età 5-18 anni. Per maggiorenni o bambini sotto 5 anni usa "Ricevuta fiscale" generica.`;
+    toast(msg,'w');
+    return;
+  }
+  // v2.5: warning soft se manca data nascita su altri documenti che dipendono dall'età
+  if(!p.nascita && ['nulla_osta','prestito','cert_anagr','lib_privacy','lib_foto'].includes(tipo)){
+    if(!confirm('Manca la data di nascita: il sistema assume "minore" e userà i template con firma del genitore. Continuare?'))return;
+  }
   const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});
   // Letterhead header
   try{doc.addImage(LOGO,'PNG',15,10,16,22)}catch(e){}
@@ -4597,7 +4675,10 @@ function genDoc(tipo){
   doc.setLineWidth(0.3);doc.line(15,36,195,36);
   let y=46;
   const title=DOCS_TEMPLATES.find(t=>t.id===tipo)?.nome||'Documento';
-  doc.setFontSize(14);doc.setFont('helvetica','bold');doc.text(title.toUpperCase(),105,y,{align:'center'});y+=10;
+  doc.setFontSize(14);doc.setFont('helvetica','bold');doc.text(title.toUpperCase(),105,y,{align:'center'});y+=6;
+  // v2.5: tag versione template sotto il titolo
+  const tagVer=isMinore(p)?'(versione MINORE — firma del genitore)':'(versione ADULTO — firma del tesserato)';
+  doc.setFontSize(8);doc.setFont('helvetica','italic');doc.setTextColor(110,110,110);doc.text(tagVer,105,y,{align:'center'});doc.setTextColor(0,0,0);y+=8;
   doc.setFontSize(10);doc.setFont('helvetica','normal');
   const body=docBody(tipo,p);
   const lines=doc.splitTextToSize(body,180);
@@ -4615,17 +4696,35 @@ function genDoc(tipo){
   toast('PDF generato','s');
 }
 function docBody(tipo,p){
-  const dati=`Cognome e Nome: ${p.cognome} ${p.nome}\nNato/a il: ${p.nascita||'—'} a ${p.comuneNascita||'—'}\nCodice Fiscale: ${p.cf||'—'}\nResidente in: ${p.indirizzo||'—'} - ${p.comuneResidenza||'—'}\nCategoria: ${p.categoria} ${groupLabel(p.categoria,p.gruppo)}`;
-  const templates={
-    nulla_osta:`La sottoscritta Società LASCARIS 1954 ASD, con sede in Pianezza (TO) - Via Claviere 16 - P.IVA 03964450013, nella persona del Presidente pro-tempore,\n\nrilascia NULLA OSTA\n\nal giocatore:\n${dati}\n\naffinché possa effettuare un periodo di prova/osservazione presso altra Società sportiva, senza pregiudizio del vincolo di tesseramento in essere.\n\nIl presente nulla osta è valido per la sola finalità indicata e per il periodo concordato tra le parti.`,
-    prestito:`La sottoscritta Società LASCARIS 1954 ASD autorizza il prestito temporaneo del giocatore:\n\n${dati}\n\npresso la Società sportiva di destinazione, secondo le norme FIGC vigenti in materia di trasferimenti temporanei nel Settore Giovanile Scolastico.\n\nAl termine del periodo di prestito, il giocatore rientrerà nella disponibilità della società di appartenenza originaria.`,
-    ric_730:`Ricevuta per il tesserato:\n\n${dati}\n\nOggetto: quota associativa stagione sportiva ${state.societa.stagione||'2025/2026'} - attività sportiva non agonistica dilettantistica.\n\nImporto versato: € __________\n\nAi sensi dell'art. 15, comma 1, lett. i-quinquies del DPR 917/86, la presente ricevuta è detraibile ai fini IRPEF nella misura del 19% dalla dichiarazione dei redditi del soggetto pagante, per spese di iscrizione annuale e abbonamento ad associazioni sportive dilettantistiche (limite massimo detraibile € 210,00 per ciascun ragazzo di età tra 5 e 18 anni).`,
-    ric_fisc:`Si rilascia ricevuta al tesserato:\n\n${dati}\n\nOggetto: quota associativa stagione sportiva ${state.societa.stagione||'2025/2026'}.\n\nImporto versato: € __________\nModalità di pagamento: __________\n\nLa presente ricevuta viene emessa a fronte del versamento della quota per lo svolgimento dell'attività sportiva dilettantistica.`,
-    cert_anagr:`Al Comune di ${p.comuneResidenza||'__________'}\nUfficio Anagrafe\n\nOggetto: richiesta di certificato anagrafico plurimo in carta semplice per uso sportivo\n\nIl/La sottoscritto/a ${p.cognome} ${p.nome}, in qualità di tesserato/a della Società LASCARIS 1954 ASD, chiede il rilascio di certificato anagrafico plurimo (residenza, stato di famiglia, cittadinanza) in carta semplice per uso sportivo, necessario al tesseramento alla Federazione Italiana Giuoco Calcio.\n\nDati del richiedente:\n${dati}\n\nSi ringrazia per l'attenzione.`,
-    lib_privacy:`Informativa ai sensi del GDPR (Regolamento UE 2016/679) e del D.Lgs. 196/2003\n\nTitolare del trattamento: LASCARIS 1954 ASD\n\nIl tesserato / esercente potestà genitoriale per:\n${dati}\n\nriceve la presente informativa relativa al trattamento dei dati personali raccolti per le finalità di tesseramento, gestione delle attività sportive e adempimenti federali FIGC.\n\nI dati saranno conservati per il tempo strettamente necessario agli adempimenti di legge. Il sottoscritto ha diritto di accesso, rettifica, cancellazione e opposizione al trattamento dei propri dati personali.\n\nData __________     Firma del tesserato/genitore __________`,
-    lib_foto:`Il/La sottoscritto/a, in qualità di genitore/tutore di:\n\n${dati}\n\nAUTORIZZA la Società LASCARIS 1954 ASD al trattamento dell'immagine fotografica e video del/la minore tesserato/a per finalità istituzionali della società, pubblicazione sui canali social (Facebook, Instagram), sito web www.lascaris.it, archivio storico sociale, articoli di stampa locale e materiale promozionale relativo all'attività sportiva dilettantistica.\n\nL'autorizzazione ha validità per la stagione sportiva in corso e può essere revocata in qualsiasi momento tramite comunicazione scritta alla segreteria.\n\nData __________     Firma __________`
+  // v2.5: dispatch su template Minore vs Adulto in base all'età
+  const dati=`Cognome e Nome: ${p.cognome} ${p.nome}\nNato/a il: ${p.nascita||'—'} a ${p.comuneNascita||'—'}\nCodice Fiscale: ${p.cf||'—'}\nResidente in: ${p.indirizzo||'—'} - ${p.comuneResidenza||'—'}\nCategoria: ${categoryDisplay(p.categoria)} ${groupLabel(p.categoria,p.gruppo)}`;
+  const stagione=state.societa.stagione||'2025/2026';
+  const minore=isMinore(p);
+  const T={
+    /* ===== NULLA OSTA ===== */
+    nulla_osta_minore:`La sottoscritta Società LASCARIS 1954 ASD, con sede in Pianezza (TO) - Via Claviere 16 - P.IVA 03964450013, nella persona del Presidente pro-tempore,\n\nrilascia NULLA OSTA\n\nal giovane tesserato:\n${dati}\n\naffinché possa effettuare un periodo di prova/osservazione presso altra Società sportiva del Settore Giovanile, senza pregiudizio del vincolo di tesseramento in essere ai sensi delle Norme Organizzative Interne della F.I.G.C.\n\nIl presente nulla osta è valido per la sola finalità indicata e per il periodo concordato tra le parti, previo consenso dell'esercente la potestà genitoriale.`,
+    nulla_osta_adulto:`La sottoscritta Società LASCARIS 1954 ASD, con sede in Pianezza (TO) - Via Claviere 16 - P.IVA 03964450013, nella persona del Presidente pro-tempore,\n\nrilascia NULLA OSTA\n\nal calciatore tesserato:\n${dati}\n\naffinché possa effettuare un periodo di prova/osservazione presso altra Società sportiva del settore dilettantistico FIGC, senza pregiudizio del vincolo di tesseramento in essere ai sensi dell'art. 95 e seguenti delle Norme Organizzative Interne della F.I.G.C.\n\nIl presente nulla osta è valido per la sola finalità indicata e per il periodo concordato tra le parti.`,
+    /* ===== PRESTITO ===== */
+    prestito_minore:`La sottoscritta Società LASCARIS 1954 ASD autorizza il prestito temporaneo del giovane tesserato:\n\n${dati}\n\npresso la Società sportiva di destinazione, secondo le norme F.I.G.C. vigenti in materia di trasferimenti temporanei nel Settore Giovanile Scolastico.\n\nIl presente prestito è subordinato al consenso scritto dell'esercente la potestà genitoriale. Al termine del periodo di prestito il tesserato rientrerà nella disponibilità della società di appartenenza originaria.`,
+    prestito_adulto:`La sottoscritta Società LASCARIS 1954 ASD autorizza il prestito temporaneo del calciatore:\n\n${dati}\n\npresso la Società sportiva di destinazione, secondo le norme F.I.G.C. vigenti in materia di trasferimenti temporanei nel settore dilettantistico (art. 103 e seguenti delle Norme Organizzative Interne della F.I.G.C.).\n\nAl termine del periodo di prestito il calciatore rientrerà nella disponibilità della società di appartenenza originaria.`,
+    /* ===== RIC. 730 ===== unica versione: 5-18 anni inclusi (filtraggio a monte in genDoc) */
+    ric_730_minore:`Ricevuta per il tesserato:\n\n${dati}\n\nOggetto: quota associativa stagione sportiva ${stagione} - attività sportiva non agonistica dilettantistica.\n\nImporto versato: € __________\nData del versamento: __________\nModalità di pagamento (tracciata, ai sensi della L. 232/2016): __________\n\nAi sensi dell'art. 15, comma 1, lett. i-quinquies del D.P.R. 917/86, la presente ricevuta è detraibile ai fini IRPEF nella misura del 19% dalla dichiarazione dei redditi del soggetto pagante, per spese di iscrizione annuale e abbonamento ad associazioni sportive dilettantistiche, fino al limite massimo di € 210,00 per ciascun ragazzo di età tra 5 e 18 anni.\n\nLa detrazione è ammessa esclusivamente se il versamento è stato effettuato con strumenti di pagamento tracciabili.`,
+    ric_730_adulto:`(Documento non applicabile a tesserati maggiorenni — usare invece "Ricevuta fiscale".)`,
+    /* ===== RIC. FISC. ===== generica, valida per minorenni e maggiorenni */
+    ric_fisc_minore:`Si rilascia ricevuta al tesserato:\n\n${dati}\n\nOggetto: quota associativa stagione sportiva ${stagione}.\n\nImporto versato: € __________\nData del versamento: __________\nModalità di pagamento: __________\n\nLa presente ricevuta viene emessa a fronte del versamento della quota per lo svolgimento dell'attività sportiva dilettantistica nel Settore Giovanile.`,
+    ric_fisc_adulto:`Si rilascia ricevuta al tesserato:\n\n${dati}\n\nOggetto: quota associativa stagione sportiva ${stagione}.\n\nImporto versato: € __________\nData del versamento: __________\nModalità di pagamento: __________\n\nLa presente ricevuta viene emessa a fronte del versamento della quota per lo svolgimento dell'attività sportiva dilettantistica.`,
+    /* ===== CERT. ANAGR. ===== */
+    cert_anagr_minore:`Al Comune di ${p.comuneResidenza||'__________'}\nUfficio Anagrafe\n\nOggetto: richiesta di certificato anagrafico plurimo in carta semplice per uso sportivo (minore d'età)\n\nIl/La sottoscritto/a __________________________ , in qualità di esercente la potestà genitoriale sul minore:\n${dati}\n\nchiede il rilascio di certificato anagrafico plurimo (residenza, stato di famiglia, cittadinanza) in carta semplice per uso sportivo, necessario al tesseramento alla Federazione Italiana Giuoco Calcio per la stagione ${stagione}.\n\nSi ringrazia per l'attenzione.\n\nData __________     Firma del genitore __________`,
+    cert_anagr_adulto:`Al Comune di ${p.comuneResidenza||'__________'}\nUfficio Anagrafe\n\nOggetto: richiesta di certificato anagrafico plurimo in carta semplice per uso sportivo\n\nIl/La sottoscritto/a ${p.cognome} ${p.nome}, in qualità di tesserato/a della Società LASCARIS 1954 ASD, chiede il rilascio di certificato anagrafico plurimo (residenza, stato di famiglia, cittadinanza) in carta semplice per uso sportivo, necessario al tesseramento alla Federazione Italiana Giuoco Calcio per la stagione ${stagione}.\n\nDati del richiedente:\n${dati}\n\nSi ringrazia per l'attenzione.\n\nData __________     Firma del tesserato __________`,
+    /* ===== LIB. PRIVACY ===== */
+    lib_privacy_minore:`Informativa ai sensi del Regolamento UE 2016/679 (GDPR) e del D.Lgs. 196/2003 e ss.mm.ii.\n\nTitolare del trattamento: LASCARIS 1954 ASD - Via Claviere 16, 10044 Pianezza (TO) - segreteria@lascaris.it\n\nIl/La sottoscritto/a __________________________ , in qualità di esercente la potestà genitoriale sul minore tesserato:\n${dati}\n\nDICHIARA di aver ricevuto l'informativa relativa al trattamento dei dati personali del minore, raccolti per le finalità di tesseramento alla F.I.G.C., gestione delle attività sportive, adempimenti amministrativi e federali, comunicazioni con la famiglia.\n\nI dati saranno conservati per il tempo strettamente necessario agli adempimenti di legge. Il sottoscritto ha diritto di accesso, rettifica, cancellazione, opposizione al trattamento e portabilità ai sensi degli artt. 15-22 GDPR.\n\nData __________     Firma del genitore __________`,
+    lib_privacy_adulto:`Informativa ai sensi del Regolamento UE 2016/679 (GDPR) e del D.Lgs. 196/2003 e ss.mm.ii.\n\nTitolare del trattamento: LASCARIS 1954 ASD - Via Claviere 16, 10044 Pianezza (TO) - segreteria@lascaris.it\n\nIl/La sottoscritto/a tesserato/a:\n${dati}\n\nDICHIARA di aver ricevuto l'informativa relativa al trattamento dei propri dati personali, raccolti per le finalità di tesseramento alla F.I.G.C., gestione delle attività sportive, adempimenti amministrativi e federali.\n\nI dati saranno conservati per il tempo strettamente necessario agli adempimenti di legge. Il sottoscritto ha diritto di accesso, rettifica, cancellazione, opposizione al trattamento e portabilità ai sensi degli artt. 15-22 GDPR.\n\nData __________     Firma del tesserato __________`,
+    /* ===== LIB. FOTO ===== */
+    lib_foto_minore:`Il/La sottoscritto/a __________________________ , in qualità di genitore/tutore del minore tesserato:\n\n${dati}\n\nAUTORIZZA la Società LASCARIS 1954 ASD al trattamento dell'immagine fotografica e video del/la minore per finalità istituzionali della società, pubblicazione sui canali social ufficiali (Facebook, Instagram), sito web www.lascaris.it, archivio storico sociale, articoli di stampa locale e materiale promozionale relativo all'attività sportiva dilettantistica.\n\nL'autorizzazione ha validità per la stagione sportiva ${stagione} e può essere revocata in qualsiasi momento tramite comunicazione scritta alla segreteria.\n\n☐ AUTORIZZO          ☐ NON AUTORIZZO\n\nData __________     Firma del genitore __________`,
+    lib_foto_adulto:`Il/La sottoscritto/a tesserato/a:\n\n${dati}\n\nAUTORIZZA la Società LASCARIS 1954 ASD al trattamento della propria immagine fotografica e video per finalità istituzionali della società, pubblicazione sui canali social ufficiali (Facebook, Instagram), sito web www.lascaris.it, archivio storico sociale, articoli di stampa locale e materiale promozionale relativo all'attività sportiva dilettantistica.\n\nL'autorizzazione ha validità per la stagione sportiva ${stagione} e può essere revocata in qualsiasi momento tramite comunicazione scritta alla segreteria.\n\n☐ AUTORIZZO          ☐ NON AUTORIZZO\n\nData __________     Firma del tesserato __________`
   };
-  return templates[tipo]||'Template non disponibile';
+  const key=tipo+(minore?'_minore':'_adulto');
+  return T[key]||T[tipo+'_minore']||'Template non disponibile';
 }
 
 /* =============================================================
