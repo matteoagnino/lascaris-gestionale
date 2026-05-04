@@ -1,10 +1,33 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.5
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.6
 ================================================================================
   CHANGELOG
   ----------
+  v2.6 · 2026-05-04 · Distinta gara FIGC (Batch 2)
+    · NEW  Modulo Distinta: VIEWS.distinta riscritto da placeholder a flow
+           operativo in 5 step (selezione partita, dati gara auto-popolati,
+           convocati max 20 senza distinguo titolari/panchina, capitano e
+           vicecapitano, recinto di gioco con staff pre-popolato dall'incarico).
+    · NEW  Generazione PDF distinta layout LND ufficiale: intestazione
+           società + dati gara + tabella 20 righe convocati con N°, data
+           nascita, cognome+nome, Cap/v.c., matricola FIGC, doc identità +
+           tabella persone ammesse + dichiarazione art. 61 N.O.I.F. + firme.
+    · NEW  Anagrafica giocatori estesa: docIdentita.numero, .rilasciatoDa,
+           .rilasciatoIl (oltre a tipo e scad già presenti).
+    · NEW  Anagrafica staff estesa: matricolaFigc, codice fiscale, oggetto
+           docIdentita completo (tipo, numero, rilasciatoDa, rilasciatoIl, scad).
+    · NEW  Validazione pre-PDF: capitano obbligatorio, dirigente accompagnatore
+           obbligatorio, matricola FIGC e doc identità per ogni convocato,
+           numero maglia per ogni convocato. Errori elencati nel pannello
+           "5️⃣ Verifica e genera PDF" prima di scaricare.
+    · NEW  Auto-popolamento staff per recinto gioco da incarichi della
+           categoria/gruppo (Tecnico→Allenatore, Dirigente→Dirigente accomp.
+           ufficiale, ecc.).
+    · CHG  Migrazione migrateStateV23 estesa per inizializzare i nuovi campi
+           sui giocatori e staff esistenti senza rompere dati pregressi.
+
   v2.5 · 2026-05-04 · Documenti minore vs adulto (Batch 1.7)
     · NEW  Helper età: calcAge(iso), isMinore(p) (<18), isDetrazioneEta(p)
            (fascia 5-18 inclusa per detrazione IRPEF 19%), ageBadge(p).
@@ -111,7 +134,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="description" content="Gestionale LASCARIS 1954 ASD - Calcio dilettantistico dal Settore Giovanile alla Prima Squadra">
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.5</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.6</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -296,14 +319,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Sportivo · v2.5</div>
+    <div class="sub">Gestionale Sportivo · v2.6</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.5</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.6</div>
   </div>
 </div>
 
@@ -370,6 +393,18 @@ function migrateStateV23(d){
   if(!d.campionatiAgonistichePreset) d.campionatiAgonistichePreset=JSON.parse(JSON.stringify(DEFAULT_STATE.campionatiAgonistichePreset));
   // 3) ruoli statutari preset (v2.4)
   if(!d.ruoliStatutariPreset) d.ruoliStatutariPreset=JSON.parse(JSON.stringify(DEFAULT_STATE.ruoliStatutariPreset));
+  // 4) v2.6: estensione documento identità giocatori e staff per distinta gara FIGC
+  (d.players||[]).forEach(p=>{
+    if(!p.docIdentita)p.docIdentita={};
+    if(p.docIdentita.numero===undefined)p.docIdentita.numero='';
+    if(p.docIdentita.rilasciatoDa===undefined)p.docIdentita.rilasciatoDa='';
+    if(p.docIdentita.rilasciatoIl===undefined)p.docIdentita.rilasciatoIl='';
+  });
+  (d.staff||[]).forEach(s=>{
+    if(!s.docIdentita)s.docIdentita={};
+    if(s.matricolaFigc===undefined)s.matricolaFigc='';
+    if(s.cf===undefined)s.cf='';
+  });
 }
 
 function loadStore(){
@@ -1663,7 +1698,8 @@ VIEWS.staff=function(c){
   `;
 };
 function openStaff(id){
-  const s=id?state.staff.find(x=>x.id===id):{id:null,nome:'',cognome:'',ruolo:'Tecnico',categoria:'',gruppo:'',tel:'',email:''};
+  const s=id?state.staff.find(x=>x.id===id):{id:null,nome:'',cognome:'',ruolo:'Tecnico',categoria:'',gruppo:'',tel:'',email:'',matricolaFigc:'',cf:'',docIdentita:{}};
+  if(!s.docIdentita)s.docIdentita={};
   // Migrazione: se esiste solo "nome" come campo unico, splitto
   if(!s.cognome&&s.nome&&s.nome.includes(' ')){const p=s.nome.trim().split(/\s+/);s.cognome=p.pop();s.nome=p.join(' ')}
   if(!s.incarichi)s.incarichi=s.ruolo?[{ruolo:s.ruolo,categoria:s.categoria||'',gruppo:s.gruppo||''}]:[{ruolo:'Tecnico',categoria:'',gruppo:''}];
@@ -1672,6 +1708,13 @@ function openStaff(id){
     <div class="ff"><label>Cognome *</label><input id="st_cn" value="${esc(s.cognome||'')}"></div>
     <div class="ff"><label>Telefono</label><input id="st_tl" value="${esc(s.tel)}"></div>
     <div class="ff"><label>Email</label><input type="email" id="st_em" value="${esc(s.email)}"></div>
+    <div class="ff"><label>Matricola F.I.G.C.</label><input id="st_mf" value="${esc(s.matricolaFigc||'')}" placeholder="N° tessera dirigenti"></div>
+    <div class="ff"><label>Codice Fiscale</label><input id="st_cf" value="${esc(s.cf||'')}" maxlength="16" style="text-transform:uppercase;font-family:monospace"></div>
+    <div class="ff"><label>Documento identità</label><select id="st_dt"><option value="">—</option><option ${s.docIdentita.tipo==='Carta Identità'?'selected':''}>Carta Identità</option><option ${s.docIdentita.tipo==='Passaporto'?'selected':''}>Passaporto</option><option ${s.docIdentita.tipo==='Patente'?'selected':''}>Patente</option><option ${s.docIdentita.tipo==='Permesso Soggiorno'?'selected':''}>Permesso Soggiorno</option></select></div>
+    <div class="ff"><label>Numero documento</label><input id="st_dn" value="${esc(s.docIdentita.numero||'')}"></div>
+    <div class="ff"><label>Rilasciato da</label><input id="st_drd" value="${esc(s.docIdentita.rilasciatoDa||'')}" placeholder="Comune / Questura"></div>
+    <div class="ff"><label>Data rilascio</label><input type="date" id="st_dri" value="${s.docIdentita.rilasciatoIl||''}"></div>
+    <div class="ff"><label>Scadenza documento</label><input type="date" id="st_ds" value="${s.docIdentita.scad||''}"></div>
   </div>
   <h3 style="font-size:12px;margin:14px 0 6px">Incarichi (${s.incarichi.length})</h3>
   <div id="st_incs">${s.incarichi.map((inc,i)=>renderStaffIncarico(inc,i)).join('')}</div>
@@ -1713,7 +1756,21 @@ function saveStaff(id){
   const incarichi=collectStaffIncarichi().filter(inc=>inc.ruolo);
   if(!incarichi.length){toast('Aggiungi almeno un incarico','e');return}
   const primary=incarichi[0];
-  const data={nome,cognome,incarichi,ruolo:primary.ruolo,categoria:primary.categoria||'',gruppo:primary.gruppo||'',tel:document.getElementById('st_tl').value,email:document.getElementById('st_em').value};
+  const data={
+    nome,cognome,incarichi,ruolo:primary.ruolo,
+    categoria:primary.categoria||'',gruppo:primary.gruppo||'',
+    tel:document.getElementById('st_tl').value,
+    email:document.getElementById('st_em').value,
+    matricolaFigc:(document.getElementById('st_mf')?.value||'').trim(),
+    cf:(document.getElementById('st_cf')?.value||'').trim().toUpperCase(),
+    docIdentita:{
+      tipo:document.getElementById('st_dt')?.value||'',
+      numero:(document.getElementById('st_dn')?.value||'').trim(),
+      rilasciatoDa:(document.getElementById('st_drd')?.value||'').trim(),
+      rilasciatoIl:document.getElementById('st_dri')?.value||'',
+      scad:document.getElementById('st_ds')?.value||''
+    }
+  };
   if(id){const s=state.staff.find(x=>x.id===id);Object.assign(s,data)}
   else{state.staff.push({id:uid(),...data})}
   recalcGruppoLabels();
@@ -1849,7 +1906,10 @@ function openPlayer(id){
     <div class="tc" id="p-s"><div class="fg">
       <div class="ff"><label>Visita medica tipo</label><select id="pl_vt"><option>Non agonistica</option><option>Agonistica</option></select></div>
       <div class="ff"><label>Scadenza visita medica</label><input type="date" id="pl_vs" value="${p.visitaMedica?.scad||''}"></div>
-      <div class="ff"><label>Documento identità</label><select id="pl_dt"><option>Carta Identità</option><option>Passaporto</option><option>Permesso Soggiorno</option></select></div>
+      <div class="ff"><label>Documento identità</label><select id="pl_dt"><option ${p.docIdentita?.tipo==='Carta Identità'?'selected':''}>Carta Identità</option><option ${p.docIdentita?.tipo==='Passaporto'?'selected':''}>Passaporto</option><option ${p.docIdentita?.tipo==='Permesso Soggiorno'?'selected':''}>Permesso Soggiorno</option></select></div>
+      <div class="ff"><label>Numero documento</label><input id="pl_dn" value="${esc(p.docIdentita?.numero||'')}" placeholder="Es. CA12345AB"></div>
+      <div class="ff"><label>Rilasciato da</label><input id="pl_drd" value="${esc(p.docIdentita?.rilasciatoDa||'')}" placeholder="Comune / Questura"></div>
+      <div class="ff"><label>Data rilascio</label><input type="date" id="pl_dri" value="${p.docIdentita?.rilasciatoIl||''}"></div>
       <div class="ff"><label>Scadenza documento</label><input type="date" id="pl_ds" value="${p.docIdentita?.scad||''}"></div>
     </div></div>
     ${id?`<div class="tc" id="p-d">
@@ -1893,7 +1953,7 @@ function savePlayer(id){
   };
   const vs=document.getElementById('pl_vs').value,ds=document.getElementById('pl_ds').value;
   data.visitaMedica={tipo:document.getElementById('pl_vt').value,scad:vs};
-  data.docIdentita={tipo:document.getElementById('pl_dt').value,scad:ds};
+  data.docIdentita={tipo:document.getElementById('pl_dt').value,numero:(document.getElementById('pl_dn')?.value||'').trim(),rilasciatoDa:(document.getElementById('pl_drd')?.value||'').trim(),rilasciatoIl:document.getElementById('pl_dri')?.value||'',scad:ds};
   if(id){const p=state.players.find(x=>x.id===id);Object.assign(p,data);toast('Aggiornato','s')}
   else{state.players.push({id:uid(),...data,eliminato:false});toast(`${cognome} ${nome} aggiunto`,'s')}
   closeM();saveStore();renderView();
@@ -2649,23 +2709,273 @@ function chartMenu(chartId,title,data){
    VIEW: MATCH DAY LIVE
    ============================================================= */
 /* =============================================================
-   VIEW: DISTINTA & REFERTO GARA (placeholder)
+   VIEW: DISTINTA GARA FIGC (v2.6)
    ============================================================= */
+const DS_RUOLI_AMMESSI=['Dirigente accompagnatore ufficiale','Dirigente addetto all\'Arbitro','Allenatore','Allenatore in seconda','Preparatore Atletico','Preparatore Portieri','Medico Sociale','Massaggiatore/Fisioterapista'];
+let dsS={matchId:'',valevolePer:'',convocati:[],staffAmmessi:[]};
+const DS_MAX_CONVOCATI=20;
+
 VIEWS.distinta=function(c){
+  const oggi=today();
+  const partite=state.attivita.filter(a=>['Partita','Campionato','Torneo','Amichevole','Test match'].includes(a.tipo)&&!a.disputata&&a.data>=oggi).sort((a,b)=>a.data.localeCompare(b.data));
+  const m=dsS.matchId?state.attivita.find(x=>x.id===dsS.matchId):null;
   c.innerHTML=`
     <div class="vw">
-      <div class="vh"><div><h1>Distinta & Referto Gara</h1><div class="sb2">Compilazione distinta di gara e referto post-partita</div></div></div>
-      <div class="es"><div class="ic">📝</div><h3>In fase di sviluppo</h3>
-        <p style="max-width:500px;margin:0 auto;color:var(--g500);font-size:13px">Questa sezione permetterà di compilare la distinta di gara ufficiale (formazione, panchina, dirigenti) e il referto gara post-partita con eventi, cambi e note arbitrali.</p>
-        <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:400px;margin-left:auto;margin-right:auto">
-          <div style="padding:12px;background:var(--g50);border-radius:var(--rs);text-align:left"><strong style="font-size:12px">📋 Distinta Gara</strong><p style="font-size:11px;color:var(--g500);margin-top:4px">Formazione titolare, panchina, dirigenti accompagnatori, delegati</p></div>
-          <div style="padding:12px;background:var(--g50);border-radius:var(--rs);text-align:left"><strong style="font-size:12px">📊 Referto Gara</strong><p style="font-size:11px;color:var(--g500);margin-top:4px">Risultato, marcatori, ammonizioni, espulsioni, note arbitro</p></div>
-        </div>
-        <button class="btn btn-p" style="margin-top:16px" onclick="goto('matchday')">⚽ Vai a Match Day Live</button>
+      <div class="vh"><div><h1>Distinta Gara FIGC</h1><div class="sb2">Compilazione distinta ufficiale · max ${DS_MAX_CONVOCATI} calciatori · stampa PDF su carta intestata</div></div>
+        ${m?`<button class="btn btn-p" onclick="dsGenPDF()">📄 Genera distinta PDF</button>`:''}
       </div>
+      <div class="card">
+        <h2 style="font-size:14px;margin-bottom:10px">1️⃣ Seleziona partita</h2>
+        ${!partite.length?`<div class="es" style="padding:20px"><p>Nessuna partita futura in agenda.</p><button class="btn btn-p btn-sm" onclick="goto('calendario')">Vai al Calendario</button></div>`:`<div style="max-height:200px;overflow-y:auto">${partite.map(mp=>`<label style="display:flex;gap:8px;padding:8px;border:1px solid var(--g200);border-radius:var(--rs);margin-bottom:4px;cursor:pointer;${dsS.matchId===mp.id?'background:#dbeafe;border-color:var(--blue)':''}"><input type="radio" name="ds_m" value="${mp.id}" ${dsS.matchId===mp.id?'checked':''} onchange="dsSelectMatch('${mp.id}')"><div style="flex:1;font-size:12px"><strong>${fmtIt(mp.data)}</strong> · ${esc(categoryDisplay(mp.categoria))} ${groupLabel(mp.categoria,mp.gruppo)} · ${esc(mp.tipo)}${mp.avversario?' vs '+esc(mp.avversario):''}<br><span style="color:var(--g500);font-size:10px">${mp.ora||''} · ${mp.sede==='trasferta'?'trasferta @ '+esc(mp.impiantoEsterno||mp.luogoLibero||''):'casa @ '+((state.impianti.find(i=>i.id===mp.impiantoId)||{}).nome||'')}</span></div></label>`).join('')}</div>`}
+      </div>
+      ${m?dsRenderDettagli(m):''}
     </div>
   `;
 };
+function dsRenderDettagli(m){
+  // rosa per categoria/gruppo
+  const rosa=state.players.filter(p=>!p.eliminato&&p.categoria===m.categoria&&p.gruppo===m.gruppo).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it'));
+  const conv=dsS.convocati;
+  const cap=conv.find(c=>c.capitano);
+  const vice=conv.find(c=>c.vice);
+  const staffDisp=(state.staff||[]).filter(s=>(s.incarichi||[]).some(i=>(!i.categoria||i.categoria===m.categoria)));
+  return `
+    <div class="card">
+      <h2 style="font-size:14px;margin-bottom:10px">2️⃣ Dati gara</h2>
+      <div class="fg">
+        <div class="ff full"><label>Valevole per</label><input id="ds_vp" value="${esc(dsS.valevolePer||(state.campionatoPrimaSquadra&&m.categoria==='PrimaSquadra'?state.campionatoPrimaSquadra+' · ':'')+(m.tipo==='Campionato'?'Campionato':m.tipo)+' · '+categoryDisplay(m.categoria))}" oninput="dsS.valevolePer=this.value" placeholder="Es. Campionato Provinciale Allievi · Girone B"></div>
+        <div class="ff"><label>Data gara</label><input type="date" id="ds_dt" value="${m.data}" disabled></div>
+        <div class="ff"><label>Ora</label><input type="time" id="ds_or" value="${m.ora||''}" disabled></div>
+        <div class="ff"><label>Città</label><input id="ds_ci" value="${esc(m.sede==='trasferta'?(m.luogoLibero||''):(state.societa.sede||'').split(' - ').pop().split(',')[0]||'Pianezza (TO)')}" placeholder="Città dove si gioca"></div>
+        <div class="ff full"><label>Campo / Impianto</label><input id="ds_cp" value="${esc(m.sede==='trasferta'?(m.impiantoEsterno||m.luogoLibero||''):((state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||'')+' · '+((state.impianti.find(i=>i.id===m.impiantoId)||{}).indirizzo||''))}" placeholder="Nome impianto e indirizzo"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h">
+        <h2 style="font-size:14px">3️⃣ Calciatori convocati (${conv.length}/${DS_MAX_CONVOCATI})</h2>
+        <div style="display:flex;gap:6px;align-items:center;font-size:11px;color:var(--g500)">
+          ${cap?`<span class="bdg bdg-k">C: ${esc(cap.cognome+' '+cap.nome)}</span>`:`<span class="bdg bdg-r">⚠ Capitano non assegnato</span>`}
+          ${vice?`<span class="bdg bdg-gray">V: ${esc(vice.cognome+' '+vice.nome)}</span>`:''}
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--g500);margin-bottom:6px">Spunta i convocati. Imposta numero maglia, capitano (uno solo) e vicecapitano (uno solo). Massimo ${DS_MAX_CONVOCATI} giocatori. Servono matricola F.I.G.C. e documento identità per ognuno (validati a fine).</p>
+      <div style="max-height:480px;overflow-y:auto;border:1px solid var(--g200);border-radius:var(--rs)">
+        ${rosa.length?rosa.map(p=>{
+          const idx=conv.findIndex(c=>c.pid===p.id);
+          const sel=idx>=0;
+          const c=sel?conv[idx]:null;
+          const missDoc=!p.tessera||!p.docIdentita?.tipo||!p.docIdentita?.numero;
+          return `<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--g100);font-size:12px;${sel?'background:#dbeafe':''}">
+            <input type="checkbox" ${sel?'checked':''} onchange="dsToggleConv('${p.id}')">
+            <input type="number" style="width:50px;padding:2px 4px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px;text-align:center" placeholder="N°" min="1" max="99" value="${c?.numero||p.numero||''}" onchange="dsUpdNum('${p.id}',this.value)" ${!sel?'disabled':''}>
+            <strong style="flex:1">${esc(p.cognome)} ${esc(p.nome)}</strong>
+            <span style="font-size:10px;color:var(--g500)">${(p.ruoli||[p.ruolo]||[]).join(', ')}</span>
+            ${missDoc?'<span class="bdg bdg-y" title="Manca matricola FIGC o doc identità">⚠ dati incompl.</span>':''}
+            <label style="font-size:10px;display:flex;align-items:center;gap:3px"><input type="radio" name="ds_cap" ${c?.capitano?'checked':''} ${!sel?'disabled':''} onchange="dsSetCap('${p.id}')">C</label>
+            <label style="font-size:10px;display:flex;align-items:center;gap:3px"><input type="radio" name="ds_vc" ${c?.vice?'checked':''} ${!sel?'disabled':''} onchange="dsSetVice('${p.id}')">V</label>
+          </div>`;
+        }).join(''):'<p style="padding:14px;color:var(--g500);text-align:center">Nessun giocatore in rosa per questa squadra</p>'}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h">
+        <h2 style="font-size:14px">4️⃣ Persone ammesse nel recinto di gioco</h2>
+        <button class="btn btn-s btn-sm" onclick="dsAddStaff()">+ Aggiungi</button>
+      </div>
+      <p style="font-size:11px;color:var(--g500);margin-bottom:6px">Ruoli previsti: Dirigente accompagnatore ufficiale (obbligatorio), Dirigente addetto Arbitro, Allenatore, Allenatore in seconda, Preparatore Portieri, Preparatore Atletico, Medico Sociale, Massaggiatore.</p>
+      ${dsS.staffAmmessi.length?`<div class="tw"><table style="font-size:12px"><thead><tr><th>Ruolo distinta</th><th>Persona</th><th>Matricola F.I.G.C.</th><th>Doc identità</th><th></th></tr></thead><tbody>${dsS.staffAmmessi.map((sa,i)=>{
+        const s=state.staff.find(x=>x.id===sa.staffId);
+        const docOk=s&&s.docIdentita&&s.docIdentita.tipo&&s.docIdentita.numero;
+        return `<tr>
+          <td><select onchange="dsS.staffAmmessi[${i}].ruolo=this.value;saveStore()" style="padding:3px 6px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px">${DS_RUOLI_AMMESSI.map(r=>`<option ${sa.ruolo===r?'selected':''}>${r}</option>`).join('')}</select></td>
+          <td><strong>${s?esc(s.cognome+' '+s.nome):'<span style="color:var(--red)">[non trovato]</span>'}</strong></td>
+          <td style="font-family:monospace">${esc(s?.matricolaFigc||'—')}</td>
+          <td style="font-size:11px">${docOk?esc((s.docIdentita.tipo||'')+' n.'+(s.docIdentita.numero||'')):'<span class="bdg bdg-y">⚠ incompl.</span>'}</td>
+          <td><button class="btn btn-sm btn-d" onclick="dsRmStaff(${i})">×</button></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`:'<p style="padding:14px;color:var(--g500);text-align:center;font-size:12px">Nessuna persona aggiunta. Premi "+ Aggiungi" per scegliere dallo staff.</p>'}
+    </div>
+    <div class="card">
+      <h2 style="font-size:14px;margin-bottom:10px">5️⃣ Verifica e genera PDF</h2>
+      <div id="dsValid" style="font-size:12px"></div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="dsGenPDF()">📄 Genera distinta PDF</button>
+        <button class="btn btn-s" onclick="dsReset()">↺ Reset</button>
+      </div>
+    </div>
+  `;
+}
+
+function dsSelectMatch(mid){
+  dsS.matchId=mid;
+  dsS.convocati=[];
+  dsS.staffAmmessi=[];
+  dsS.valevolePer='';
+  // Pre-popola staff dalla rosa: cerca dirigente accompagnatore + allenatore di quella squadra
+  const m=state.attivita.find(x=>x.id===mid);
+  if(m){
+    (state.staff||[]).forEach(s=>{
+      (s.incarichi||[]).forEach(inc=>{
+        if(inc.categoria===m.categoria&&inc.gruppo===m.gruppo){
+          let ruolo=null;
+          if(inc.ruolo==='Tecnico')ruolo='Allenatore';
+          else if(inc.ruolo==='Tecnico in seconda')ruolo='Allenatore in seconda';
+          else if(inc.ruolo==='Dirigente')ruolo='Dirigente accompagnatore ufficiale';
+          else if(inc.ruolo==='Allenatore Portieri')ruolo='Preparatore Portieri';
+          else if(inc.ruolo==='Preparatore Atletico')ruolo='Preparatore Atletico';
+          else if(inc.ruolo==='Preparatore Motorio')ruolo='Preparatore Atletico';
+          else if(inc.ruolo==='Fisioterapista'||inc.ruolo==='Massaggiatore')ruolo='Massaggiatore/Fisioterapista';
+          if(ruolo&&!dsS.staffAmmessi.find(x=>x.staffId===s.id))dsS.staffAmmessi.push({staffId:s.id,ruolo});
+        }
+      });
+    });
+  }
+  saveStore();renderView();
+}
+function dsToggleConv(pid){
+  const i=dsS.convocati.findIndex(c=>c.pid===pid);
+  if(i>=0){dsS.convocati.splice(i,1)}
+  else{
+    if(dsS.convocati.length>=DS_MAX_CONVOCATI){toast('Massimo '+DS_MAX_CONVOCATI+' convocati','w');return}
+    const p=state.players.find(x=>x.id===pid);
+    dsS.convocati.push({pid,cognome:p.cognome,nome:p.nome,numero:p.numero||'',capitano:false,vice:false});
+  }
+  saveStore();renderView();
+}
+function dsUpdNum(pid,n){const c=dsS.convocati.find(x=>x.pid===pid);if(c){c.numero=n;saveStore()}}
+function dsSetCap(pid){dsS.convocati.forEach(c=>c.capitano=(c.pid===pid));saveStore();renderView()}
+function dsSetVice(pid){dsS.convocati.forEach(c=>c.vice=(c.pid===pid));saveStore();renderView()}
+function dsAddStaff(){
+  const allStaff=(state.staff||[]).filter(s=>!dsS.staffAmmessi.find(x=>x.staffId===s.id));
+  if(!allStaff.length){toast('Tutti i membri staff già aggiunti o staff vuoto','w');return}
+  openM('Aggiungi al recinto di gioco',`<div class="fg">
+    <div class="ff full"><label>Persona</label><select id="ds_addS">${allStaff.map(s=>`<option value="${s.id}">${esc(s.cognome+' '+s.nome)} (${esc((s.incarichi||[])[0]?.ruolo||s.ruolo||'?')})</option>`).join('')}</select></div>
+    <div class="ff full"><label>Ruolo in distinta</label><select id="ds_addR">${DS_RUOLI_AMMESSI.map(r=>`<option>${r}</option>`).join('')}</select></div>
+  </div>`,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="dsAddStaffSave()">+ Aggiungi</button>`);
+}
+function dsAddStaffSave(){
+  const sid=document.getElementById('ds_addS').value;
+  const ruolo=document.getElementById('ds_addR').value;
+  dsS.staffAmmessi.push({staffId:sid,ruolo});
+  closeM();saveStore();renderView();
+}
+function dsRmStaff(i){dsS.staffAmmessi.splice(i,1);saveStore();renderView()}
+function dsReset(){if(!confirm('Resettare distinta corrente?'))return;dsS={matchId:'',valevolePer:'',convocati:[],staffAmmessi:[]};saveStore();renderView();toast('Reset','s')}
+function dsValidate(){
+  const errs=[];
+  if(!dsS.matchId)errs.push('Seleziona una partita');
+  if(!dsS.convocati.length)errs.push('Almeno un convocato');
+  if(!dsS.convocati.find(c=>c.capitano))errs.push('Capitano non assegnato');
+  dsS.convocati.forEach(c=>{
+    const p=state.players.find(x=>x.id===c.pid);
+    if(!p)return;
+    if(!p.tessera)errs.push('Manca matricola FIGC: '+p.cognome+' '+p.nome);
+    if(!p.docIdentita?.tipo||!p.docIdentita?.numero)errs.push('Manca documento identità: '+p.cognome+' '+p.nome);
+    if(!c.numero)errs.push('Manca numero maglia: '+p.cognome+' '+p.nome);
+  });
+  if(!dsS.staffAmmessi.find(s=>s.ruolo==='Dirigente accompagnatore ufficiale'))errs.push('Dirigente accompagnatore ufficiale obbligatorio');
+  return errs;
+}
+function dsGenPDF(){
+  const errs=dsValidate();
+  if(errs.length){
+    const box=document.getElementById('dsValid');
+    if(box)box.innerHTML='<div style="padding:10px;background:#fee2e2;border-radius:var(--rs);color:#991b1b"><strong>⚠ Verifica fallita:</strong><ul style="margin:6px 0 0 16px">'+errs.map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul></div>';
+    toast('Distinta non valida: '+errs.length+' errori','e');
+    return;
+  }
+  if(!window.jspdf){toast('jsPDF non caricato','e');return}
+  const m=state.attivita.find(x=>x.id===dsS.matchId);
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  // Header
+  try{doc.addImage(LOGO,'PNG',15,10,16,22)}catch(e){}
+  doc.setFontSize(14);doc.setFont('helvetica','bold');doc.text(state.societa.nome||'LASCARIS 1954 ASD',105,16,{align:'center'});
+  doc.setFontSize(8);doc.setFont('helvetica','normal');
+  doc.text(state.societa.sede||'Stadio Comunale Giovanni Soffietti · Via Claviere, 16 · Pianezza (TO)',105,21,{align:'center'});
+  doc.text('Tel. '+(state.societa.tel||'011 967 95 98')+' · '+esc(state.societa.email||'segreteria@lascaris.it'),105,25,{align:'center'});
+  doc.setLineWidth(0.3);doc.line(15,30,195,30);
+  let y=35;
+  doc.setFontSize(9);doc.setFont('helvetica','normal');
+  doc.text('Elenco dei calciatori che partecipano alla gara:',15,y);y+=5;
+  doc.text('valevole per: '+(document.getElementById('ds_vp')?.value||dsS.valevolePer||''),15,y);y+=4;
+  doc.text('in programma il '+fmtIt(m.data)+' alle ore '+(m.ora||'—')+' a '+(document.getElementById('ds_ci')?.value||''),15,y);y+=4;
+  doc.text('campo '+(document.getElementById('ds_cp')?.value||''),15,y);y+=6;
+  // Tabella convocati
+  doc.setFontSize(7);doc.setFont('helvetica','bold');
+  const cols=[{x:15,w:7,t:'N°'},{x:22,w:6,t:'G'},{x:28,w:6,t:'M'},{x:34,w:7,t:'A'},{x:41,w:55,t:'Cognome e nome'},{x:96,w:9,t:'Cap'},{x:105,w:25,t:'matricola FIGC'},{x:130,w:14,t:'Tipo doc'},{x:144,w:25,t:'Numero doc'},{x:169,w:26,t:'Rilasciato'}];
+  doc.setFillColor(245,245,245);doc.rect(15,y,180,5,'F');
+  cols.forEach(col=>{doc.text(col.t,col.x+col.w/2,y+3.5,{align:'center'})});
+  doc.rect(15,y,180,5);y+=5;
+  doc.setFont('helvetica','normal');
+  // 20 righe (compilate + vuote)
+  for(let i=0;i<DS_MAX_CONVOCATI;i++){
+    doc.rect(15,y,180,5);
+    cols.forEach(col=>{if(col.x>15)doc.line(col.x,y,col.x,y+5)});
+    doc.text(String(i+1),18.5,y+3.5,{align:'center'});
+    if(dsS.convocati[i]){
+      const c=dsS.convocati[i];
+      const p=state.players.find(x=>x.id===c.pid)||{};
+      const nas=p.nascita?p.nascita.split('-'):['','',''];
+      const g=nas[2]||'',mn=nas[1]||'',a=nas[0]||'';
+      doc.text(g,25,y+3.5,{align:'center'});
+      doc.text(mn,31,y+3.5,{align:'center'});
+      doc.text(a.slice(2),37.5,y+3.5,{align:'center'});
+      doc.text((p.cognome||'')+' '+(p.nome||''),42,y+3.5);
+      const cap=c.capitano?'C':(c.vice?'V':'');
+      doc.text(cap,100.5,y+3.5,{align:'center'});
+      doc.text(p.tessera||'',106,y+3.5);
+      doc.text((p.docIdentita?.tipo||'').replace('Carta Identità','C.I.').replace('Passaporto','Pas.').replace('Permesso Soggiorno','P.S.'),131,y+3.5);
+      doc.text(p.docIdentita?.numero||'',145,y+3.5);
+      doc.text(p.docIdentita?.rilasciatoDa||'',170,y+3.5);
+    }
+    y+=5;
+  }
+  y+=4;
+  // Tabella persone ammesse
+  doc.setFont('helvetica','bold');doc.setFontSize(8);
+  doc.setFillColor(245,245,245);doc.rect(15,y,180,5,'F');
+  doc.text('Persone ammesse nel recinto di gioco',77,y+3.5,{align:'center'});
+  doc.text('Matricola FIGC',125,y+3.5,{align:'center'});
+  doc.text('Tipo / Numero / Rilasciato',170,y+3.5,{align:'center'});
+  doc.rect(15,y,180,5);y+=5;
+  doc.setFontSize(7);doc.setFont('helvetica','normal');
+  // Righe staff (max 6)
+  const ruoliOrdine=DS_RUOLI_AMMESSI;
+  ruoliOrdine.forEach(ruolo=>{
+    const sa=dsS.staffAmmessi.find(x=>x.ruolo===ruolo);
+    doc.rect(15,y,180,5);doc.line(105,y,105,y+5);doc.line(145,y,145,y+5);
+    doc.text(ruolo,17,y+3.5);
+    if(sa){
+      const s=state.staff.find(x=>x.id===sa.staffId);
+      if(s){
+        doc.text((s.cognome||'')+' '+(s.nome||''),60,y+3.5);
+        doc.text(s.matricolaFigc||'',107,y+3.5);
+        const docTxt=[(s.docIdentita?.tipo||'').replace('Carta Identità','C.I.').replace('Passaporto','Pas.').replace('Permesso Soggiorno','P.S.'),s.docIdentita?.numero||'',s.docIdentita?.rilasciatoDa||''].filter(Boolean).join(' / ');
+        doc.text(docTxt,147,y+3.5);
+      }
+    }
+    y+=5;
+  });
+  y+=4;
+  // Dichiarazione
+  doc.setFontSize(7);doc.setFont('helvetica','italic');
+  const dich='Il sottoscritto Dirigente Accompagnatore Ufficiale dichiara, ai sensi dell\'art. 61 N.O.I.F., che i calciatori sopraindicati sono regolarmente tesserati e partecipano alla gara sotto la responsabilità della società.';
+  const dichLines=doc.splitTextToSize(dich,180);
+  doc.text(dichLines,15,y);y+=dichLines.length*3+6;
+  // Firme
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  doc.text("L'ARBITRO",50,y,{align:'center'});
+  doc.text('IL DIRIGENTE ACCOMPAGNATORE UFFICIALE',150,y,{align:'center'});
+  doc.line(20,y+8,80,y+8);
+  doc.line(110,y+8,190,y+8);
+  // Footer pagina
+  doc.setFontSize(7);doc.text('Pianezza, '+fmtIt(today()),15,287);
+  // Salva
+  const fname='distinta_'+m.data+'_'+(m.categoria||'').replace(/[^a-z0-9]/gi,'')+'_vs_'+(m.avversario||'').replace(/[^a-z0-9]/gi,'')+'.pdf';
+  doc.save(fname);
+  toast('Distinta PDF generata','s');
+}
 let mdS={live:false,t:0,period:1,nPeriods:2,perDur:30,home:0,away:0,roster:[],events:[],opp:[],sede:'casa',clockInt:null,configured:false,matchId:null,cat:'',grp:'',tipo:'Campionato',avv:'',impiantoId:'',impiantoLibero:''};
 let _mdExp=null;
 let _mdArmed='tiriP';
