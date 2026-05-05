@@ -134,7 +134,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="description" content="Gestionale LASCARIS 1954 ASD - Calcio dilettantistico dal Settore Giovanile alla Prima Squadra">
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.6.1</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.6.2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -319,14 +319,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Sportivo · v2.6.1</div>
+    <div class="sub">Gestionale Sportivo · v2.6.2</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.6.1</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.6.2</div>
   </div>
 </div>
 
@@ -2743,7 +2743,10 @@ VIEWS.distinta=function(c){
   c.innerHTML=`
     <div class="vw">
       <div class="vh"><div><h1>Distinta Gara FIGC</h1><div class="sb2">Compilazione distinta ufficiale · max ${DS_MAX_CONVOCATI} calciatori · stampa PDF su carta intestata</div></div>
-        ${m?`<button class="btn btn-p" onclick="dsGenPDF()">📄 Genera distinta PDF</button>`:''}
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-s btn-sm" onclick="dsGenPDF(true)" title="Scarica un PDF vuoto da compilare a mano">📥 Modello vuoto</button>
+          ${m?`<button class="btn btn-p" onclick="dsGenPDF(false)">📄 Genera distinta PDF</button>`:''}
+        </div>
       </div>
       <div class="card">
         <h2 style="font-size:14px;margin-bottom:6px">1️⃣ Seleziona partita dal calendario</h2>
@@ -2771,12 +2774,26 @@ VIEWS.distinta=function(c){
 };
 function dsTogglePassate(v){dsS.showPassate=!!v;saveStore();renderView()}
 function dsRenderDettagli(m){
-  // rosa per categoria/gruppo
-  const rosa=state.players.filter(p=>!p.eliminato&&p.categoria===m.categoria&&p.gruppo===m.gruppo).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it'));
+  // v2.6.2: rosa allargabile con toggle cross-group e cross-cat
+  if(dsS.crossGroup===undefined)dsS.crossGroup=false;
+  if(dsS.crossCat===undefined)dsS.crossCat=false;
   const conv=dsS.convocati;
   const cap=conv.find(c=>c.capitano);
   const vice=conv.find(c=>c.vice);
-  const staffDisp=(state.staff||[]).filter(s=>(s.incarichi||[]).some(i=>(!i.categoria||i.categoria===m.categoria)));
+  const matchPair=m.categoria+'|'+m.gruppo;
+  const rosa=state.players.filter(p=>{
+    if(p.eliminato)return false;
+    if(p.categoria===m.categoria&&p.gruppo===m.gruppo)return true;          // rosa principale
+    if(dsS.crossGroup && p.categoria===m.categoria)return true;             // altri gruppi stessa cat
+    if(dsS.crossCat && p.categoria!==m.categoria){
+      // categorie limitrofe (per anno di nascita)
+      const idxCur=state.categories.indexOf(m.categoria);
+      const idxOth=state.categories.indexOf(p.categoria);
+      if(idxCur>=0&&idxOth>=0&&Math.abs(idxCur-idxOth)<=2)return true;
+    }
+    return false;
+  }).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it'));
+  const visibilebili=rosa.length;
   return `
     <div class="card">
       <h2 style="font-size:14px;margin-bottom:10px">2️⃣ Dati gara</h2>
@@ -2796,23 +2813,39 @@ function dsRenderDettagli(m){
           ${vice?`<span class="bdg bdg-gray">V: ${esc(vice.cognome+' '+vice.nome)}</span>`:''}
         </div>
       </div>
-      <p style="font-size:11px;color:var(--g500);margin-bottom:6px">Spunta i convocati. Imposta numero maglia, capitano (uno solo) e vicecapitano (uno solo). Massimo ${DS_MAX_CONVOCATI} giocatori. Servono matricola F.I.G.C. e documento identità per ognuno (validati a fine).</p>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn btn-p btn-sm" onclick="dsConvAllVisible()" title="Convoca tutti i giocatori attualmente visibili (max ${DS_MAX_CONVOCATI})">✓ Convoca tutti i visibili (${visibilebili})</button>
+        <button class="btn btn-s btn-sm" onclick="dsConvNone()">Deseleziona tutti</button>
+        <span style="border-left:1px solid var(--g300);height:18px"></span>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer">
+          <input type="checkbox" ${dsS.crossGroup?'checked':''} onchange="dsToggleCross('crossGroup',this.checked)">
+          Altri gruppi stessa categoria
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer">
+          <input type="checkbox" ${dsS.crossCat?'checked':''} onchange="dsToggleCross('crossCat',this.checked)">
+          Categorie limitrofe (anni vicini)
+        </label>
+      </div>
+      <p style="font-size:11px;color:var(--g500);margin-bottom:6px">Spunta i convocati. Imposta numero maglia, capitano (uno solo) e vicecapitano (uno solo). Massimo ${DS_MAX_CONVOCATI} giocatori. I giocatori extra (altri gruppi/categorie) sono evidenziati in giallo.</p>
       <div style="max-height:480px;overflow-y:auto;border:1px solid var(--g200);border-radius:var(--rs)">
         ${rosa.length?rosa.map(p=>{
           const idx=conv.findIndex(c=>c.pid===p.id);
           const sel=idx>=0;
           const c=sel?conv[idx]:null;
           const missDoc=!p.tessera||!p.docIdentita?.tipo||!p.docIdentita?.numero;
-          return `<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--g100);font-size:12px;${sel?'background:#dbeafe':''}">
+          const isCross=!(p.categoria===m.categoria&&p.gruppo===m.gruppo);
+          const bg=sel?'#dbeafe':(isCross?'#fef9c3':'');
+          return `<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--g100);font-size:12px;${bg?'background:'+bg:''}">
             <input type="checkbox" ${sel?'checked':''} onchange="dsToggleConv('${p.id}')">
             <input type="number" style="width:50px;padding:2px 4px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px;text-align:center" placeholder="N°" min="1" max="99" value="${c?.numero||p.numero||''}" onchange="dsUpdNum('${p.id}',this.value)" ${!sel?'disabled':''}>
             <strong style="flex:1">${esc(p.cognome)} ${esc(p.nome)}</strong>
+            ${isCross?`<span class="bdg bdg-y" title="Aggregato da altro gruppo/categoria">${esc(categoryShort(p.categoria))} ${esc(groupLabel(p.categoria,p.gruppo))}</span>`:''}
             <span style="font-size:10px;color:var(--g500)">${(p.ruoli||[p.ruolo]||[]).join(', ')}</span>
             ${missDoc?'<span class="bdg bdg-y" title="Manca matricola FIGC o doc identità">⚠ dati incompl.</span>':''}
             <label style="font-size:10px;display:flex;align-items:center;gap:3px"><input type="radio" name="ds_cap" ${c?.capitano?'checked':''} ${!sel?'disabled':''} onchange="dsSetCap('${p.id}')">C</label>
             <label style="font-size:10px;display:flex;align-items:center;gap:3px"><input type="radio" name="ds_vc" ${c?.vice?'checked':''} ${!sel?'disabled':''} onchange="dsSetVice('${p.id}')">V</label>
           </div>`;
-        }).join(''):'<p style="padding:14px;color:var(--g500);text-align:center">Nessun giocatore in rosa per questa squadra</p>'}
+        }).join(''):'<p style="padding:14px;color:var(--g500);text-align:center">Nessun giocatore visibile. Attiva i toggle qui sopra per ampliare la rosa o aggiungi giocatori dal modulo Anagrafica.</p>'}
       </div>
     </div>
     <div class="card">
@@ -2836,13 +2869,41 @@ function dsRenderDettagli(m){
     <div class="card">
       <h2 style="font-size:14px;margin-bottom:10px">5️⃣ Verifica e genera PDF</h2>
       <div id="dsValid" style="font-size:12px"></div>
-      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-p" onclick="dsGenPDF()">📄 Genera distinta PDF</button>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-p" onclick="dsGenPDF(false)" title="Genera distinta solo se valida (capitano + dirigente + dati completi)">📄 Genera distinta PDF</button>
+        <button class="btn btn-s" onclick="dsGenPDF(true)" title="Scarica anche se incompleta o vuota: utile per compilare a mano">📥 Scarica vuota / parziale</button>
+        <span style="border-left:1px solid var(--g300);height:24px"></span>
         <button class="btn btn-s" onclick="dsReset()">↺ Reset</button>
+        <span style="font-size:10px;color:var(--g500);margin-left:auto">La versione "vuota/parziale" salta i controlli e include i dati presenti, lasciando vuote le righe mancanti.</span>
       </div>
     </div>
   `;
 }
+function dsToggleCross(key,val){if(key==='crossGroup'||key==='crossCat'){dsS[key]=!!val;saveStore();renderView()}}
+function dsConvAllVisible(){
+  const m=state.attivita.find(x=>x.id===dsS.matchId);if(!m)return;
+  const matchPair=m.categoria+'|'+m.gruppo;
+  const rosa=state.players.filter(p=>{
+    if(p.eliminato)return false;
+    if(p.categoria===m.categoria&&p.gruppo===m.gruppo)return true;
+    if(dsS.crossGroup&&p.categoria===m.categoria)return true;
+    if(dsS.crossCat&&p.categoria!==m.categoria){
+      const idxCur=state.categories.indexOf(m.categoria);const idxOth=state.categories.indexOf(p.categoria);
+      if(idxCur>=0&&idxOth>=0&&Math.abs(idxCur-idxOth)<=2)return true;
+    }
+    return false;
+  }).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it'));
+  // Mantengo i convocati esistenti che sono in rosa visibile, aggiungo gli altri fino a max
+  const already=new Set(dsS.convocati.map(c=>c.pid));
+  for(const p of rosa){
+    if(dsS.convocati.length>=DS_MAX_CONVOCATI)break;
+    if(already.has(p.id))continue;
+    dsS.convocati.push({pid:p.id,cognome:p.cognome,nome:p.nome,numero:p.numero||'',capitano:false,vice:false});
+  }
+  saveStore();renderView();
+  toast('Convocati '+dsS.convocati.length+' giocatori (max '+DS_MAX_CONVOCATI+')','s');
+}
+function dsConvNone(){if(!dsS.convocati.length){toast('Lista già vuota','w');return}if(!confirm('Deselezionare tutti i convocati?'))return;dsS.convocati=[];saveStore();renderView()}
 
 function dsSelectMatch(mid){
   if(!mid){dsS.matchId='';dsS.convocati=[];dsS.staffAmmessi=[];dsS.valevolePer='';saveStore();renderView();return}
@@ -2916,16 +2977,25 @@ function dsValidate(){
   if(!dsS.staffAmmessi.find(s=>s.ruolo==='Dirigente accompagnatore ufficiale'))errs.push('Dirigente accompagnatore ufficiale obbligatorio');
   return errs;
 }
-function dsGenPDF(){
-  const errs=dsValidate();
-  if(errs.length){
+function dsGenPDF(force){
+  // v2.6.2: force=true bypassa validazione e genera anche distinta vuota/parziale
+  if(!force){
+    const errs=dsValidate();
+    if(errs.length){
+      const box=document.getElementById('dsValid');
+      if(box)box.innerHTML='<div style="padding:10px;background:#fee2e2;border-radius:var(--rs);color:#991b1b"><strong>⚠ Verifica fallita:</strong><ul style="margin:6px 0 0 16px">'+errs.map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul><p style="margin-top:6px;font-size:11px">Puoi comunque scaricare la versione "vuota/parziale" per compilarla a mano.</p></div>';
+      toast('Distinta non valida: '+errs.length+' errori','e');
+      return;
+    }
+  }else{
     const box=document.getElementById('dsValid');
-    if(box)box.innerHTML='<div style="padding:10px;background:#fee2e2;border-radius:var(--rs);color:#991b1b"><strong>⚠ Verifica fallita:</strong><ul style="margin:6px 0 0 16px">'+errs.map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul></div>';
-    toast('Distinta non valida: '+errs.length+' errori','e');
-    return;
+    if(box)box.innerHTML='<div style="padding:8px;background:#fef3c7;border-radius:var(--rs);color:#854d0e;font-size:11px">📥 Scaricamento versione vuota/parziale (controlli saltati)</div>';
   }
   if(!window.jspdf){toast('jsPDF non caricato','e');return}
-  const m=state.attivita.find(x=>x.id===dsS.matchId);
+  const mFound=state.attivita.find(x=>x.id===dsS.matchId);
+  if(!mFound&&!force){toast('Nessuna partita selezionata','e');return}
+  // v2.6.2: fallback safe per modalità "vuota": tutti i campi diventano stringa vuota
+  const m=mFound||{id:'',data:'',ora:'',sede:'casa',impiantoId:'',luogoLibero:'',impiantoEsterno:'',avversario:'',categoria:'',gruppo:'',tipo:''};
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'mm',format:'a4'});
   // Header
