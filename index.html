@@ -1,10 +1,43 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.6
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.8
 ================================================================================
   CHANGELOG
   ----------
+  v2.8 · 2026-05-05 · Squalifiche & Diffide (Batch 3)
+    · NEW  Modulo Squalifiche & Diffide (sidebar Area Valutazione).
+           Tre tab: Tutti gli eventi · Diffidati · Squalificati attivi.
+    · NEW  Modello dati state.disciplina[] con record:
+           {id, playerId, tipo, data, competizione, giornata,
+            giornateSqualifica, motivo, ammenda, partiteScontate[],
+            note, stagione}.
+    · NEW  Tre tipi di evento: Ammonizione · Espulsione · Squalifica.
+    · NEW  Calcolo automatico stato:
+           - Diffidato = ammonizioni accumulate dall'ultima squalifica
+             ≥ soglia configurabile (default 4).
+           - Squalificato = squalifica con giornate residue.
+    · NEW  state.disciplinaSettings con maxAmmonizioniPrimaDiffida,
+           giornateSqualificaPerEspulsione, resetStagionale.
+    · NEW  Helper: dispCountAmmonizioni, dispIsDiffidato,
+           dispSqualificheAttive, dispIsSqualificatoPerData,
+           dispBadgePlayer, dispEventiPlayer.
+    · NEW  Pulsante "+1 giornata scontata" sui squalificati attivi
+           per gestire manualmente l'avanzamento.
+    · CHG  Convocazioni: badge giallo "DIFFIDATO" o badge rosso
+           "SQUALIFICATO" accanto al nome del giocatore.
+    · CHG  Distinta gara: badge stesso meccanismo + validazione
+           bloccante in dsValidate che impedisce di scaricare il PDF
+           se uno dei convocati è squalificato per la data partita.
+    · NEW  Permesso 'disciplina' aggiunto a PERMS_BASE / PERM_LABELS.
+    · CHG  Migrazione migrateStateV23 estesa per inizializzare
+           state.disciplina e state.disciplinaSettings sui dati pregressi.
+
+  v2.7 · 2026-05-04 · Distinta usa template LND ufficiale (XLSX)
+    · CHG  La distinta scaricata è ora il file template caricato dall'utente,
+           con celle popolate via SheetJS (XLSX.read + writeFile). Stesso layout,
+           font, loghi del documento ufficiale.
+
   v2.6 · 2026-05-04 · Distinta gara FIGC (Batch 2)
     · NEW  Modulo Distinta: VIEWS.distinta riscritto da placeholder a flow
            operativo in 5 step (selezione partita, dati gara auto-popolati,
@@ -134,7 +167,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="description" content="Gestionale LASCARIS 1954 ASD - Calcio dilettantistico dal Settore Giovanile alla Prima Squadra">
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.7</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.8</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -319,14 +352,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Sportivo · v2.7</div>
+    <div class="sub">Gestionale Sportivo · v2.8</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.7</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.8</div>
   </div>
 </div>
 
@@ -406,6 +439,9 @@ function migrateStateV23(d){
     if(s.matricolaFigc===undefined)s.matricolaFigc='';
     if(s.cf===undefined)s.cf='';
   });
+  // 5) v2.8: disciplina (squalifiche e diffide)
+  if(!Array.isArray(d.disciplina))d.disciplina=[];
+  if(!d.disciplinaSettings||typeof d.disciplinaSettings!=='object')d.disciplinaSettings=JSON.parse(JSON.stringify(DEFAULT_STATE.disciplinaSettings));
 }
 
 function loadStore(){
@@ -517,6 +553,8 @@ const DEFAULT_STATE={
   campionatiAgonistiche:{},
   campionatiAgonistichePreset:['Provinciale','Regionale','Élite','Nazionale'],
   ruoliStatutariPreset:['Presidente CdA','Vicepresidente','Consigliere','Segretario','Tesoriere','Sindaco','Revisore dei Conti'],
+  disciplina:[],
+  disciplinaSettings:{maxAmmonizioniPrimaDiffida:4,giornateSqualificaPerEspulsione:1,resetStagionale:true},
   impianti:[
     {id:'imp1',nome:'LASCARIS',indirizzo:'Via Claviere 16, 10044 Pianezza (TO)',campi:[{id:'l11',nome:'Campo 11',tipo:'11'},{id:'l11a',nome:'Metà A',tipo:'11h'},{id:'l11b',nome:'Metà B',tipo:'11h'},{id:'l7',nome:'Campo 7',tipo:'7'}],spogliatoi:['Spogliatoio 1','Spogliatoio 2','Spogliatoio 3','Spogliatoio 4'],fasce:['16:30-18:00','18:00-19:30','19:30-21:00']},
     {id:'imp2',nome:'MERONI',indirizzo:'Via Orsiera 25, 10098 Rivoli (TO)',campi:[{id:'m11',nome:'Campo 11',tipo:'11'},{id:'m11a',nome:'Metà A',tipo:'11h'},{id:'m11b',nome:'Metà B',tipo:'11h'},{id:'m7',nome:'Campo 7',tipo:'7'}],spogliatoi:['Spogliatoio 1','Spogliatoio 2','Spogliatoio 3','Spogliatoio 4'],fasce:['16:30-18:00','18:00-19:30','19:30-21:00']},
@@ -661,6 +699,52 @@ function ageBadge(p){
 
 /* ---------- CATEGORY HELPERS (v2.3) ---------- */
 function categoryLabel(cat){return (state.categoryLabels||{})[cat]||''}
+/* ---------- DISCIPLINA HELPERS (v2.8) ---------- */
+/* Record disciplina:
+   {id, playerId, tipo:'Ammonizione'|'Espulsione'|'Squalifica',
+    data, competizione, giornata, giornateSqualifica, motivo, ammenda,
+    partiteScontate:[matchIds], note, stagione}
+*/
+function dispStagioneCorrente(){return state.societa?.stagione||'2025/2026'}
+function dispEventiPlayer(pid,stagione){
+  stagione=stagione||dispStagioneCorrente();
+  return (state.disciplina||[]).filter(d=>d.playerId===pid&&(!d.stagione||d.stagione===stagione));
+}
+function dispCountAmmonizioni(pid,stagione){
+  return dispEventiPlayer(pid,stagione).filter(d=>d.tipo==='Ammonizione').length;
+}
+function dispIsDiffidato(pid,stagione){
+  // Diffidato = al raggiungimento della soglia (default 4 ammonizioni) ma non ancora alla 5ª
+  // L'ammonizione che fa scattare la squalifica resetta il contatore (è gestita dall'utente con record di Squalifica)
+  const soglia=state.disciplinaSettings?.maxAmmonizioniPrimaDiffida||4;
+  // Conta solo ammonizioni successive all'ultima squalifica
+  const eventi=dispEventiPlayer(pid,stagione).slice().sort((a,b)=>(a.data||'').localeCompare(b.data||''));
+  let amm=0;
+  for(const e of eventi){
+    if(e.tipo==='Squalifica')amm=0;            // dopo squalifica reset
+    else if(e.tipo==='Ammonizione')amm++;
+  }
+  return amm>=soglia;
+}
+function dispSqualificheAttive(pid,stagione){
+  // Ritorna squalifiche con giornate residue da scontare
+  return dispEventiPlayer(pid,stagione).filter(d=>{
+    if(d.tipo!=='Squalifica')return false;
+    const giornateTot=+d.giornateSqualifica||1;
+    const scontate=(d.partiteScontate||[]).length;
+    return scontate<giornateTot;
+  });
+}
+function dispIsSqualificatoPerData(pid,iso,stagione){
+  // Verifica se il giocatore è squalificato per una specifica partita (data)
+  const sq=dispSqualificheAttive(pid,stagione);
+  return sq.some(d=>(d.data||'')<=iso);  // squalifica scattata prima della partita
+}
+function dispBadgePlayer(pid){
+  if(dispSqualificheAttive(pid).length>0)return '<span class="bdg bdg-r" title="Squalifica attiva">🚫 SQUALIFICATO</span>';
+  if(dispIsDiffidato(pid))return '<span class="bdg bdg-y" title="Diffidato (alla prossima ammonizione 1 giornata)">⚠ DIFFIDATO</span>';
+  return '';
+}
 function categoryDisplay(cat){const lab=categoryLabel(cat);if(!cat)return '';if(cat==='PrimaSquadra')return 'Prima Squadra';return lab?cat+' · '+lab:cat}
 function categoryShort(cat){return cat==='PrimaSquadra'?'1ª Sq.':cat}
 function categoryUsesMultiGroup(cat){return ['U6','U7','U8','U9','U10','U11','U12','U13'].includes(cat)}
@@ -790,7 +874,8 @@ const NAV=[
     {sh:'Area Valutazione',items:[
       ['tippsInt','★','TIPPS Scouting Interno'],
       ['tippsIntP','🧤','TIPPS Interno Portieri'],
-      ['infortuni','🩹','Infortuni']
+      ['infortuni','🩹','Infortuni'],
+      ['disciplina','🟨','Squalifiche & Diffide']
     ]},
     {sh:'Area Scouting',items:[
       ['tippsExt','🔍','TIPPS Scouting Esterno'],
@@ -1369,8 +1454,8 @@ function orgComSendSMS(){const phones=orgComGetPhones();if(!phones.length){toast
 /* =============================================================
    VIEW: UTENTI & PERMESSI
    ============================================================= */
-const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','impianti','parametri','storico','utenti'];
-const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi'};
+const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','disciplina','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','impianti','parametri','storico','utenti'];
+const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',disciplina:'Squalifiche & Diffide',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi'};
 function allPerms(){return [...PERMS_BASE,...state.permessiCustom.map(p=>p.code)]}
 function permLabel(code){return PERM_LABELS_BASE[code]||(state.permessiCustom.find(p=>p.code===code)||{}).label||code}
 // Back-compat aliases
@@ -2443,6 +2528,181 @@ function inFilterPlayers(){
 }
 
 /* =============================================================
+   VIEW: SQUALIFICHE & DIFFIDE (v2.8)
+   ============================================================= */
+let dispS={tab:'all',filtroCat:'',filtroGrp:''};
+VIEWS.disciplina=function(c){
+  const stagione=dispStagioneCorrente();
+  const settings=state.disciplinaSettings||{maxAmmonizioniPrimaDiffida:4};
+  const ps=state.players.filter(p=>!p.eliminato);
+  const ev=(state.disciplina||[]).slice().sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  // Liste calcolate
+  const diffidati=ps.filter(p=>dispIsDiffidato(p.id,stagione));
+  const squalificati=ps.filter(p=>dispSqualificheAttive(p.id,stagione).length>0);
+  // Filtri
+  const filtraPlayer=p=>{
+    if(dispS.filtroCat&&p.categoria!==dispS.filtroCat)return false;
+    if(dispS.filtroGrp&&p.gruppo!==dispS.filtroGrp)return false;
+    return true;
+  };
+  const evCorrenti=dispS.tab==='diffidati'?ev.filter(d=>diffidati.find(p=>p.id===d.playerId)):
+                   dispS.tab==='squalificati'?ev.filter(d=>squalificati.find(p=>p.id===d.playerId)):
+                   ev;
+  c.innerHTML=`
+    <div class="vw">
+      <div class="vh"><div><h1>Squalifiche & Diffide</h1><div class="sb2">Tracciamento ammonizioni, espulsioni, squalifiche · Stagione ${esc(stagione)}</div></div>
+        <button class="btn btn-p" onclick="openDisp('')">+ Nuovo provvedimento</button>
+      </div>
+      <div class="grid g3">
+        <div class="kpi"><div class="l">Eventi totali stagione</div><div class="v">${ev.length}</div><div class="t">ammon. + espuls. + squal.</div></div>
+        <div class="kpi w"><div class="l">Diffidati</div><div class="v">${diffidati.length}</div><div class="t">≥${settings.maxAmmonizioniPrimaDiffida} amm. dall'ultima squalifica</div></div>
+        <div class="kpi d"><div class="l">Squalificati attivi</div><div class="v">${squalificati.length}</div><div class="t">con giornate residue</div></div>
+      </div>
+      <div class="card">
+        <div class="tabs">
+          <div class="tab ${dispS.tab==='all'?'on':''}" onclick="dispS.tab='all';renderView()">Tutti gli eventi (${ev.length})</div>
+          <div class="tab ${dispS.tab==='diffidati'?'on':''}" onclick="dispS.tab='diffidati';renderView()">Diffidati (${diffidati.length})</div>
+          <div class="tab ${dispS.tab==='squalificati'?'on':''}" onclick="dispS.tab='squalificati';renderView()">Squalificati attivi (${squalificati.length})</div>
+        </div>
+        ${dispS.tab==='diffidati'?renderDispListPlayer(diffidati,'⚠ Diffidato — alla prossima ammonizione scatta 1 giornata di squalifica.'):
+          dispS.tab==='squalificati'?renderDispListSqualificati(squalificati):
+          renderDispListEventi(evCorrenti)}
+      </div>
+    </div>
+  `;
+};
+function renderDispListEventi(eventi){
+  if(!eventi.length)return '<div class="es" style="padding:20px"><div class="ic">📋</div><h3>Nessun provvedimento registrato</h3><p>Premi "+ Nuovo provvedimento" per registrare un\'ammonizione, espulsione o squalifica.</p></div>';
+  return `<div class="tw"><table>
+    <thead><tr><th>Data</th><th>Giocatore</th><th>Squadra</th><th>Tipo</th><th>Competizione</th><th>Giornata</th><th>Stato</th><th>Azioni</th></tr></thead>
+    <tbody>${eventi.map(d=>{
+      const p=state.players.find(x=>x.id===d.playerId);
+      if(!p)return '';
+      const cls=d.tipo==='Squalifica'?'bdg-r':(d.tipo==='Espulsione'?'bdg-r':'bdg-y');
+      let stato='—';
+      if(d.tipo==='Squalifica'){
+        const tot=+d.giornateSqualifica||1;
+        const sc=(d.partiteScontate||[]).length;
+        stato=sc>=tot?'<span class="bdg bdg-g">Scontata '+sc+'/'+tot+'</span>':'<span class="bdg bdg-r">In corso '+sc+'/'+tot+'</span>';
+      }
+      return `<tr>
+        <td>${fmtIt(d.data)}</td>
+        <td><strong>${esc(p.cognome)} ${esc(p.nome)}</strong></td>
+        <td>${groupChip(p.categoria,p.gruppo)}</td>
+        <td><span class="bdg ${cls}">${esc(d.tipo)}${d.tipo==='Squalifica'&&d.giornateSqualifica?' · '+d.giornateSqualifica+'g':''}</span></td>
+        <td style="font-size:11px">${esc(d.competizione||'—')}</td>
+        <td>${esc(d.giornata||'—')}</td>
+        <td>${stato}</td>
+        <td><button class="btn btn-sm btn-s" onclick="openDisp('${d.id}')">✎</button> <button class="btn btn-sm btn-d" onclick="delDisp('${d.id}')">🗑</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+function renderDispListPlayer(plist,hint){
+  if(!plist.length)return '<div class="es" style="padding:20px"><div class="ic">✅</div><p>Nessun giocatore in questa categoria.</p></div>';
+  return `${hint?`<p style="padding:10px;background:#fef3c7;border-radius:var(--rs);font-size:12px;color:#854d0e;margin-bottom:10px">${hint}</p>`:''}
+    <div class="tw"><table>
+    <thead><tr><th>Giocatore</th><th>Squadra</th><th>Ammonizioni dall'ultima squalifica</th><th>Eventi totali stagione</th><th>Azioni</th></tr></thead>
+    <tbody>${plist.map(p=>{
+      const ev=dispEventiPlayer(p.id);
+      const ammDall=ev.slice().sort((a,b)=>(a.data||'').localeCompare(b.data||'')).reduce((acc,e)=>e.tipo==='Squalifica'?0:(e.tipo==='Ammonizione'?acc+1:acc),0);
+      return `<tr>
+        <td><strong>${esc(p.cognome)} ${esc(p.nome)}</strong></td>
+        <td>${groupChip(p.categoria,p.gruppo)}</td>
+        <td><span class="bdg bdg-y">${ammDall}</span></td>
+        <td>${ev.length}</td>
+        <td><button class="btn btn-sm btn-p" onclick="dispOpenForPlayer('${p.id}')">+ Provvedimento</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+function renderDispListSqualificati(plist){
+  if(!plist.length)return '<div class="es" style="padding:20px"><div class="ic">✅</div><p>Nessun giocatore squalificato.</p></div>';
+  return `<div class="tw"><table>
+    <thead><tr><th>Giocatore</th><th>Squadra</th><th>Giornate residue</th><th>Data squalifica</th><th>Motivo</th><th>Azioni</th></tr></thead>
+    <tbody>${plist.map(p=>{
+      const sq=dispSqualificheAttive(p.id);
+      return sq.map(d=>{
+        const tot=+d.giornateSqualifica||1;
+        const sc=(d.partiteScontate||[]).length;
+        return `<tr>
+          <td><strong>${esc(p.cognome)} ${esc(p.nome)}</strong></td>
+          <td>${groupChip(p.categoria,p.gruppo)}</td>
+          <td><span class="bdg bdg-r">${tot-sc} residue / ${tot} totali</span></td>
+          <td>${fmtIt(d.data)}</td>
+          <td style="font-size:11px">${esc(d.motivo||'—')}</td>
+          <td><button class="btn btn-sm btn-s" onclick="dispMarkScontata('${d.id}')">+1 giornata scontata</button> <button class="btn btn-sm btn-s" onclick="openDisp('${d.id}')">✎</button></td>
+        </tr>`;
+      }).join('');
+    }).join('')}</tbody>
+  </table></div>`;
+}
+function dispOpenForPlayer(pid){openDisp('',pid)}
+function openDisp(id,prefilledPlayerId){
+  const ev=id?(state.disciplina||[]).find(x=>x.id===id):null;
+  const d=ev||{id:null,playerId:prefilledPlayerId||'',tipo:'Ammonizione',data:today(),competizione:'',giornata:'',giornateSqualifica:1,motivo:'',ammenda:0,note:'',stagione:dispStagioneCorrente()};
+  const ps=state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||'','it'));
+  openM(id?'Modifica provvedimento':'Nuovo provvedimento disciplinare',`<div class="fg">
+    <div class="ff full"><label>Giocatore *</label><select id="dp_pl">${ps.length?'<option value="">—</option>'+ps.map(p=>`<option value="${p.id}" ${d.playerId===p.id?'selected':''}>${esc(p.cognome)} ${esc(p.nome)} (${categoryShort(p.categoria)} ${groupLabel(p.categoria,p.gruppo)})</option>`).join(''):'<option value="">Nessun giocatore</option>'}</select></div>
+    <div class="ff"><label>Tipo *</label><select id="dp_ti" onchange="document.getElementById('dp_giornBox').style.display=this.value==='Squalifica'?'block':'none'">
+      <option ${d.tipo==='Ammonizione'?'selected':''}>Ammonizione</option>
+      <option ${d.tipo==='Espulsione'?'selected':''}>Espulsione</option>
+      <option ${d.tipo==='Squalifica'?'selected':''}>Squalifica</option>
+    </select></div>
+    <div class="ff"><label>Data *</label><input type="date" id="dp_da" value="${d.data}"></div>
+    <div class="ff full"><label>Competizione</label><input id="dp_cp" value="${esc(d.competizione)}" placeholder="Es. Campionato Provinciale Allievi · Girone B"></div>
+    <div class="ff"><label>Giornata</label><input id="dp_gi" value="${esc(d.giornata)}" placeholder="Es. 12"></div>
+    <div class="ff" id="dp_giornBox" style="display:${d.tipo==='Squalifica'?'block':'none'}"><label>Giornate squalifica</label><input type="number" id="dp_gs" value="${d.giornateSqualifica||1}" min="1" max="20"></div>
+    <div class="ff full"><label>Motivo</label><input id="dp_mo" value="${esc(d.motivo)}" placeholder="Es. doppia ammonizione, condotta antisportiva..."></div>
+    <div class="ff"><label>Ammenda (€)</label><input type="number" id="dp_am" value="${d.ammenda||0}" min="0" step="1"></div>
+    <div class="ff full"><label>Note</label><textarea id="dp_no" rows="2">${esc(d.note)}</textarea></div>
+    ${d.tipo==='Squalifica'&&d.partiteScontate?.length?`<div class="ff full" style="background:#fef3c7;padding:8px;border-radius:var(--rs);font-size:11px"><strong>Giornate già scontate:</strong> ${d.partiteScontate.length} su ${d.giornateSqualifica||1}</div>`:''}
+  </div>`,`<button class="btn btn-s" onclick="closeM()">Annulla</button>${id?`<button class="btn btn-d" onclick="delDisp('${id}')">🗑 Elimina</button>`:''}<button class="btn btn-p" onclick="saveDisp('${id||''}')">Salva</button>`);
+}
+function saveDisp(id){
+  const pid=document.getElementById('dp_pl').value;
+  if(!pid){toast('Seleziona un giocatore','e');return}
+  const data={
+    playerId:pid,
+    tipo:document.getElementById('dp_ti').value,
+    data:document.getElementById('dp_da').value,
+    competizione:document.getElementById('dp_cp').value.trim(),
+    giornata:document.getElementById('dp_gi').value.trim(),
+    giornateSqualifica:+document.getElementById('dp_gs').value||1,
+    motivo:document.getElementById('dp_mo').value.trim(),
+    ammenda:+document.getElementById('dp_am').value||0,
+    note:document.getElementById('dp_no').value.trim(),
+    stagione:dispStagioneCorrente()
+  };
+  if(!Array.isArray(state.disciplina))state.disciplina=[];
+  if(id){
+    const e=state.disciplina.find(x=>x.id===id);
+    if(e)Object.assign(e,data);
+    toast('Aggiornato','s');
+  }else{
+    state.disciplina.push({id:uid(),...data,partiteScontate:[]});
+    toast('Provvedimento registrato','s');
+  }
+  closeM();saveStore();renderView();
+}
+function delDisp(id){
+  if(!confirm('Eliminare questo provvedimento? L\'azione non è reversibile.'))return;
+  state.disciplina=(state.disciplina||[]).filter(x=>x.id!==id);
+  saveStore();closeM();renderView();toast('Eliminato','s');
+}
+function dispMarkScontata(id){
+  const d=(state.disciplina||[]).find(x=>x.id===id);
+  if(!d)return;
+  if(!d.partiteScontate)d.partiteScontate=[];
+  const tot=+d.giornateSqualifica||1;
+  if(d.partiteScontate.length>=tot){toast('Squalifica già completamente scontata','w');return}
+  d.partiteScontate.push('manuale_'+today());
+  saveStore();renderView();
+  const res=tot-d.partiteScontate.length;
+  toast(res>0?'Marcata · '+res+' giornate residue':'Squalifica completata','s');
+}
+
+/* =============================================================
    VIEW: TIPPS (4 voci separate)
    ============================================================= */
 const TIPPS_PESI_STD={'T · TECNICA':[25,25,25,25],'I · INTELLIGENZA':[25,25,25,25],'P · PERSONALITÀ':[25,25,25,25],'S · STRUTTURA FISICA':[20,20,20,20,20],'S · VELOCITÀ / RAPIDITÀ':[25,25,25,25]};
@@ -2841,6 +3101,7 @@ function dsRenderDettagli(m){
             <input type="number" style="width:50px;padding:2px 4px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px;text-align:center" placeholder="N°" min="1" max="99" value="${c?.numero||p.numero||''}" onchange="dsUpdNum('${p.id}',this.value)" ${!sel?'disabled':''}>
             <strong style="flex:1">${esc(p.cognome)} ${esc(p.nome)}</strong>
             ${isCross?`<span class="bdg bdg-y" title="Aggregato da altro gruppo/categoria">${esc(categoryShort(p.categoria))} ${esc(groupLabel(p.categoria,p.gruppo))}</span>`:''}
+            ${dispBadgePlayer(p.id)}
             <span style="font-size:10px;color:var(--g500)">${(p.ruoli||[p.ruolo]||[]).join(', ')}</span>
             ${missDoc?'<span class="bdg bdg-y" title="Manca matricola FIGC o doc identità">⚠ dati incompl.</span>':''}
             <label style="font-size:10px;display:flex;align-items:center;gap:3px"><input type="radio" name="ds_cap" ${c?.capitano?'checked':''} ${!sel?'disabled':''} onchange="dsSetCap('${p.id}')">C</label>
@@ -2968,12 +3229,16 @@ function dsValidate(){
   if(!dsS.matchId)errs.push('Seleziona una partita');
   if(!dsS.convocati.length)errs.push('Almeno un convocato');
   if(!dsS.convocati.find(c=>c.capitano))errs.push('Capitano non assegnato');
+  const m=state.attivita.find(x=>x.id===dsS.matchId);
+  const dataPartita=m?.data||today();
   dsS.convocati.forEach(c=>{
     const p=state.players.find(x=>x.id===c.pid);
     if(!p)return;
     if(!p.tessera)errs.push('Manca matricola FIGC: '+p.cognome+' '+p.nome);
     if(!p.docIdentita?.tipo||!p.docIdentita?.numero)errs.push('Manca documento identità: '+p.cognome+' '+p.nome);
     if(!c.numero)errs.push('Manca numero maglia: '+p.cognome+' '+p.nome);
+    // v2.8: blocco squalificati
+    if(dispIsSqualificatoPerData(c.pid,dataPartita))errs.push('Giocatore SQUALIFICATO per la data della partita: '+p.cognome+' '+p.nome+' (rimuovi dai convocati o segna scontata in Squalifiche & Diffide)');
   });
   if(!dsS.staffAmmessi.find(s=>s.ruolo==='Dirigente accompagnatore ufficiale'))errs.push('Dirigente accompagnatore ufficiale obbligatorio');
   return errs;
@@ -4893,6 +5158,7 @@ function renderConvSelect(){
             <input type="checkbox" ${convS.convocati.includes(p.id)?'checked':''} onchange="toggleConv('${p.id}')">
             <strong>${esc(p.cognome)} ${esc(p.nome)}</strong>
             ${isCross?`<span class="bdg bdg-y" style="margin-left:6px">${esc(categoryShort(p.categoria))} ${esc(groupLabel(p.categoria,p.gruppo))}</span>`:''}
+            ${dispBadgePlayer(p.id)}
             <span style="color:var(--g500);margin-left:auto;font-size:10px">${esc((p.ruoli||[p.ruolo]||[]).join(', '))}</span>
           </label>`;
         }).join('')}</div>
