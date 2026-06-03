@@ -1,10 +1,27 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.12
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.13
 ================================================================================
   CHANGELOG
   ----------
+  v2.13 · 2026-06-03 · Fix sicurezza (dati minori, password, XSS, reset)
+    · SEC  [C1] Rimossa password in chiaro da DEFAULT_STATE.users.
+    · SEC  [C2] saveToSupabase() esclude players/staff/attivita/presenze/
+           infortuni dal blob (ora solo in tabelle relazionali); strip
+           del campo password da state.users prima del salvataggio su cloud.
+    · SEC  [C3] resetAllData(): aggiunto controllo permessi admin lato JS;
+           pulsante "Cancella dati" visibile solo per admin; rimosso
+           console.log rivelatorio; fix: salva currentUser invece di
+           cercare admin per email hardcoded.
+    · DB   [C3] app_state: policy DELETE limitata a is_admin(); SELECT/
+           INSERT/UPDATE rimangono per tutti gli authenticated.
+    · XSS  [A1] toast() usa textContent invece di innerHTML.
+    · XSS  [B2] esc() applicato a state.currentView in innerHTML.
+    · SEC  [A5] isAdmin in openUser() usa permessi/role_key invece di
+           confronto email hardcoded.
+    · PRI  [M3] Rimossi console.log con email e UUID utente.
+
   v2.12 · 2026-06-03 · Go-live prep: sicurezza + gruppi + UI utenti DB
     · SEC  Rimosse policy anon_all temporanee da tutte le tabelle operative
            (giocatori, staff, attivita, presenze, infortuni, ecc.): dati
@@ -505,8 +522,11 @@ function saveStore(){
 let _sbMap={giocatori:{},attivita:{}};
 async function saveToSupabase(){
   try{
-    const{currentUser,...rest}=state;const now=new Date().toISOString();
-    const payload={id:STORE,data:rest,updated_at:now};
+    // Escludi dal blob: dati operativi (ora in tabelle relazionali) + password utenti locali
+    const{currentUser,players,staff,attivita,presenze,infortuni,...rest}=state;
+    const usersBlob=(rest.users||[]).map(({password,...u})=>u);
+    const now=new Date().toISOString();
+    const payload={id:STORE,data:{...rest,users:usersBlob},updated_at:now};
     console.log('[SUPABASE] Salvataggio blob+tabelle...');
     const{error:blobErr}=await sb.from('app_state').upsert(payload,{onConflict:'id'});
     if(!blobErr){localStorage.setItem(STORE+'_ts',now);console.log('[SUPABASE] Blob salvato')}
@@ -740,7 +760,7 @@ const DEFAULT_STATE={
   // Parametri società
   societa:{nome:'LASCARIS 1954 ASD',piva:'',matricolaFigc:'',sede:'Via Claviere 16, 10044 Pianezza (TO)',tel:'',email:'',pec:'',rappresentanteLegale:'',cfRappresentante:'',sito:'',stagione:'2025/2026',inizio:'2025-07-01',fine:'2026-06-30'},
   // Users
-  users:[{id:'u1',email:'matteo.agnino@gmail.com',password:'Lascaris2025!',name:'Matteo Agnino',ruolo:'Direttore Sportivo · Admin',role_key:'admin',avatar:'MA',attivo:true,permessi:['all']}],
+  users:[{id:'u1',email:'matteo.agnino@gmail.com',name:'Matteo Agnino',ruolo:'Direttore Sportivo · Admin',role_key:'admin',avatar:'MA',attivo:true,permessi:['all']}],
   currentUser:null,
   // Misc
   nextId:100,
@@ -917,7 +937,7 @@ function refreshGruppoSel(selId,cat){
   const wrapper=el.closest('.ff');if(wrapper)wrapper.style.display='';
 }
 /* ---------- TOAST ---------- */
-function toast(m,t){const el=document.createElement('div');el.className='ts '+(t||'');el.innerHTML=m;document.getElementById('tc').appendChild(el);setTimeout(()=>{el.style.animation='si .2s reverse';setTimeout(()=>el.remove(),200)},2500)}
+function toast(m,t){const el=document.createElement('div');el.className='ts '+(t||'');el.textContent=m;document.getElementById('tc').appendChild(el);setTimeout(()=>{el.style.animation='si .2s reverse';setTimeout(()=>el.remove(),200)},2500)}
 /* ---------- MODAL ---------- */
 function openM(title,body,footer){document.getElementById('mTtl').textContent=title;document.getElementById('mBd').innerHTML=body;document.getElementById('mFt').innerHTML=footer||'<button class="btn btn-s" onclick="closeM()">Chiudi</button>';document.getElementById('mov').classList.add('on')}
 function closeM(){document.getElementById('mov').classList.remove('on')}
@@ -949,7 +969,7 @@ async function _buildCurrentUser(sbUser){
   const profPerm=(state.profiliPermessi||[]).find(p=>p.id==='prof_'+rInfo.key)||{permessi:[]};
   const fullName=[nome,cognome].filter(Boolean).join(' ').trim()||nome;
   const avatar=fullName.split(' ').map(w=>w[0]||'').join('').toUpperCase().substring(0,2)||'??';
-  console.log('[AUTH] Profilo DB:',fullName,'ruolo:',ruoloCodice,'→',rInfo.label);
+  /* log rimosso: non esporre dati personali in console */
   return{id:sbUser.id,email:sbUser.email,name:fullName,ruolo:rInfo.label,role_key:rInfo.key,avatar,attivo:true,permessi:profPerm.permessi||[],supabase:true,sb_id:sbUser.id};
 }
 async function doLogin(){
@@ -958,10 +978,9 @@ async function doLogin(){
   const err=document.getElementById('le');
   const btn=document.querySelector('#login button[type="submit"]');
   btn.disabled=true;btn.textContent='Accesso in corso…';
-  console.log('[AUTH] Tentativo login Supabase per:',em);
   let data,error;
   try{const res=await sb.auth.signInWithPassword({email:em,password:pw});data=res.data;error=res.error;
-    console.log('[AUTH] Risposta Supabase:',error?'ERRORE: '+error.message:'OK, user='+data?.user?.id);
+    if(error)console.error('[AUTH] Errore login:',error.message);
   }catch(ex){console.error('[AUTH] Eccezione rete:',ex);error={message:'Errore di connessione a Supabase: '+ex.message}}
   if(error){
     // Fallback: login locale per utenti non migrati a Supabase Auth
@@ -1068,7 +1087,7 @@ function renderView(){
   const c=document.getElementById('vc');
   const fn=VIEWS[state.currentView];
   if(fn){c.innerHTML='';fn(c)}
-  else c.innerHTML=`<div class="vw"><div class="vh"><h1>${state.currentView}</h1></div><div class="es"><div class="ic">🚧</div><h3>Pagina in costruzione</h3><p>Questa sezione sarà disponibile in una prossima consegna.</p></div></div>`;
+  else c.innerHTML=`<div class="vw"><div class="vh"><h1>${esc(state.currentView)}</h1></div><div class="es"><div class="ic">🚧</div><h3>Pagina in costruzione</h3><p>Questa sezione sarà disponibile in una prossima consegna.</p></div></div>`;
 }
 
 /* ---------- CHART helpers ---------- */
@@ -1142,7 +1161,7 @@ VIEWS.dashboard=function(c){
     <div class="vw">
       <div class="vh">
         <div><h1>Dashboard</h1><div class="sb2">Benvenuto ${esc(state.currentUser.name)} · ${tod.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div>
-        <div style="display:flex;gap:6px"><button class="btn btn-s" onclick="forceSyncSupabase()">☁️ Sync</button><button class="btn btn-s" onclick="openNotificheDS()" style="position:relative">🔔 DS${(state.notificheDS||[]).filter(n=>!n.letta).length?'<span style="position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:9px;padding:1px 5px;border-radius:10px">'+(state.notificheDS||[]).filter(n=>!n.letta).length+'</span>':''}</button><button class="btn btn-s" onclick="testSupabaseConnection()">🔍 Test DB</button><button class="btn btn-s" onclick="resetAllData()">Cancella dati</button></div>
+        <div style="display:flex;gap:6px"><button class="btn btn-s" onclick="forceSyncSupabase()">☁️ Sync</button><button class="btn btn-s" onclick="openNotificheDS()" style="position:relative">🔔 DS${(state.notificheDS||[]).filter(n=>!n.letta).length?'<span style="position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:9px;padding:1px 5px;border-radius:10px">'+(state.notificheDS||[]).filter(n=>!n.letta).length+'</span>':''}</button><button class="btn btn-s" onclick="testSupabaseConnection()">🔍 Test DB</button>${state.currentUser?.permessi?.includes('all')?'<button class="btn btn-s" onclick="resetAllData()">Cancella dati</button>':''}</div>
       </div>
       ${np===0?`<div class="es"><div class="ic">🚀</div><h3>Inizia qui: configura la tua società</h3><p>Il gestionale è vuoto. Per iniziare ti consigliamo:</p><div style="display:flex;flex-direction:column;gap:8px;max-width:380px;margin:0 auto;text-align:left">
         <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g50);border-radius:var(--rs)"><strong style="color:var(--black)">1.</strong> Compila i <a onclick="goto('parametri')" style="color:var(--blue);cursor:pointer;text-decoration:underline">Parametri Società</a></div>
@@ -1241,14 +1260,14 @@ VIEWS.dashboard=function(c){
   }
 };
 function resetAllData(){
+  if(!state.currentUser?.permessi?.includes('all')){toast('Non autorizzato: solo Admin può eseguire questa operazione','e');return}
   if(!confirm('ATTENZIONE: verranno cancellati tutti i dati inseriti (giocatori, staff, infortuni, direttivo, organigramma, ecc.). L\'account Admin resterà attivo. Continuare?'))return;
-  const adminUser=state.users.find(u=>u.email==='matteo.agnino@gmail.com');
+  const cu=state.currentUser;
   localStorage.removeItem(STORE);localStorage.removeItem(STORE+'_ts');
   state=JSON.parse(JSON.stringify(DEFAULT_STATE));
-  state.currentUser=adminUser;
+  state.currentUser=cu;
   saveStore();
-  // Also clear Supabase
-  sb.from('app_state').delete().eq('id',STORE).then(()=>console.log('Supabase data cleared'));
+  sb.from('app_state').delete().eq('id',STORE).then(()=>{}).catch(()=>{});
   toast('Tutti i dati sono stati cancellati (locale + cloud)','s');
   renderView();
 }
@@ -1706,7 +1725,7 @@ function openUser(id){
   const u=id?state.users.find(x=>x.id===id):{id:null,email:'',password:'',name:'',cognome:'',incarico:'',ruolo:'',avatar:'',attivo:true,permessi:[],profiloId:''};
   // Migrazione nome unico → nome+cognome
   if(!u.cognome&&u.name&&u.name.includes(' ')){const p=u.name.trim().split(/\s+/);u.cognome=p.pop();u.name=p.join(' ')}
-  const isAdmin=u.email==='matteo.agnino@gmail.com';
+  const isAdmin=(u.permessi||[]).includes('all')||u.role_key==='admin';
   openM(id?'Modifica utente':'Nuovo utente',`<div class="fg">
     <div class="ff"><label>Nome *</label><input id="us_nm" value="${esc(u.name)}" ${isAdmin?'readonly':''}></div>
     <div class="ff"><label>Cognome *</label><input id="us_cn" value="${esc(u.cognome||'')}" ${isAdmin?'readonly':''}></div>
