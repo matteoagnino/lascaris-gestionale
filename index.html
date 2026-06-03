@@ -1,10 +1,19 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.9
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.10
 ================================================================================
   CHANGELOG
   ----------
+  v2.10 · 2026-06-03 · Fase D — Login da DB (profili + utenti_ruoli)
+    · NEW  _buildCurrentUser(sbUser): query profili+utenti_ruoli, costruisce
+           state.currentUser con nome reale, ruolo e permessi dal DB.
+    · CHG  doLogin(): dopo auth Supabase usa _buildCurrentUser() invece di
+           state.users; mantiene fallback locale per utenti non migrati.
+    · CHG  doLoginAuto(): se sessione Supabase attiva usa _buildCurrentUser();
+           fallback a utente locale se nessuna sessione.
+    · DB   profili.nome/cognome Matteo aggiornati a "Matteo Agnino".
+
   v2.9 · 2026-06-03 · Fase C — Dual-write Supabase relazionale
     · CHG  loadFromSupabase(): carica blob (config+campi extra) + overlay da
            tabelle relazionali (giocatori, staff, attivita, presenze, infortuni).
@@ -896,50 +905,53 @@ document.getElementById('mov').addEventListener('click',e=>{if(e.target.id==='mo
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeM()});
 
 /* ---------- LOGIN / LOGOUT ---------- */
+/* Helper: costruisce currentUser da Supabase Auth + tabelle DB */
+async function _buildCurrentUser(sbUser){
+  const RUOLO_MAP={
+    ADMIN:{label:'Amministratore',key:'admin'},
+    DS:{label:'Direttore Sportivo',key:'ds'},
+    RSG:{label:'Resp. Settore Giovanile',key:'rsg'},
+    TECNICO:{label:'Tecnico',key:'tec'},
+    SCOUT:{label:'Scout',key:'scout'},
+    DIRIGENTE:{label:'Dirigente',key:'ds'},
+    PRESIDENTE:{label:'Presidente',key:'admin'}
+  };
+  let nome=sbUser.email.split('@')[0],cognome='',ruoloCodice='';
+  try{
+    const[rPro,rRuoli]=await Promise.all([
+      sb.from('profili').select('nome,cognome').eq('id',sbUser.id).single(),
+      sb.from('utenti_ruoli').select('ruoli(codice)').eq('user_id',sbUser.id).eq('attivo',true)
+    ]);
+    if(rPro.data){nome=rPro.data.nome||nome;cognome=rPro.data.cognome||''}
+    ruoloCodice=(rRuoli.data?.[0]?.ruoli?.codice)||'';
+  }catch(e){console.warn('[AUTH] Errore DB profilo:',e)}
+  const rInfo=RUOLO_MAP[ruoloCodice]||{label:'Staff',key:'tec'};
+  const profPerm=(state.profiliPermessi||[]).find(p=>p.id==='prof_'+rInfo.key)||{permessi:[]};
+  const fullName=[nome,cognome].filter(Boolean).join(' ').trim()||nome;
+  const avatar=fullName.split(' ').map(w=>w[0]||'').join('').toUpperCase().substring(0,2)||'??';
+  console.log('[AUTH] Profilo DB:',fullName,'ruolo:',ruoloCodice,'→',rInfo.label);
+  return{id:sbUser.id,email:sbUser.email,name:fullName,ruolo:rInfo.label,role_key:rInfo.key,avatar,attivo:true,permessi:profPerm.permessi||[],supabase:true,sb_id:sbUser.id};
+}
 async function doLogin(){
   const em=document.getElementById('em').value.trim().toLowerCase();
   const pw=document.getElementById('pw').value;
   const err=document.getElementById('le');
   const btn=document.querySelector('#login button[type="submit"]');
   btn.disabled=true;btn.textContent='Accesso in corso…';
-  // Prova autenticazione Supabase
   console.log('[AUTH] Tentativo login Supabase per:',em);
   let data,error;
-  try{
-    const res=await sb.auth.signInWithPassword({email:em,password:pw});
-    data=res.data;error=res.error;
+  try{const res=await sb.auth.signInWithPassword({email:em,password:pw});data=res.data;error=res.error;
     console.log('[AUTH] Risposta Supabase:',error?'ERRORE: '+error.message:'OK, user='+data?.user?.id);
-  }catch(ex){
-    console.error('[AUTH] Eccezione rete:',ex);
-    error={message:'Errore di connessione a Supabase: '+ex.message};
-  }
+  }catch(ex){console.error('[AUTH] Eccezione rete:',ex);error={message:'Errore di connessione a Supabase: '+ex.message}}
   if(error){
-    // Fallback: prova login locale (per utenti non ancora migrati)
-    console.log('[AUTH] Fallback login locale…');
+    // Fallback: login locale per utenti non migrati a Supabase Auth
     const u=state.users.find(x=>x.email.toLowerCase()===em&&x.password===pw&&x.attivo);
     if(!u){err.textContent=error.message==='Invalid login credentials'?'Credenziali non valide':error.message;err.classList.add('on');btn.disabled=false;btn.textContent='Accedi';return}
-    err.classList.remove('on');
-    state.currentUser=u;
-    saveStore();
-    enterApp(u);
-    btn.disabled=false;btn.textContent='Accedi';
-    return;
+    err.classList.remove('on');state.currentUser=u;saveStore();enterApp(u);btn.disabled=false;btn.textContent='Accedi';return;
   }
   err.classList.remove('on');
-  // Utente autenticato via Supabase — carica profilo dal DB
-  const sbUser=data.user;
-  let localUser=state.users.find(x=>x.email.toLowerCase()===sbUser.email.toLowerCase());
-  if(!localUser){
-    // Crea un riferimento locale per l'utente Supabase
-    const meta=sbUser.user_metadata||{};
-    localUser={id:sbUser.id,email:sbUser.email,name:(meta.nome?meta.nome+' '+(meta.cognome||''):sbUser.email.split('@')[0]),ruolo:'Staff',role_key:'admin',avatar:(sbUser.email.substring(0,2).toUpperCase()),attivo:true,permessi:['all'],supabase:true};
-    state.users.push(localUser);
-  }
-  localUser.supabase=true;
-  localUser.sb_id=sbUser.id;
-  state.currentUser=localUser;
-  saveStore();
-  enterApp(localUser);
+  const cu=await _buildCurrentUser(data.user);
+  state.currentUser=cu;saveStore();enterApp(cu);
   btn.disabled=false;btn.textContent='Accedi';
 }
 function enterApp(u){
@@ -1060,21 +1072,19 @@ window.addEventListener('load',()=>{
   }
 });
 async function doLoginAuto(){
-  // Verifica sessione Supabase attiva
-  const {data:{session}}=await sb.auth.getSession();
-  if(state.currentUser?.supabase && !session){state.currentUser=null;saveStore();return}
-  const u=state.users.find(x=>x.id===state.currentUser.id&&x.attivo);
-  if(!u){state.currentUser=null;return}
-  state.currentUser=u;
-  document.getElementById('login').classList.add('hide');
-  document.getElementById('app').classList.remove('hide');
-  document.getElementById('uNm').textContent=u.name;
-  document.getElementById('uRl').textContent=u.ruolo;
-  document.getElementById('uAv').textContent=u.avatar;
-  buildSidebar();
-  calView={y:new Date().getFullYear(),m:new Date().getMonth()};
-  impWk=wkStart(new Date());
-  goto(state.currentView||'dashboard');
+  const{data:{session}}=await sb.auth.getSession();
+  if(session?.user){
+    // Sessione Supabase valida: ricostruisce currentUser dal DB
+    const cu=await _buildCurrentUser(session.user);
+    state.currentUser=cu;enterApp(cu);return;
+  }
+  // Nessuna sessione Supabase: prova utente locale (fallback)
+  if(state.currentUser&&!state.currentUser.supabase){
+    const u=state.users.find(x=>x.id===state.currentUser.id&&x.attivo);
+    if(u){state.currentUser=u;enterApp(u);return}
+  }
+  // Sessione scaduta o non trovata
+  state.currentUser=null;saveStore();
 }
 
 /* ---------- VIEWS container ---------- */
