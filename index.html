@@ -1,10 +1,18 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.10
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.11
 ================================================================================
   CHANGELOG
   ----------
+  v2.11 · 2026-06-03 · Fase E — Auto-login + RPC gestione utenti
+    · FIX  doLoginAuto() ora chiamata sempre al load (non solo se currentUser
+           era già settato): risolve il bug per cui dopo reload gli utenti
+           Supabase vedevano la schermata di login invece dell'app.
+    · DB   Funzione RPC admin_assign_role(user_id, ruolo, cat?, grp?):
+           permette all'admin di assegnare ruolo+scope a nuovi utenti.
+    · DB   GRANT INSERT/UPDATE su utenti_ruoli e profili per authenticated.
+
   v2.10 · 2026-06-03 · Fase D — Login da DB (profili + utenti_ruoli)
     · NEW  _buildCurrentUser(sbUser): query profili+utenti_ruoli, costruisce
            state.currentUser con nome reale, ruolo e permessi dal DB.
@@ -1066,10 +1074,9 @@ if(window.Chart){
 window.addEventListener('load',()=>{
   document.getElementById('lcLogo').src=LOGO;
   document.getElementById('tbLogo').src=LOGO;
-  // Auto-login if currentUser is still set (from previous session)
-  if(state.currentUser){
-    doLoginAuto();
-  }
+  // Sempre: verifica sessione Supabase o utente locale
+  // (state.currentUser può essere null dopo reload anche se la sessione è valida)
+  doLoginAuto();
 });
 async function doLoginAuto(){
   const{data:{session}}=await sb.auth.getSession();
