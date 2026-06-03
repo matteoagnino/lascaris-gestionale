@@ -1,10 +1,22 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.11
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.12
 ================================================================================
   CHANGELOG
   ----------
+  v2.12 · 2026-06-03 · Go-live prep: sicurezza + gruppi + UI utenti DB
+    · SEC  Rimosse policy anon_all temporanee da tutte le tabelle operative
+           (giocatori, staff, attivita, presenze, infortuni, ecc.): dati
+           accessibili solo ad authenticated.
+    · DB   Creati gruppi A/B/C/D per tutte le 14 categorie attive (56 gruppi
+           totali): tecnici di qualsiasi categoria possono essere assegnati.
+    · NEW  renderUtTabUsers() → carica utenti da profili+utenti_ruoli DB;
+           mostra ruolo e scope; bottone "Cambia ruolo" per ogni utente.
+    · NEW  loadUtentiDB(): query async profili+utenti_ruoli+ruoli.
+    · NEW  openRuoloModal(userId): form per assegnare ruolo+scope.
+    · NEW  saveRuoloDB(userId): chiama RPC admin_assign_role().
+
   v2.11 · 2026-06-03 · Fase E — Auto-login + RPC gestione utenti
     · FIX  doLoginAuto() ora chiamata sempre al load (non solo se currentUser
            era già settato): risolve il bug per cui dopo reload gli utenti
@@ -1597,7 +1609,7 @@ VIEWS.utenti=function(c){
     <div class="vw">
       <div class="vh"><div><h1>Utenti &amp; Permessi</h1><div class="sb2">Gestione accessi · permessi granulari · profili personalizzabili</div></div></div>
       <div class="tabs">
-        <div class="tab ${tab==='users'?'on':''}" onclick="state._utTab='users';saveStore();renderView()">👤 Utenti (${state.users.length})</div>
+        <div class="tab ${tab==='users'?'on':''}" onclick="state._utTab='users';saveStore();renderView()">👤 Utenti</div>
         <div class="tab ${tab==='profs'?'on':''}" onclick="state._utTab='profs';saveStore();renderView()">📋 Profili permessi (${state.profiliPermessi.length})</div>
         <div class="tab ${tab==='perms'?'on':''}" onclick="state._utTab='perms';saveStore();renderView()">🔑 Permessi disponibili (${PERMS_BASE.length+state.permessiCustom.length})</div>
       </div>
@@ -1605,13 +1617,65 @@ VIEWS.utenti=function(c){
     </div>
   `;
 };
-function renderUtTabUsers(){return `
-  <div style="margin-bottom:10px;display:flex;justify-content:flex-end"><button class="btn btn-p" onclick="openUser('')">+ Nuovo utente</button></div>
-  <div class="card"><div class="tw"><table>
-    <thead><tr><th>Cognome</th><th>Nome</th><th>Email</th><th>Incarico</th><th>Ruolo</th><th>Profilo</th><th>Stato</th><th>Azioni</th></tr></thead>
-    <tbody>${state.users.map(u=>{const cn=u.cognome||(u.name&&u.name.includes(' ')?u.name.trim().split(/\s+/).pop():'');const nm=u.cognome?u.name:(u.name&&u.name.includes(' ')?u.name.trim().split(/\s+/).slice(0,-1).join(' '):u.name);return `<tr><td><strong>${esc(cn)}</strong> ${u.email==='matteo.agnino@gmail.com'?'<span class="bdg bdg-k" style="margin-left:4px">ADMIN</span>':''}</td><td>${esc(nm)}</td><td style="font-size:12px">${esc(u.email)}</td><td>${esc(u.incarico)||'—'}</td><td>${esc(u.ruolo)||'—'}</td><td style="font-size:11px">${u.profiloId?esc((state.profiliPermessi.find(p=>p.id===u.profiloId)||{}).nome||'—'):'<em>custom</em>'}</td><td>${u.attivo?'<span class="bdg bdg-g">Attivo</span>':'<span class="bdg bdg-r">Disattivato</span>'}</td><td><button class="btn btn-sm btn-s" onclick="openUser('${u.id}')">✎</button>${u.email!=='matteo.agnino@gmail.com'?` <button class="btn btn-sm btn-d" onclick="delUser('${u.id}')">🗑</button>`:''}</td></tr>`}).join('')}</tbody>
-  </table></div></div>
-`}
+function renderUtTabUsers(){
+  setTimeout(()=>loadUtentiDB(),0);
+  return `
+  <div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+    <p style="color:var(--g500);font-size:12px">Utenti da Supabase Auth. Crea nuovi utenti dalla <a href="https://supabase.com/dashboard/project/skyaknhivjkywuijgywx/auth/users" target="_blank" style="color:var(--pri)">Dashboard Supabase</a>, poi assegna qui il ruolo.</p>
+  </div>
+  <div id="ut-users-container"><div class="es" style="padding:30px"><div class="ic">⏳</div><p>Caricamento utenti...</p></div></div>
+  `;
+}
+async function loadUtentiDB(){
+  const el=document.getElementById('ut-users-container');if(!el)return;
+  try{
+    const[rP,rUR]=await Promise.all([
+      sb.from('profili').select('id,nome,cognome'),
+      sb.from('utenti_ruoli').select('user_id,ruoli(codice),categorie(codice),gruppi(nome)').eq('attivo',true)
+    ]);
+    const urMap={};(rUR.data||[]).forEach(ur=>{urMap[ur.user_id]=ur});
+    const rows=(rP.data||[]).map(p=>{
+      const ur=urMap[p.id]||{};
+      const ruolo=ur.ruoli?.codice||'—';
+      const cat=ur.categorie?.codice||'';const grp=ur.gruppi?.nome||'';
+      const scope=cat?(cat+(grp?'/'+grp:'')):'Globale';
+      const isMe=p.id===state.currentUser?.id;
+      return `<tr>
+        <td><strong>${esc(p.cognome||'—')}</strong>${isMe?' <span class="bdg bdg-k">Tu</span>':''}</td>
+        <td>${esc(p.nome||'—')}</td>
+        <td style="font-size:11px;font-family:monospace">${p.id.substring(0,8)}…</td>
+        <td><span class="bdg bdg-k">${esc(ruolo)}</span></td>
+        <td style="font-size:11px">${esc(scope)}</td>
+        <td>${!isMe?`<button class="btn btn-sm btn-s" onclick="openRuoloModal('${p.id}','${esc((p.nome+' '+p.cognome).trim())}')">Cambia ruolo</button>`:'—'}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML=`<div class="card"><div class="tw"><table>
+      <thead><tr><th>Cognome</th><th>Nome</th><th>UUID</th><th>Ruolo</th><th>Scope</th><th>Azioni</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" style="color:var(--g500);text-align:center">Nessun profilo trovato</td></tr>'}</tbody>
+    </table></div></div>`;
+  }catch(e){if(el)el.innerHTML=`<div style="color:var(--red);padding:14px">Errore: ${esc(e.message)}</div>`}
+}
+function openRuoloModal(userId,nome){
+  const RUOLI=['ADMIN','DS','RSG','TECNICO','SCOUT','DIRIGENTE','PRESIDENTE'];
+  const cats=state.categories||[];const grps=state.groups||[];
+  openM('Assegna ruolo — '+nome,`<div class="fg">
+    <div class="ff"><label>Ruolo *</label><select id="rm_ru">${RUOLI.map(r=>`<option>${r}</option>`).join('')}</select></div>
+    <div class="ff"><label>Categoria (scope)</label><select id="rm_cat"><option value="">Globale — tutte le categorie</option>${cats.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>
+    <div class="ff"><label>Gruppo (scope)</label><select id="rm_grp"><option value="">Tutti i gruppi</option>${grps.map(g=>`<option>${esc(g)}</option>`).join('')}</select></div>
+    <p style="font-size:11px;color:var(--g500)">Scope vuoto = accesso a tutte le categorie/gruppi del ruolo assegnato.</p>
+  </div>`,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveRuoloDB('${userId}')">Salva ruolo</button>`);
+}
+async function saveRuoloDB(userId){
+  const ruolo=document.getElementById('rm_ru').value;
+  const cat=document.getElementById('rm_cat').value||null;
+  const grp=document.getElementById('rm_grp').value||null;
+  try{
+    const{error}=await sb.rpc('admin_assign_role',{p_user_id:userId,p_ruolo_codice:ruolo,p_cat_codice:cat,p_grp_nome:grp});
+    if(error)throw new Error(error.message);
+    closeM();toast('Ruolo assegnato: '+ruolo+(cat?' ('+cat+(grp?'/'+grp:'')+')'),'s');
+    loadUtentiDB();
+  }catch(e){toast('Errore: '+e.message,'e')}
+}
 function renderUtTabProfs(){return `
   <div style="margin-bottom:10px;display:flex;justify-content:flex-end"><button class="btn btn-p" onclick="openProfile('')">+ Nuovo profilo</button></div>
   <div class="grid ga">${state.profiliPermessi.map(pr=>`<div class="card" style="margin:0">
