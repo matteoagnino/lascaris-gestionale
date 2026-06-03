@@ -587,7 +587,7 @@ async function _syncRelational(){
       for(const p of state.players){
         const gId=_sbMap.giocatori[p.id];if(!gId)continue;
         const cId=catByCode[p.categoria];
-        if(cId)await sb.from('tesseramenti').upsert({giocatore_id:gId,stagione_id:STAGID,categoria_id:cId,data_tesseramento:'2025-09-01',numero_tessera:p.tessera||null,stato:'attivo'},{onConflict:'giocatore_id,stagione_id'}).catch(()=>{});
+        if(cId){try{await sb.from('tesseramenti').upsert({giocatore_id:gId,stagione_id:STAGID,categoria_id:cId,data_tesseramento:'2025-09-01',numero_tessera:p.tessera||null,stato:'attivo'},{onConflict:'giocatore_id,stagione_id'})}catch(e){}}
       }
     }
   }
