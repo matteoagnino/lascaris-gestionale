@@ -1,10 +1,20 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.8
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.9
 ================================================================================
   CHANGELOG
   ----------
+  v2.9 · 2026-06-03 · Fase C — Dual-write Supabase relazionale
+    · CHG  loadFromSupabase(): carica blob (config+campi extra) + overlay da
+           tabelle relazionali (giocatori, staff, attivita, presenze, infortuni).
+    · CHG  saveToSupabase(): scrive blob + chiama _syncRelational().
+    · NEW  _syncRelational(): upsert su tabelle relazionali con legacy_id come
+           chiave di conflitto; presenze espllose da sessione a righe per giocatore.
+    · NEW  _sbMap: mappa legacy_id → UUID Supabase, popolata al caricamento.
+    · DB   Migrazioni A1–A3 (Squalifiche, RLS, trigger audit/updated_at),
+           B1–B8 (migrazione dati blob→tabelle), C1 (UNIQUE su legacy_id).
+
   v2.8 · 2026-05-05 · Squalifiche & Diffide (Batch 3)
     · NEW  Modulo Squalifiche & Diffide (sidebar Area Valutazione).
            Tre tab: Tutti gli eventi · Diffidati · Squalificati attivi.
@@ -462,56 +472,160 @@ function saveStore(){
   if(_saveTimer)clearTimeout(_saveTimer);
   _saveTimer=setTimeout(()=>saveToSupabase(),2000);
 }
+/* ── _sbMap: legacy_id → supabase uuid (popolato da loadFromSupabase) ── */
+let _sbMap={giocatori:{},attivita:{}};
 async function saveToSupabase(){
   try{
-    const {currentUser,...rest}=state;
-    const now=new Date().toISOString();
+    const{currentUser,...rest}=state;const now=new Date().toISOString();
     const payload={id:STORE,data:rest,updated_at:now};
-    console.log('[SUPABASE] Salvataggio in corso...');
-    const {error}=await sb.from('app_state').upsert(payload,{onConflict:'id'});
-    if(!error){
-      localStorage.setItem(STORE+'_ts',now);
-      console.log('[SUPABASE] Salvato con successo alle',now);
-    }
-    if(error){
-      console.error('[SUPABASE] Errore salvataggio:',error.message,error.code,error.details);
-      if(error.message.includes('does not exist')||error.code==='42P01'){
-        console.log('[SUPABASE] Tabella non trovata, tentativo creazione...');
-        await sb.rpc('exec_sql',{sql:"CREATE TABLE IF NOT EXISTS app_state (id text PRIMARY KEY, data jsonb, updated_at timestamptz DEFAULT now()); ALTER TABLE app_state ENABLE ROW LEVEL SECURITY; CREATE POLICY IF NOT EXISTS \"Allow all for anon\" ON app_state FOR ALL TO anon USING (true) WITH CHECK (true);"}).catch(e2=>{console.error('[SUPABASE] Errore creazione tabella:',e2)});
-        const {error:e2}=await sb.from('app_state').upsert(payload,{onConflict:'id'});
-        if(e2)console.error('[SUPABASE] Retry fallito:',e2.message);
-        else console.log('[SUPABASE] Retry OK dopo creazione tabella');
-      }
-      if(error.code==='42501'||error.message.includes('policy')||error.message.includes('permission')){
-        console.error('[SUPABASE] ERRORE RLS: la policy non permette accesso.');
-      }
-    }
+    console.log('[SUPABASE] Salvataggio blob+tabelle...');
+    const{error:blobErr}=await sb.from('app_state').upsert(payload,{onConflict:'id'});
+    if(!blobErr){localStorage.setItem(STORE+'_ts',now);console.log('[SUPABASE] Blob salvato')}
+    else if(blobErr.message?.includes('does not exist')||blobErr.code==='42P01'){
+      await sb.rpc('exec_sql',{sql:"CREATE TABLE IF NOT EXISTS app_state (id text PRIMARY KEY, data jsonb, updated_at timestamptz DEFAULT now()); ALTER TABLE app_state ENABLE ROW LEVEL SECURITY; CREATE POLICY IF NOT EXISTS \"Allow all for anon\" ON app_state FOR ALL TO anon USING (true) WITH CHECK (true);"}).catch(()=>{});
+      await sb.from('app_state').upsert(payload,{onConflict:'id'}).catch(()=>{});
+    }else console.error('[SUPABASE] Errore blob:',blobErr.message,blobErr.code);
+    await _syncRelational().catch(e=>console.error('[SUPABASE] Sync tabelle fallito:',e));
   }catch(e){console.error('[SUPABASE] Salvataggio fallito:',e)}
 }
 async function loadFromSupabase(){
   try{
-    console.log('[SUPABASE] Caricamento dati...');
-    const {data:row,error}=await sb.from('app_state').select('data,updated_at').eq('id',STORE).single();
-    if(error){console.error('[SUPABASE] Errore caricamento:',error.message,error.code,error.details);return}
-    if(!row){console.log('[SUPABASE] Nessun dato trovato nel database');return}
-    console.log('[SUPABASE] Dati trovati, updated_at:',row.updated_at);
-    const localTs=localStorage.getItem(STORE+'_ts')||'';
-    console.log('[SUPABASE] Timestamp locale:',localTs||'(nessuno)');
-    if(row.updated_at>localTs||!localTs){
-      const d=row.data;
-      ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
-      if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
-      migrateStateV23(d);
-      Object.assign(state,d);
-      const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(state.users||[]).find(x=>x.id===uref.id);if(u)state.currentUser=u}
-      localStorage.setItem(STORE,JSON.stringify(d));
-      localStorage.setItem(STORE+'_ts',row.updated_at);
-      renderView();
-      console.log('[SUPABASE] Dati sincronizzati con successo');
-    }else{
-      console.log('[SUPABASE] Dati locali già aggiornati');
+    console.log('[SUPABASE] Caricamento blob+tabelle...');
+    /* 1. Blob: carica config + campi extra non ancora nelle tabelle relazionali */
+    const{data:row,error:blobErr}=await sb.from('app_state').select('data,updated_at').eq('id',STORE).single();
+    if(!blobErr&&row){
+      const localTs=localStorage.getItem(STORE+'_ts')||'';
+      if(row.updated_at>localTs||!localTs){
+        const d=row.data;
+        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
+        if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
+        migrateStateV23(d);Object.assign(state,d);
+        const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(state.users||[]).find(x=>x.id===uref.id);if(u)state.currentUser=u}
+        localStorage.setItem(STORE,JSON.stringify(d));localStorage.setItem(STORE+'_ts',row.updated_at);
+      }
     }
+    /* 2. Tabelle relazionali: query parallele */
+    const[rG,rS,rA,rP,rI]=await Promise.all([
+      sb.from('giocatori').select('id,legacy_id,nome,cognome,data_nascita,luogo_nascita,codice_fiscale,indirizzo,piede_preferito,ruolo_preferito,note,attivo,deleted_at,giocatori_anagrafica_estesa(taglia_maglia),tesseramenti(numero_tessera,categorie(codice)),giocatori_gruppi(gruppi(nome))').order('cognome'),
+      sb.from('staff').select('id,legacy_id,nome,cognome,email,telefono,staff_gruppi(ruolo,gruppi(nome,categorie(codice)))').eq('attivo',true),
+      sb.from('attivita').select('id,legacy_id,tipo,data,ora_inizio,luogo_alternativo,note,annullata,categorie(codice),gruppi(nome)').order('data'),
+      sb.from('presenze').select('stato,motivazione,attivita(data,categorie(codice),gruppi(nome)),giocatori(legacy_id)'),
+      sb.from('infortuni').select('id,legacy_id,data_infortunio,tipo,parte_corpo,gravita,data_rientro_prevista,note,giocatori(legacy_id)')
+    ]);
+    /* 3. Ricostruisci _sbMap */
+    _sbMap={giocatori:{},attivita:{}};
+    if(!rG.error&&rG.data)rG.data.forEach(g=>{if(g.legacy_id)_sbMap.giocatori[g.legacy_id]=g.id});
+    if(!rA.error&&rA.data)rA.data.forEach(a=>{if(a.legacy_id)_sbMap.attivita[a.legacy_id]=a.id});
+    /* 4. Mappe di conversione */
+    const GMAP={lieve:'Lieve (<7gg)',media:'Mild (7-28gg)',grave:'Grave (>28gg)'};
+    const TMAP={allenamento:'Allenamento',partita:'Campionato',torneo:'Torneo',riunione:'Riunione',evento_societario:'Evento'};
+    const RMAP={principale:'Tecnico',vice:'Vice',preparatore_portieri:'Preparatore Portieri',dirigente:'Dirigente',altro:'Altro'};
+    const SMAP={presente:'Presente',malato:'Ammalato',infortunato:'Infortunio',assente_giustificato:'Motivi personali',assente_non_giustificato:'Assente',non_convocato:'Non convocato'};
+    /* 5. Overlay giocatori */
+    if(!rG.error&&rG.data&&rG.data.length){
+      state.players=rG.data.map(g=>{
+        const blob=(state.players||[]).find(p=>p.id===g.legacy_id)||{};
+        const tess=(g.tesseramenti||[])[0]||{};const grpRow=(g.giocatori_gruppi||[])[0]||{};const ext=g.giocatori_anagrafica_estesa||{};
+        return{...blob,id:g.legacy_id||g.id,nome:g.nome,cognome:g.cognome,nascitaISO:g.data_nascita||'',nascita:g.data_nascita?g.data_nascita.split('-').reverse().join('/'):(blob.nascita||''),cf:g.codice_fiscale||blob.cf||'',indirizzo:g.indirizzo||blob.indirizzo||'',comuneNascita:g.luogo_nascita||blob.comuneNascita||'',piede:g.piede_preferito?(g.piede_preferito[0].toUpperCase()+g.piede_preferito.slice(1)):(blob.piede||''),ruoli:g.ruolo_preferito?[g.ruolo_preferito]:(blob.ruoli||[]),note:g.note||blob.note||'',eliminato:!!g.deleted_at||!g.attivo,categoria:tess.categorie?.codice||blob.categoria||'',tessera:tess.numero_tessera||blob.tessera||'',gruppo:grpRow.gruppi?.nome||blob.gruppo||'',taglia:ext.taglia_maglia||blob.taglia||''};
+      });
+    }
+    /* 6. Overlay staff */
+    if(!rS.error&&rS.data&&rS.data.length){
+      state.staff=rS.data.map(s=>{
+        const blob=(state.staff||[]).find(x=>x.id===s.legacy_id)||{};
+        const inc=(s.staff_gruppi||[]).map(sg=>({ruolo:RMAP[sg.ruolo]||sg.ruolo,gruppo:sg.gruppi?.nome||'',categoria:sg.gruppi?.categorie?.codice||''}));
+        return{...blob,id:s.legacy_id||s.id,nome:s.nome,cognome:s.cognome,email:s.email||blob.email||'',tel:s.telefono||blob.tel||'',ruolo:inc[0]?.ruolo||blob.ruolo||'',gruppo:inc[0]?.gruppo||blob.gruppo||'',categoria:inc[0]?.categoria||blob.categoria||'',incarichi:inc.length?inc:(blob.incarichi||[])};
+      });
+    }
+    /* 7. Overlay attività */
+    if(!rA.error&&rA.data&&rA.data.length){
+      state.attivita=rA.data.map(a=>{
+        const blob=(state.attivita||[]).find(x=>x.id===a.legacy_id)||{};
+        let avv=blob.avversario||'';if(a.note&&a.note.includes('Avversario: '))avv=a.note.replace(/^.*Avversario: /,'').split(' | ')[0];
+        return{...blob,id:a.legacy_id||a.id,tipo:TMAP[a.tipo]||a.tipo,data:a.data,ora:a.ora_inizio?a.ora_inizio.substring(0,5):(blob.ora||''),categoria:a.categorie?.codice||blob.categoria||'',gruppo:a.gruppi?.nome||blob.gruppo||'',note:a.note||blob.note||'',luogoLibero:a.luogo_alternativo||blob.luogoLibero||'',avversario:avv,annullata:a.annullata||false};
+      });
+    }
+    /* 8. Overlay infortuni */
+    if(!rI.error&&rI.data&&rI.data.length){
+      state.infortuni=rI.data.map(inf=>{
+        const blob=(state.infortuni||[]).find(x=>x.id===inf.legacy_id)||{};
+        return{...blob,id:inf.legacy_id||inf.id,playerId:inf.giocatori?.legacy_id||blob.playerId||'',data:inf.data_infortunio,tipo:inf.tipo||blob.tipo||'',sede:inf.parte_corpo||blob.sede||'',grav:GMAP[inf.gravita]||blob.grav||'',dataRientro:inf.data_rientro_prevista||blob.dataRientro||'',note:inf.note||blob.note||''};
+      });
+    }
+    /* 9. Overlay presenze: righe DB → sessioni aggregate {cat,grp,data,marks} */
+    if(!rP.error&&rP.data&&rP.data.length){
+      const sess={};
+      rP.data.forEach(p=>{
+        const att=p.attivita;if(!att)return;
+        const cat=att.categorie?.codice||'';const grp=att.gruppi?.nome||'';const data=att.data;const key=cat+grp+data;
+        if(!sess[key])sess[key]={cat,grp,data,key,marks:{}};
+        const lid=p.giocatori?.legacy_id;if(lid)sess[key].marks[lid]=p.motivazione||SMAP[p.stato]||p.stato;
+      });
+      if(Object.keys(sess).length)state.presenze=Object.values(sess);
+    }
+    renderView();console.log('[SUPABASE] Sync completato (blob+tabelle)');
   }catch(e){console.error('[SUPABASE] Caricamento fallito:',e)}
+}
+async function _syncRelational(){
+  /* Dual-write: sincronizza state → tabelle relazionali Supabase */
+  const STAGID='2e1d19b5-e615-4939-9625-89f60c33e57b';
+  const PIEDE={destro:'destro',sinistro:'sinistro',ambidestro:'ambidestro'};
+  const TIPO={Allenamento:'allenamento',Campionato:'partita',Amichevole:'partita',Torneo:'torneo',Riunione:'riunione',Evento:'evento_societario'};
+  const GRAV={'Lieve (<7gg)':'lieve','Mild (7-28gg)':'media','Grave (>28gg)':'grave'};
+  const STATO={Presente:'presente',Ammalato:'malato',Infortunio:'infortunato','Motivi personali':'assente_giustificato','Motivi familiari':'assente_giustificato','Motivi scolastici':'assente_giustificato',Assente:'assente_non_giustificato','Non convocato':'non_convocato'};
+  const[rCat,rGrp]=await Promise.all([sb.from('categorie').select('id,codice'),sb.from('gruppi').select('id,nome,categorie(codice)')]);
+  const catByCode={};(rCat.data||[]).forEach(c=>catByCode[c.codice]=c.id);
+  const grpByNC={};(rGrp.data||[]).forEach(g=>grpByNC[g.nome+'_'+(g.categorie?.codice||'')]=g.id);
+  /* Giocatori */
+  if(state.players?.length){
+    const rows=state.players.map(p=>({nome:p.nome,cognome:p.cognome,data_nascita:p.nascitaISO||null,luogo_nascita:p.comuneNascita||null,codice_fiscale:p.cf||null,indirizzo:p.indirizzo||null,piede_preferito:PIEDE[p.piede?.toLowerCase()]||null,ruolo_preferito:(p.ruoli||[])[0]||null,note:p.note||null,attivo:!p.eliminato,deleted_at:p.eliminato?new Date().toISOString():null,legacy_id:p.id}));
+    const{error:ge}=await sb.from('giocatori').upsert(rows,{onConflict:'legacy_id'});
+    if(ge)console.error('[SYNC] giocatori:',ge.message);
+    else{
+      const{data:fr}=await sb.from('giocatori').select('id,legacy_id').in('legacy_id',rows.map(r=>r.legacy_id));
+      (fr||[]).forEach(g=>{_sbMap.giocatori[g.legacy_id]=g.id});
+      for(const p of state.players){
+        const gId=_sbMap.giocatori[p.id];if(!gId)continue;
+        const cId=catByCode[p.categoria];
+        if(cId)await sb.from('tesseramenti').upsert({giocatore_id:gId,stagione_id:STAGID,categoria_id:cId,data_tesseramento:'2025-09-01',numero_tessera:p.tessera||null,stato:'attivo'},{onConflict:'giocatore_id,stagione_id'}).catch(()=>{});
+      }
+    }
+  }
+  /* Staff */
+  if(state.staff?.length){
+    const rows=state.staff.map(s=>({nome:s.nome,cognome:s.cognome,email:s.email||null,telefono:s.tel||null,attivo:true,legacy_id:s.id}));
+    const{error:se}=await sb.from('staff').upsert(rows,{onConflict:'legacy_id'});
+    if(se)console.error('[SYNC] staff:',se.message);
+  }
+  /* Attività */
+  if(state.attivita?.length){
+    const rows=state.attivita.map(a=>{const cId=catByCode[a.categoria]||null;const gId=grpByNC[a.gruppo+'_'+a.categoria]||null;let note=a.note||null;if(a.avversario)note=[note,'Avversario: '+a.avversario].filter(Boolean).join(' | ');return{tipo:TIPO[a.tipo]||'allenamento',stagione_id:STAGID,gruppo_id:gId,categoria_id:cId,data:a.data,ora_inizio:a.ora||null,luogo_alternativo:a.luogoLibero||null,note,annullata:a.annullata||false,legacy_id:a.id};}).filter(r=>r.categoria_id&&r.gruppo_id);
+    if(rows.length){
+      const{error:ae}=await sb.from('attivita').upsert(rows,{onConflict:'legacy_id'});
+      if(ae)console.error('[SYNC] attivita:',ae.message);
+      else{const{data:fr}=await sb.from('attivita').select('id,legacy_id').in('legacy_id',rows.map(r=>r.legacy_id));(fr||[]).forEach(a=>{_sbMap.attivita[a.legacy_id]=a.id});}
+    }
+  }
+  /* Infortuni */
+  if(state.infortuni?.length){
+    const rows=state.infortuni.filter(inf=>inf.playerId&&_sbMap.giocatori[inf.playerId]).map(inf=>({giocatore_id:_sbMap.giocatori[inf.playerId],stagione_id:STAGID,data_infortunio:inf.data,tipo:inf.tipo||null,parte_corpo:inf.sede||null,gravita:GRAV[inf.grav]||'lieve',data_rientro_prevista:inf.dataRientro||null,note:inf.note||null,legacy_id:inf.id}));
+    if(rows.length){const{error:ie}=await sb.from('infortuni').upsert(rows,{onConflict:'legacy_id'});if(ie)console.error('[SYNC] infortuni:',ie.message);}
+  }
+  /* Presenze: sessioni aggregate → righe per giocatore */
+  if(state.presenze?.length){
+    const prRows=[];
+    for(const sess of state.presenze){
+      if(!sess.marks)continue;
+      const att=state.attivita?.find(a=>a.data===sess.data&&a.categoria===sess.cat&&a.gruppo===sess.grp);
+      if(!att)continue;const attId=_sbMap.attivita[att.id];if(!attId)continue;
+      for(const[pid,stato] of Object.entries(sess.marks)){
+        const gId=_sbMap.giocatori[pid];if(!gId)continue;
+        prRows.push({attivita_id:attId,giocatore_id:gId,stato:STATO[stato]||'assente_non_giustificato',motivazione:stato!=='Presente'?stato:null});
+      }
+    }
+    if(prRows.length){const{error:pe}=await sb.from('presenze').upsert(prRows,{onConflict:'attivita_id,giocatore_id'});if(pe)console.error('[SYNC] presenze:',pe.message);}
+  }
+  console.log('[SUPABASE] Sync relazionale OK');
 }
 async function forceSyncSupabase(){
   toast('Sincronizzazione in corso...','i');
