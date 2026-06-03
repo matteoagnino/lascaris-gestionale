@@ -482,8 +482,8 @@ async function saveToSupabase(){
     const{error:blobErr}=await sb.from('app_state').upsert(payload,{onConflict:'id'});
     if(!blobErr){localStorage.setItem(STORE+'_ts',now);console.log('[SUPABASE] Blob salvato')}
     else if(blobErr.message?.includes('does not exist')||blobErr.code==='42P01'){
-      await sb.rpc('exec_sql',{sql:"CREATE TABLE IF NOT EXISTS app_state (id text PRIMARY KEY, data jsonb, updated_at timestamptz DEFAULT now()); ALTER TABLE app_state ENABLE ROW LEVEL SECURITY; CREATE POLICY IF NOT EXISTS \"Allow all for anon\" ON app_state FOR ALL TO anon USING (true) WITH CHECK (true);"}).catch(()=>{});
-      await sb.from('app_state').upsert(payload,{onConflict:'id'}).catch(()=>{});
+      try{await sb.rpc('exec_sql',{sql:"CREATE TABLE IF NOT EXISTS app_state (id text PRIMARY KEY, data jsonb, updated_at timestamptz DEFAULT now()); ALTER TABLE app_state ENABLE ROW LEVEL SECURITY; CREATE POLICY IF NOT EXISTS \"Allow all for anon\" ON app_state FOR ALL TO anon USING (true) WITH CHECK (true);"})}catch(e){}
+      try{await sb.from('app_state').upsert(payload,{onConflict:'id'})}catch(e){}
     }else console.error('[SUPABASE] Errore blob:',blobErr.message,blobErr.code);
     await _syncRelational().catch(e=>console.error('[SUPABASE] Sync tabelle fallito:',e));
   }catch(e){console.error('[SUPABASE] Salvataggio fallito:',e)}
