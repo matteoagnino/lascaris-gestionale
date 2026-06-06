@@ -1,10 +1,16 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.14
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.15
 ================================================================================
   CHANGELOG
   ----------
+  v2.15 · 2026-06-03 · Hotfix: rimossa CSP (bloccava script inline)
+    · FIX  Rimosso meta CSP: 'unsafe-inline' in script-src non funziona
+           con app single-file su GitHub Pages (Chrome ignora il tag e
+           blocca l'intero script inline). L'app è tornata inaccessibile.
+           La sicurezza dei dati è garantita dalla RLS Supabase lato DB.
+
   v2.14 · 2026-06-03 · Fix sicurezza: CSP + meta tag + titolo versione
     · SEC  [M2] Aggiunto meta Content-Security-Policy: limita script a
            cdnjs.cloudflare.com e cdn.jsdelivr.net; connect-src limitato
@@ -230,7 +236,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="description" content="Gestionale LASCARIS 1954 ASD - Calcio dilettantistico dal Settore Giovanile alla Prima Squadra">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' cdnjs.cloudflare.com cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self' https://skyaknhivjkywuijgywx.supabase.co wss://skyaknhivjkywuijgywx.supabase.co; img-src 'self' data: blob:; font-src 'self' data:; worker-src blob: cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self';">
+<!-- CSP rimossa: incompatibile con app single-file (blocca inline script nonostante unsafe-inline). -->
+<!-- Per app single-file su GitHub Pages la protezione è garantita da Supabase RLS lato DB. -->
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
 <title>LASCARIS 1954 ASD — Gestionale v2.13</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
