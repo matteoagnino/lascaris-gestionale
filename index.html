@@ -786,10 +786,10 @@ const DEFAULT_STATE={
   incarichiCustom:[],  // Additional staff roles
   profiliPermessi:[
     {id:'prof_admin',nome:'Admin',incarico:'Admin',ruolo:'Amministratore di sistema',descrizione:'Accesso totale al gestionale inclusa gestione utenti',permessi:['all']},
-    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne']},
+    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne']},
     {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne']},
     {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda']},
-    {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','statDesc','rae']}
+    {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','schedeExt','statDesc','rae']}
   ]
 };
 
@@ -1053,7 +1053,8 @@ const NAV=[
     ]},
     {sh:'Area Scouting',items:[
       ['tippsExt','🔍','TIPPS Scouting Esterno'],
-      ['tippsExtP','🧤','TIPPS Esterno Portieri']
+      ['tippsExtP','🧤','TIPPS Esterno Portieri'],
+      ['schedeExt','📋','Archivio Schede Scouting']
     ]},
     {sh:'Area Analisi Statistiche',items:[
       ['statDesc','📊','Statistiche Descrittive'],
@@ -1625,8 +1626,8 @@ function orgComSendSMS(){const phones=orgComGetPhones();if(!phones.length){toast
 /* =============================================================
    VIEW: UTENTI & PERMESSI
    ============================================================= */
-const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','disciplina','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','impianti','parametri','storico','utenti'];
-const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',disciplina:'Squalifiche & Diffide',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi'};
+const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','disciplina','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','impianti','parametri','storico','utenti','schedeExt'];
+const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',disciplina:'Squalifiche & Diffide',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
 function allPerms(){return [...PERMS_BASE,...state.permessiCustom.map(p=>p.code)]}
 function permLabel(code){return PERM_LABELS_BASE[code]||(state.permessiCustom.find(p=>p.code===code)||{}).label||code}
 // Back-compat aliases
@@ -5640,6 +5641,94 @@ function docBody(tipo,p){
 /* =============================================================
    Fix: mdLoadFromAgenda filtering non-disputata
    ============================================================= */
+
+/* ── ARCHIVIO SCHEDE SCOUTING (TIPPS Esterno → Supabase) ── */
+VIEWS.schedeExt=function(c){
+  c.innerHTML=`<div class="vw"><div class="vh"><div><h1>Archivio Schede Scouting</h1><div class="sb2">Schede inviate dall'app TIPPS Scouting Esterno</div></div><div style="display:flex;gap:8px"><button class="btn btn-p btn-sm" onclick="loadSchedeExt()">↻ Aggiorna</button></div></div><div id="sce-body"><div class="es"><div class="ic">⏳</div><h3>Caricamento...</h3></div></div></div>`;
+  loadSchedeExt();
+};
+window._schedeExtData=[];
+function loadSchedeExt(){
+  const body=document.getElementById('sce-body');
+  if(!body)return;
+  body.innerHTML=`<div class="es"><div class="ic">⏳</div><h3>Caricamento...</h3></div>`;
+  sb.from('schede_scouting').select('*').order('created_at',{ascending:false}).then(({data,error})=>{
+    const b=document.getElementById('sce-body');
+    if(!b)return;
+    if(error||!data){b.innerHTML=`<div class="es"><div class="ic">❌</div><h3>Errore caricamento</h3><p>${esc((error||{}).message||'Riprova')}</p></div>`;return;}
+    if(!data.length){b.innerHTML=`<div class="es"><div class="ic">🔍</div><h3>Nessuna scheda ancora</h3><p>Le schede arrivano qui quando un osservatore usa l'app TIPPS Scouting ed esporta una valutazione.</p></div>`;return;}
+    window._schedeExtData=data;
+    const cats=new Set(data.map(s=>s.categoria).filter(Boolean));
+    const ossv=new Set(data.map(s=>s.osservatore).filter(Boolean));
+    b.innerHTML=`
+      <div class="grid g4" style="margin-bottom:14px">
+        <div class="kpi"><div class="l">Schede totali</div><div class="v">${data.length}</div></div>
+        <div class="kpi d"><div class="l">Osservatori</div><div class="v">${ossv.size}</div></div>
+        <div class="kpi w"><div class="l">Categorie</div><div class="v">${cats.size}</div></div>
+        <div class="kpi o"><div class="l">Ultima scheda</div><div class="v" style="font-size:13px">${fmtIt(data[0]?.created_at?.slice(0,10))}</div></div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--g50);border-bottom:2px solid var(--g200)">
+            <th style="padding:10px 12px;text-align:left">GIOCATORE</th>
+            <th style="padding:10px 12px;text-align:left">CAT.</th>
+            <th style="padding:10px 12px;text-align:left">OSSERVATORE</th>
+            <th style="padding:10px 12px;text-align:left">DATA</th>
+            <th style="padding:10px 12px;text-align:left">EVENTO</th>
+            <th style="padding:10px 12px;text-align:center">N°</th>
+            <th style="padding:10px 12px;text-align:center">T</th>
+            <th style="padding:10px 12px;text-align:center">I</th>
+            <th style="padding:10px 12px;text-align:center">P</th>
+            <th style="padding:10px 12px;text-align:center">S</th>
+            <th style="padding:10px 12px;text-align:center">V</th>
+            <th style="padding:10px 12px;text-align:center">MEDIA</th>
+          </tr></thead>
+          <tbody>${data.map((s,i)=>{
+            const m=s.medie||{};const mg=parseFloat(s.media_globale)||null;
+            const mc=!mg?'var(--g400)':mg>=4?'#16a34a':mg>=3?'#d97706':'#dc2626';
+            return `<tr style="border-bottom:1px solid var(--g100);cursor:pointer" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''" onclick="openSchedaExt(${i})">
+              <td style="padding:10px 12px"><strong>${esc((s.cognome||'')+' '+(s.nome||''))}</strong><div style="font-size:10px;color:var(--g400)">${esc(s.anno_nascita||'')}</div></td>
+              <td style="padding:10px 12px">${esc(s.categoria||'—')}</td>
+              <td style="padding:10px 12px">${esc(s.osservatore||'—')}</td>
+              <td style="padding:10px 12px">${fmtIt(s.data_obs||s.created_at?.slice(0,10))}</td>
+              <td style="padding:10px 12px">${esc(s.tipo_evento||'—')}</td>
+              <td style="padding:10px 12px;text-align:center">${s.n_obs||1}</td>
+              <td style="padding:10px 12px;text-align:center;color:var(--g500)">${m.T!=null?parseFloat(m.T).toFixed(1):'—'}</td>
+              <td style="padding:10px 12px;text-align:center;color:var(--g500)">${m.I!=null?parseFloat(m.I).toFixed(1):'—'}</td>
+              <td style="padding:10px 12px;text-align:center;color:var(--g500)">${m.P!=null?parseFloat(m.P).toFixed(1):'—'}</td>
+              <td style="padding:10px 12px;text-align:center;color:var(--g500)">${m.S!=null?parseFloat(m.S).toFixed(1):'—'}</td>
+              <td style="padding:10px 12px;text-align:center;color:var(--g500)">${m.V!=null?parseFloat(m.V).toFixed(1):'—'}</td>
+              <td style="padding:10px 12px;text-align:center"><strong style="color:${mc};font-size:14px">${mg?mg.toFixed(2):'—'}</strong></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>`;
+  });
+}
+function openSchedaExt(i){
+  const s=window._schedeExtData[i];if(!s)return;
+  const m=s.medie||{};const sint=s.sintesi||{};const mg=parseFloat(s.media_globale)||null;
+  openM(`${esc(s.cognome||'')} ${esc(s.nome||'')} · Scheda TIPPS Scouting`,`
+    <div style="font-size:13px">
+      <div class="grid g3" style="margin-bottom:14px">
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Categoria</div><strong>${esc(s.categoria||'—')}</strong></div>
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Anno nascita</div><strong>${esc(s.anno_nascita||'—')}</strong></div>
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Piede</div><strong>${esc(s.piede||'—')}</strong></div>
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Ruolo</div><strong>${esc(s.ruolo||'—')}</strong></div>
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Osservatore</div><strong>${esc(s.osservatore||'—')}</strong></div>
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Data obs.</div><strong>${fmtIt(s.data_obs||s.created_at?.slice(0,10))}</strong></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        ${['T','I','P','S','V'].map(a=>`<div style="flex:1;text-align:center;padding:10px 4px;background:var(--g50);border-radius:var(--rs)"><div style="font-size:20px;font-weight:700">${m[a]!=null?parseFloat(m[a]).toFixed(1):'—'}</div><div style="font-size:10px;color:var(--g400)">${a}</div></div>`).join('')}
+        <div style="flex:1;text-align:center;padding:10px 4px;background:#0A0A0A;border-radius:var(--rs)"><div style="font-size:20px;font-weight:700;color:white">${mg?mg.toFixed(2):'—'}</div><div style="font-size:10px;color:#888">▲</div></div>
+      </div>
+      ${sint.puntiForza?`<div style="margin-bottom:10px"><div style="font-size:10px;color:var(--g400);text-transform:uppercase;margin-bottom:4px">Punti di forza</div><div style="padding:8px;background:#f0fdf4;border-radius:var(--rs)">${esc(sint.puntiForza)}</div></div>`:''}
+      ${sint.priorita?`<div style="margin-bottom:10px"><div style="font-size:10px;color:var(--g400);text-transform:uppercase;margin-bottom:4px">Priorità di sviluppo</div><div style="padding:8px;background:#fff7ed;border-radius:var(--rs)">${esc(sint.priorita)}</div></div>`:''}
+      ${sint.note?`<div style="margin-bottom:10px"><div style="font-size:10px;color:var(--g400);text-transform:uppercase;margin-bottom:4px">Note</div><div style="padding:8px;background:var(--g50);border-radius:var(--rs)">${esc(sint.note)}</div></div>`:''}
+      <div style="font-size:10px;color:var(--g400);text-align:right;margin-top:8px">Archiviata: ${new Date(s.created_at||'').toLocaleString('it-IT')} · Club: ${esc(s.club||'—')}</div>
+    </div>
+  `,`<button class="btn btn-p" onclick="closeM()">Chiudi</button>`);
+}
 
 /* renderChart helper (missing from v2.2 for compatibility) */
 function renderChart(id,config){requestAnimationFrame(()=>{const el=document.getElementById(id);if(!el)return;if(el._ch){el._ch.destroy()}el._ch=new Chart(el,config)})}
