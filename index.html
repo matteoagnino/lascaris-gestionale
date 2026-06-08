@@ -1,10 +1,17 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.20
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.21
 ================================================================================
   CHANGELOG
   ----------
+  v2.21 · 2026-06-08 · Piano Stagionale (macrocicli + mesocicli)
+    · NEW  Piano Stagionale: organizza la stagione per stagioni (es. 2025/26)
+           con macrocicli (nome, focus, inizio/fine, obiettivi). Timeline Gantt
+           CSS visiva con etichette mesi e barre colorate per focus.
+    · NEW  Mesocicli: dentro ogni macrociclo aggiungi microblocchi settimanali
+           con focus, carico previsto (basso/medio/alto) e note.
+
   v2.20 · 2026-06-08 · Obiettivi di Sviluppo Giocatore + Carico & RPE
     · NEW  Obiettivi Sviluppo: definisci obiettivi tecnici/tattici/fisici/mentali
            per ogni giocatore con scadenza, % avanzamento e stato (in corso /
@@ -557,7 +564,7 @@ function loadStore(){
   // Try localStorage first for instant load, then ALWAYS sync from Supabase
   let d=null;
   try{const s=localStorage.getItem(STORE);d=s?JSON.parse(s):null;if(d){
-    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
+    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','pianoStagionale','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
     migrateStateV23(d);
     const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(d.users||[]).find(x=>x.id===uref.id);if(u)d.currentUser=u}}
   }catch(e){}
@@ -599,7 +606,7 @@ async function loadFromSupabase(){
       const localTs=localStorage.getItem(STORE+'_ts')||'';
       if(row.updated_at>localTs||!localTs){
         const d=row.data;
-        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
+        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','pianoStagionale','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
         if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
         migrateStateV23(d);Object.assign(state,d);
         const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(state.users||[]).find(x=>x.id===uref.id);if(u)state.currentUser=u}
@@ -830,13 +837,14 @@ const DEFAULT_STATE={
   reportScout:[],
   obiettivi:[],
   rpeLog:[],
+  pianoStagionale:[],
   permessiCustom:[],  // Additional permissions created by admin
   incarichiCustom:[],  // Additional staff roles
   profiliPermessi:[
     {id:'prof_admin',nome:'Admin',incarico:'Admin',ruolo:'Amministratore di sistema',descrizione:'Accesso totale al gestionale inclusa gestione utenti',permessi:['all']},
-    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe']},
-    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe']},
-    {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda','doppieConv','confronto','fascicolo','obiettivi','rpe']},
+    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale']},
+    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale']},
+    {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda','doppieConv','confronto','fascicolo','obiettivi','rpe','pianoStagionale']},
     {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','schedeExt','statDesc','rae','confronto','reportScout']}
   ]
 };
@@ -1096,7 +1104,8 @@ const NAV=[
       ['doppieConv','🔼','Doppie Convocazioni'],
       ['fascicolo','📁','Fascicolo Giocatore'],
       ['obiettivi','🎯','Obiettivi Sviluppo'],
-      ['rpe','⚡','Carico & RPE']
+      ['rpe','⚡','Carico & RPE'],
+      ['pianoStagionale','🗓','Piano Stagionale']
     ]},
     {sh:'Area Valutazione',items:[
       ['tippsInt','★','TIPPS Scouting Interno'],
@@ -1681,8 +1690,8 @@ function orgComSendSMS(){const phones=orgComGetPhones();if(!phones.length){toast
 /* =============================================================
    VIEW: UTENTI & PERMESSI
    ============================================================= */
-const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','impianti','parametri','storico','utenti','schedeExt'];
-const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',obiettivi:'Obiettivi Sviluppo',rpe:'Carico & RPE',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
+const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','impianti','parametri','storico','utenti','schedeExt'];
+const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',obiettivi:'Obiettivi Sviluppo',rpe:'Carico & RPE',pianoStagionale:'Piano Stagionale',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
 function allPerms(){return [...PERMS_BASE,...state.permessiCustom.map(p=>p.code)]}
 function permLabel(code){return PERM_LABELS_BASE[code]||(state.permessiCustom.find(p=>p.code===code)||{}).label||code}
 // Back-compat aliases
@@ -5818,6 +5827,209 @@ function delSchedeExtAll(){
 }
 function toggleAllSchedeExt(checked){
   document.querySelectorAll('.sce-chk').forEach(x=>x.checked=checked);
+}
+
+/* ── PIANO STAGIONALE ── */
+VIEWS.pianoStagionale=function(c){
+  const piano=(state.pianoStagionale||[]);
+  // Raggruppa per stagione
+  const stagioni=[...new Set(piano.map(m=>m.stagione||'—'))].sort().reverse();
+  const selSt=state._psSt||(stagioni[0]||'');
+  const macros=piano.filter(m=>m.stagione===selSt).sort((a,b)=>a.inizio.localeCompare(b.inizio));
+  const focusColor={fisico:'#3b82f6',tecnico:'#16a34a',tattico:'#d97706',misto:'#7c3aed',preparazione:'#ea580c',recupero:'#64748b'};
+  const focusLabel={fisico:'💪 Fisico',tecnico:'⚙️ Tecnico',tattico:'🧠 Tattico',misto:'🔀 Misto',preparazione:'🏃 Preparazione',recupero:'🛌 Recupero'};
+  // Timeline: calcola la larghezza relativa di ogni macrociclo tra inizio e fine stagione
+  let tlHtml='';
+  if(macros.length>=1){
+    const starts=macros.map(m=>m.inizio).filter(Boolean);
+    const ends=macros.map(m=>m.fine).filter(Boolean);
+    if(starts.length&&ends.length){
+      const tMin=new Date(starts.reduce((a,b)=>a<b?a:b));
+      const tMax=new Date(ends.reduce((a,b)=>a>b?a:b));
+      const totDays=(tMax-tMin)/(1000*60*60*24)||1;
+      const bars=macros.map(m=>{
+        if(!m.inizio||!m.fine)return'';
+        const s=new Date(m.inizio);const e=new Date(m.fine);
+        const left=Math.round((s-tMin)/totDays/864/100*10)/10;
+        const width=Math.max(2,Math.round((e-s)/totDays/864/100*10)/10);
+        const col=focusColor[m.focus]||'#64748b';
+        return `<div title="${m.nome} · ${fmtIt(m.inizio)} → ${fmtIt(m.fine)}" onclick="openEditMacro('${m.id}')" style="position:absolute;left:${left}%;width:${width}%;height:36px;background:${col};border-radius:6px;cursor:pointer;display:flex;align-items:center;padding:0 8px;overflow:hidden;box-sizing:border-box;transition:opacity .15s" onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'"><span style="color:#fff;font-size:11px;font-weight:600;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${esc(m.nome)}</span></div>`;
+      }).join('');
+      // Mesi etichette
+      const monthLabels=[];
+      const cur=new Date(tMin);cur.setDate(1);
+      while(cur<=tMax){
+        const pct=Math.round((cur-tMin)/totDays/864/100*10)/10;
+        monthLabels.push(`<span style="position:absolute;left:${pct}%;font-size:10px;color:var(--g400);transform:translateX(-50%)">${cur.toLocaleDateString('it',{month:'short'})}</span>`);
+        cur.setMonth(cur.getMonth()+1);
+      }
+      tlHtml=`<div class="card" style="margin-bottom:16px;overflow:hidden">
+        <div style="font-weight:600;font-size:12px;margin-bottom:14px">📊 Timeline stagione ${esc(selSt)}</div>
+        <div style="position:relative;height:22px;margin-bottom:10px">${monthLabels.join('')}</div>
+        <div style="position:relative;height:36px;background:var(--g100);border-radius:6px">${bars}</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">${Object.entries(focusLabel).map(([k,v])=>`<span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:${focusColor[k]||'#64748b'};display:inline-block"></span>${v}</span>`).join('')}</div>
+      </div>`;
+    }
+  }
+  c.innerHTML=`
+  <div class="vw">
+    <div class="vh"><div><h1>Piano Stagionale</h1><div class="sb2">Struttura la stagione in macrocicli e mesocicli con focus e obiettivi</div></div>
+      <button class="btn btn-p btn-sm" onclick="openNuovoMacro()">+ Nuovo macrociclo</button></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      <select id="ps_st" onchange="state._psSt=this.value;saveStore();renderView()" style="padding:8px 12px;border:1px solid var(--g300);border-radius:var(--rs);font-size:13px">
+        <option value="">— Seleziona stagione —</option>
+        ${stagioni.map(s=>`<option value="${s}" ${selSt===s?'selected':''}>${esc(s)}</option>`).join('')}
+      </select>
+      <button class="btn btn-s btn-sm" onclick="openNuovaStagione()">+ Nuova stagione</button>
+    </div>
+    ${!selSt?`<div class="es"><div class="ic">🗓</div><h3>Nessuna stagione selezionata</h3><p>Crea una nuova stagione con il pulsante "+ Nuova stagione".</p></div>`:
+    !macros.length?`<div class="es"><div class="ic">📋</div><h3>Nessun macrociclo per ${esc(selSt)}</h3><p>Aggiungi il primo macrociclo con "+ Nuovo macrociclo".</p></div>`:`
+    ${tlHtml}
+    <div style="display:grid;gap:12px">
+      ${macros.map(m=>{
+        const col=focusColor[m.focus]||'#64748b';
+        const durDays=m.inizio&&m.fine?Math.round((new Date(m.fine)-new Date(m.inizio))/(1000*60*60*24)):null;
+        return `<div class="card" style="border-left:4px solid ${col};padding:14px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+                <span class="bdg" style="background:${col}20;color:${col};font-size:10px">${focusLabel[m.focus]||m.focus}</span>
+                ${durDays!=null?`<span class="bdg" style="font-size:10px">⏱ ${durDays} giorni</span>`:''}
+              </div>
+              <div style="font-weight:700;font-size:15px;margin-bottom:3px">${esc(m.nome)}</div>
+              <div style="font-size:12px;color:var(--g500)">${m.inizio?fmtIt(m.inizio):''} ${m.inizio&&m.fine?'→':''} ${m.fine?fmtIt(m.fine):''}</div>
+              ${m.obiettivi?`<div style="font-size:12px;margin-top:8px;padding:8px;background:var(--g50);border-radius:var(--rs)"><strong style="font-size:10px;color:var(--g400);display:block;margin-bottom:2px">OBIETTIVI</strong>${esc(m.obiettivi)}</div>`:''}
+              ${m.note?`<div style="font-size:11px;color:var(--g500);margin-top:6px">${esc(m.note)}</div>`:''}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+              <div style="font-size:11px;color:var(--g500)">${(m.mesocicli||[]).length} mesocicli</div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm btn-s" onclick="openMesocicli('${m.id}')">📋 Mesocicli</button>
+                <button class="btn btn-sm btn-s" onclick="openEditMacro('${m.id}')">✏️</button>
+                <button class="btn btn-sm btn-d" onclick="delMacro('${m.id}')">🗑</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`}
+  </div>`;
+};
+function openNuovaStagione(){
+  openM('Nuova stagione',`
+    <div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:6px">Nome stagione *</label>
+      <input id="ps_stnm" placeholder="es. 2025/2026" style="width:100%;padding:10px;border:1px solid var(--g300);border-radius:var(--rs);font-size:14px"></div>`,
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveNuovaStagione()">Crea</button>`);
+  setTimeout(()=>document.getElementById('ps_stnm')?.focus(),50);
+}
+function saveNuovaStagione(){
+  const nm=document.getElementById('ps_stnm')?.value.trim();
+  if(!nm){toast('Nome stagione obbligatorio','e');return;}
+  state._psSt=nm;saveStore();closeM();renderView();toast('Stagione "'+nm+'" creata','s');
+}
+function _macroForm(m){
+  const foci=['fisico','tecnico','tattico','misto','preparazione','recupero'];
+  return `
+    <div class="fg" style="margin-bottom:12px">
+      <div class="ff" style="flex:2"><label>Nome macrociclo *</label><input id="mac_nm" value="${m?esc(m.nome):''}" placeholder="es. Preparazione estiva" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+      <div class="ff"><label>Focus *</label>
+        <select id="mac_fc" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          ${foci.map(f=>`<option value="${f}" ${m&&m.focus===f?'selected':''}>${f.charAt(0).toUpperCase()+f.slice(1)}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="fg" style="margin-bottom:12px">
+      <div class="ff"><label>Data inizio *</label><input type="date" id="mac_ini" value="${m?m.inizio:''}"></div>
+      <div class="ff"><label>Data fine *</label><input type="date" id="mac_fin" value="${m?m.fine:''}"></div>
+    </div>
+    <div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Obiettivi del periodo</label>
+      <textarea id="mac_ob" rows="2" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs);font:inherit;font-size:12px;resize:vertical" placeholder="Cosa vogliamo raggiungere in questa fase?">${m?esc(m.obiettivi||''):''}</textarea></div>
+    <div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Note</label>
+      <input id="mac_nt" value="${m?esc(m.note||''):''}" placeholder="Note aggiuntive..." style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>`;
+}
+function openNuovoMacro(){
+  if(!state._psSt){toast('Seleziona prima una stagione','e');return;}
+  openM('Nuovo macrociclo — '+state._psSt,_macroForm(null),
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveMacro()">Salva</button>`);
+}
+function openEditMacro(id){
+  const m=(state.pianoStagionale||[]).find(x=>x.id===id);if(!m)return;
+  openM('Modifica macrociclo',_macroForm(m),
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveMacro('${id}')">Aggiorna</button>`);
+}
+function saveMacro(id){
+  const nm=document.getElementById('mac_nm')?.value.trim();
+  const ini=document.getElementById('mac_ini')?.value;
+  const fin=document.getElementById('mac_fin')?.value;
+  if(!nm||!ini||!fin){toast('Nome e date obbligatori','e');return;}
+  if(ini>fin){toast('Data fine deve essere dopo inizio','e');return;}
+  if(!state.pianoStagionale)state.pianoStagionale=[];
+  if(id){
+    const idx=state.pianoStagionale.findIndex(x=>x.id===id);
+    if(idx>=0)Object.assign(state.pianoStagionale[idx],{nome:nm,focus:document.getElementById('mac_fc')?.value,inizio:ini,fine:fin,obiettivi:document.getElementById('mac_ob')?.value||'',note:document.getElementById('mac_nt')?.value||''});
+  } else {
+    state.pianoStagionale.push({id:uid(),stagione:state._psSt,nome:nm,focus:document.getElementById('mac_fc')?.value,inizio:ini,fine:fin,obiettivi:document.getElementById('mac_ob')?.value||'',note:document.getElementById('mac_nt')?.value||'',mesocicli:[]});
+  }
+  saveStore();closeM();renderView();toast('Macrociclo salvato','s');
+}
+function delMacro(id){
+  if(!confirm('Eliminare questo macrociclo e tutti i suoi mesocicli?'))return;
+  state.pianoStagionale=state.pianoStagionale.filter(x=>x.id!==id);
+  saveStore();renderView();toast('Eliminato','s');
+}
+function openMesocicli(macId){
+  const mac=(state.pianoStagionale||[]).find(x=>x.id===macId);if(!mac)return;
+  const mes=mac.mesocicli||[];
+  const caricoColor={basso:'#16a34a',medio:'#d97706',alto:'#dc2626'};
+  const focusLabel={fisico:'💪',tecnico:'⚙️',tattico:'🧠',misto:'🔀',recupero:'🛌'};
+  openM(`Mesocicli — ${esc(mac.nome)}`,`
+    <div style="margin-bottom:12px">
+      <button class="btn btn-p btn-sm" onclick="openNuovoMeso('${macId}')">+ Aggiungi mesociclo</button>
+    </div>
+    ${!mes.length?'<p style="color:var(--g500);font-size:12px;text-align:center;padding:20px">Nessun mesociclo. Aggiungine uno con il pulsante sopra.</p>':`
+    <div style="display:grid;gap:8px;max-height:400px;overflow-y:auto">
+      ${mes.slice().sort((a,b)=>a.settimana.localeCompare(b.settimana)).map(ms=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--g50);border-radius:var(--rs)">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--g500)">Settimana ${fmtIt(ms.settimana)}</div>
+            <div style="font-weight:600;font-size:13px">${focusLabel[ms.focus]||''} ${ms.focus.charAt(0).toUpperCase()+ms.focus.slice(1)}${ms.note?' · <span style="font-weight:400;color:var(--g500)">'+esc(ms.note)+'</span>':''}</div>
+          </div>
+          <span style="padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;background:${caricoColor[ms.carico]||'#64748b'}20;color:${caricoColor[ms.carico]||'#64748b'}">${ms.carico}</span>
+          <button class="btn btn-sm btn-d" onclick="delMeso('${macId}','${ms.id}')">🗑</button>
+        </div>`).join('')}
+    </div>`}`,
+    `<button class="btn btn-p" onclick="closeM()">Chiudi</button>`);
+}
+function openNuovoMeso(macId){
+  const mac=(state.pianoStagionale||[]).find(x=>x.id===macId);if(!mac)return;
+  openM(`Nuovo mesociclo — ${esc(mac.nome)}`,`
+    <div class="fg" style="margin-bottom:12px">
+      <div class="ff"><label>Settimana (lunedì) *</label><input type="date" id="ms_sw"></div>
+      <div class="ff"><label>Focus</label>
+        <select id="ms_fc" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          ${['fisico','tecnico','tattico','misto','recupero'].map(f=>`<option value="${f}">${f.charAt(0).toUpperCase()+f.slice(1)}</option>`).join('')}
+        </select></div>
+      <div class="ff"><label>Carico previsto</label>
+        <select id="ms_ca" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          <option value="basso">🟢 Basso</option><option value="medio" selected>🟡 Medio</option><option value="alto">🔴 Alto</option>
+        </select></div>
+    </div>
+    <div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Note</label>
+      <input id="ms_nt" placeholder="es. Scarico post-partita, focus su palla inattiva..." style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>`,
+    `<button class="btn btn-s" onclick="openMesocicli('${macId}')">← Indietro</button><button class="btn btn-p" onclick="saveMeso('${macId}')">Salva</button>`);
+}
+function saveMeso(macId){
+  const sw=document.getElementById('ms_sw')?.value;
+  if(!sw){toast('Settimana obbligatoria','e');return;}
+  const mac=(state.pianoStagionale||[]).find(x=>x.id===macId);if(!mac)return;
+  if(!mac.mesocicli)mac.mesocicli=[];
+  mac.mesocicli.push({id:uid(),settimana:sw,focus:document.getElementById('ms_fc')?.value,carico:document.getElementById('ms_ca')?.value,note:document.getElementById('ms_nt')?.value||''});
+  saveStore();openMesocicli(macId);toast('Mesociclo aggiunto','s');
+}
+function delMeso(macId,msId){
+  if(!confirm('Eliminare questo mesociclo?'))return;
+  const mac=(state.pianoStagionale||[]).find(x=>x.id===macId);if(!mac)return;
+  mac.mesocicli=mac.mesocicli.filter(x=>x.id!==msId);
+  saveStore();openMesocicli(macId);toast('Eliminato','s');
 }
 
 /* ── OBIETTIVI DI SVILUPPO GIOCATORE ── */
