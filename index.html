@@ -1,10 +1,24 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.22
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.23
 ================================================================================
   CHANGELOG
   ----------
+  v2.23 · 2026-06-08 · Editor SVG Schemi Tattici
+    · NEW  Editor tattico interattivo (🎨) nei Schemi Tattici: campo SVG
+           portrait 11v11 con linee accurate (area, centrocampo, porte).
+    · NEW  Giocatori draggabili con pointer events (touch + mouse); colori
+           ⬜ bianco (nostra squadra), 🔴 rosso (avversario), 🟡 giallo (jolly).
+    · NEW  Frecce click-to-click: movimento (bianco), passaggio (giallo tratto),
+           corsa con palla (blu puntato) con freccia SVG.
+    · NEW  Auto-popola posizioni da moduli predefiniti (1-4-3-3, 1-4-4-2,
+           1-3-5-2, 1-4-2-3-1, 1-4-3-2-1, 1-5-3-2, 1-3-4-3, 1-4-5-1).
+    · NEW  Salvataggio schema come SVG inline — thumbnail visibile nella
+           card dello schema.
+    · NEW  Bottone 🧩 in Minutaggi → mostra schemi assegnati alla partita
+           con thumbnail SVG e note tattiche.
+
   v2.22 · 2026-06-08 · Schemi Tattici + Canvas revamp + PDF scheda
     · NEW  Schemi Tattici: libreria schemi (modulo/palla inattiva/pressing/
            offensiva/difensiva) con moduli predefiniti (1-4-3-3 ecc.) +
@@ -4187,7 +4201,7 @@ VIEWS.minutaggi=function(c){
       ${!ms.length?`<div class="es"><div class="ic">⏱</div><h3>Nessuna partita archiviata</h3><p>Quando concludi una partita in Match Day Live e clicchi "Archivia", finirà qui col dettaglio tecnico completo.</p><button class="btn btn-p" onclick="goto('matchday')">Vai a Match Day</button></div>`:`
         <div class="card"><div class="tw"><table>
           <thead><tr><th>Data</th><th>Squadra</th><th>Tipo</th><th>Sede</th><th>Avversario</th><th>Impianto</th><th>Risultato</th><th>Minuti totali</th><th>Eventi</th><th>Azioni</th></tr></thead>
-          <tbody>${ms.map(m=>{const totalMin=m.roster.reduce((s,r)=>s+r.minutes,0);const impN=m.impiantoEsterno||(state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||m.impiantoLibero||'—';return `<tr>
+          <tbody>${ms.map(m=>{const totalMin=m.roster.reduce((s,r)=>s+r.minutes,0);const impN=m.impiantoEsterno||(state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||m.impiantoLibero||'—';const schNc=(state.schemiTattici||[]).filter(s=>(s.matchIds||[]).includes(m.id)).length;return `<tr>
             <td>${fmtIt(m.data)}</td>
             <td>${groupChip(m.categoria,m.gruppo)}</td>
             <td><span class="bdg bdg-gray">${esc(m.tipo)}</span></td>
@@ -4197,7 +4211,7 @@ VIEWS.minutaggi=function(c){
             <td><strong style="color:${m.home>m.away?'var(--green)':m.home<m.away?'var(--red)':'var(--g500)'}">${m.home}-${m.away}</strong></td>
             <td>${totalMin}'</td>
             <td>${m.events.length}</td>
-            <td style="white-space:nowrap"><button class="btn btn-sm btn-s" onclick="showMatchDetail('${m.id}')" title="Dettaglio">📋</button> <button class="btn btn-sm btn-s" onclick="openReportPartita('${m.id}')" title="Report partita" style="${m.report?'background:#dcfce7':''}">📝${m.report?'✓':''}</button> <button class="btn btn-sm btn-s" onclick="editMatchGrid('${m.id}')" title="Modifica griglia">📊</button> <button class="btn btn-sm btn-s" onclick="reopenMatchLive('${m.id}')" title="Riapri nel Live">▶</button> <button class="btn btn-sm btn-s" onclick="downloadMatchPDF('${m.id}')" title="Scarica PDF">📄</button> <button class="btn btn-sm btn-d" onclick="delMatch('${m.id}')" title="Elimina">🗑</button></td>
+            <td style="white-space:nowrap"><button class="btn btn-sm btn-s" onclick="showMatchDetail('${m.id}')" title="Dettaglio">📋</button> <button class="btn btn-sm btn-s" onclick="openReportPartita('${m.id}')" title="Report partita" style="${m.report?'background:#dcfce7':''}">📝${m.report?'✓':''}</button> <button class="btn btn-sm btn-s" onclick="openSchemiPartita('${m.id}')" title="Schemi assegnati" style="${schNc?'background:#dbeafe':''}">🧩${schNc?schNc:''}</button> <button class="btn btn-sm btn-s" onclick="editMatchGrid('${m.id}')" title="Modifica griglia">📊</button> <button class="btn btn-sm btn-s" onclick="reopenMatchLive('${m.id}')" title="Riapri nel Live">▶</button> <button class="btn btn-sm btn-s" onclick="downloadMatchPDF('${m.id}')" title="Scarica PDF">📄</button> <button class="btn btn-sm btn-d" onclick="delMatch('${m.id}')" title="Elimina">🗑</button></td>
           </tr>`}).join('')}</tbody>
         </table></div></div>
       ${Object.values(byTeam).map(tm=>minutaggiSummary(tm)).join('')}
@@ -5942,10 +5956,12 @@ VIEWS.schemiTattici=function(c){
               <div style="font-size:11px;color:var(--g400)">${fmtIt(s.dataCreazione)}</div>
               <div style="display:flex;gap:6px">
                 <button class="btn btn-sm btn-s" onclick="openAssegnaPartita('${s.id}')" title="Assegna a partita">⚽</button>
+                <button class="btn btn-sm btn-s" onclick="openEditorSVG('${s.id}')" title="Editor tattico">🎨</button>
                 ${canEdit?`<button class="btn btn-sm btn-s" onclick="openEditSchema('${s.id}')">✏️</button><button class="btn btn-sm btn-d" onclick="delSchema('${s.id}')">🗑</button>`:''}
               </div>
             </div>
           </div>
+          ${s.svgXml?`<div style="margin-top:8px;border:1px solid var(--g200);border-radius:4px;overflow:hidden;height:80px;background:#2d6a3f;line-height:0">${s.svgXml}</div>`:''}
         </div>`;
       }).join('')}
     </div>`}
@@ -6018,6 +6034,244 @@ function saveAssegnaPartita(schId){
   const checked=[...document.querySelectorAll('#modalEl input[type=checkbox]:checked')].map(el=>el.value);
   sch.matchIds=checked;
   saveStore();closeM();renderView();toast('Assegnazione aggiornata','s');
+}
+
+/* ── EDITOR SVG SCHEMI TATTICI ── */
+let edState=null;
+const ED_FORM={
+  '1-4-3-3':  [[180,482,'POR'],[70,418,'TS'],[133,400,'DC'],[227,400,'DC'],[290,418,'TD'],[100,298,'CC'],[180,288,'MC'],[260,298,'CC'],[88,158,'ESS'],[180,130,'AC'],[272,158,'ESD']],
+  '1-4-4-2':  [[180,482,'POR'],[70,418,'TS'],[133,400,'DC'],[227,400,'DC'],[290,418,'TD'],[78,298,'CS'],[147,285,'MC'],[213,285,'MC'],[282,298,'CD'],[147,148,'AC'],[213,148,'AC']],
+  '1-3-5-2':  [[180,482,'POR'],[112,410,'DC'],[180,405,'DC'],[248,410,'DC'],[67,308,'ES'],[122,292,'CC'],[180,282,'MC'],[238,292,'CC'],[293,308,'ED'],[147,142,'AC'],[213,142,'AC']],
+  '1-4-2-3-1':[[180,482,'POR'],[70,418,'TS'],[133,400,'DC'],[227,400,'DC'],[290,418,'TD'],[147,322,'MC'],[213,322,'MC'],[93,222,'TRS'],[180,215,'TC'],[267,222,'TRD'],[180,125,'PC']],
+  '1-4-3-2-1':[[180,482,'POR'],[70,418,'TS'],[133,400,'DC'],[227,400,'DC'],[290,418,'TD'],[100,305,'CC'],[180,295,'MC'],[260,305,'CC'],[138,200,'TR'],[222,200,'TR'],[180,120,'PC']],
+  '1-5-3-2':  [[180,482,'POR'],[57,420,'TS'],[117,408,'DC'],[180,402,'DC'],[243,408,'DC'],[303,420,'TD'],[113,295,'CC'],[180,285,'MC'],[247,295,'CC'],[147,148,'AC'],[213,148,'AC']],
+  '1-3-4-3':  [[180,482,'POR'],[118,410,'DC'],[180,406,'DC'],[242,410,'DC'],[63,310,'ES'],[140,295,'CC'],[220,295,'CC'],[297,310,'ED'],[90,158,'ESS'],[180,130,'AC'],[270,158,'ESD']],
+  '1-4-5-1':  [[180,482,'POR'],[70,418,'TS'],[133,400,'DC'],[227,400,'DC'],[290,418,'TD'],[78,285,'ES'],[130,277,'CC'],[180,272,'MC'],[230,277,'CC'],[282,285,'ED'],[180,122,'PC']]
+};
+function edField(){
+  return `<defs>
+    <marker id="mka" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="white"/></marker>
+    <marker id="mkr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#fbbf24"/></marker>
+    <marker id="mkb" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#93c5fd"/></marker>
+  </defs>
+  <rect width="360" height="540" fill="#2d6a3f"/>
+  <rect x="20" y="15" width="320" height="510" stroke="white" stroke-width="1.8" fill="none"/>
+  <line x1="20" y1="270" x2="340" y2="270" stroke="white" stroke-width="1.8"/>
+  <circle cx="180" cy="270" r="42" stroke="white" stroke-width="1.8" fill="none"/>
+  <circle cx="180" cy="270" r="3" fill="white"/>
+  <rect x="108" y="15" width="144" height="62" stroke="white" stroke-width="1.4" fill="none"/>
+  <rect x="138" y="15" width="84" height="28" stroke="white" stroke-width="1.4" fill="none"/>
+  <rect x="108" y="463" width="144" height="62" stroke="white" stroke-width="1.4" fill="none"/>
+  <rect x="138" y="497" width="84" height="28" stroke="white" stroke-width="1.4" fill="none"/>
+  <rect x="157" y="3" width="46" height="14" stroke="white" stroke-width="1.2" fill="#777"/>
+  <rect x="157" y="523" width="46" height="14" stroke="white" stroke-width="1.2" fill="#777"/>
+  <circle cx="180" cy="90" r="2.5" fill="white"/>
+  <circle cx="180" cy="450" r="2.5" fill="white"/>`;
+}
+function edPlayerSvg(p,sel){
+  const fills={w:'#ffffff',r:'#dc2626',y:'#fbbf24',b:'#2563eb'};
+  const tcs={w:'#111',r:'#fff',y:'#111',b:'#fff'};
+  const fill=fills[p.c]||'#fff';
+  const tc=tcs[p.c]||'#111';
+  const ring=sel?'stroke="#ffd700" stroke-width="3"':'stroke="#000" stroke-width="1.5"';
+  const nm=p.nm?(p.nm.trim().split(/\s+/).pop()||'').substring(0,10):'';
+  return `<g id="edp_${p.id}" data-pid="${p.id}" style="cursor:move">
+    <circle cx="${p.x}" cy="${p.y}" r="15" fill="${fill}" ${ring}/>
+    <text x="${p.x}" y="${p.y+4}" text-anchor="middle" font-size="9" font-weight="700" fill="${tc}" pointer-events="none" style="user-select:none">${esc(p.r)}</text>
+    ${nm?`<text x="${p.x}" y="${p.y+27}" text-anchor="middle" font-size="7.5" fill="white" pointer-events="none" style="user-select:none">${esc(nm)}</text>`:''}
+  </g>`;
+}
+function edArrowSvg(f,sel){
+  const dx=f.x2-f.x1,dy=f.y2-f.y1,len=Math.sqrt(dx*dx+dy*dy)||1;
+  const nx=dx/len,ny=dy/len;
+  const x1=(f.x1+nx*16).toFixed(1);const y1=(f.y1+ny*16).toFixed(1);
+  const x2=(f.x2-nx*18).toFixed(1);const y2=(f.y2-ny*18).toFixed(1);
+  const mk=f.t==='pass'?'mkr':f.t==='run'?'mkb':'mka';
+  const dash=f.t==='pass'?'7,4':f.t==='run'?'3,2':'none';
+  const col=sel?'#ffd700':'white';const sw=sel?2.5:1.8;
+  return `<line id="eda_${f.id}" data-fid="${f.id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${sw}" stroke-dasharray="${dash}" marker-end="url(#${mk})" style="cursor:pointer"/>`;
+}
+function edRender(){
+  const svg=document.getElementById('ed_svg');if(!svg||!edState)return;
+  let h=edField();
+  edState.frecce.forEach(f=>{h+=edArrowSvg(f,edState.selId===f.id);});
+  if(edState.arrowFrom&&edState.arrowPt){
+    h+=`<line x1="${edState.arrowFrom.x.toFixed(1)}" y1="${edState.arrowFrom.y.toFixed(1)}" x2="${edState.arrowPt.x.toFixed(1)}" y2="${edState.arrowPt.y.toFixed(1)}" stroke="#ffd700" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.8" pointer-events="none"/>`;
+  }
+  edState.pos.forEach(p=>{h+=edPlayerSvg(p,edState.selId===p.id);});
+  svg.innerHTML=h;
+  edAttach();
+  const sb=document.getElementById('ed_status');
+  if(sb)sb.textContent=edState.tool==='arrow'?(edState.arrowFrom?'🎯 Clicca destinazione freccia':'🎯 Clicca punto di partenza freccia'):edState.tool==='del'?'🗑 Clicca su un elemento per eliminarlo':'🖱 Trascina giocatori · clicca frecce per selezionarle';
+}
+function edAttach(){
+  const svg=document.getElementById('ed_svg');if(!svg)return;
+  svg.querySelectorAll('[data-pid]').forEach(function(el){el.addEventListener('pointerdown',edPlayerDown,{passive:false});});
+  svg.querySelectorAll('[data-fid]').forEach(function(el){
+    el.addEventListener('click',function(e){
+      if(!edState)return;
+      const fid=e.currentTarget.dataset.fid;
+      if(edState.tool==='del'){edState.frecce=edState.frecce.filter(function(f){return f.id!==fid;});edState.selId=null;edRender();e.stopPropagation();return;}
+      edState.selId=fid;edRender();e.stopPropagation();
+    });
+  });
+}
+function edSvgPt(e){
+  const svg=document.getElementById('ed_svg');if(!svg)return{x:180,y:270};
+  const r=svg.getBoundingClientRect();
+  return{x:((e.clientX-r.left)/(r.width||360))*360,y:((e.clientY-r.top)/(r.height||540))*540};
+}
+function edPlayerDown(e){
+  if(!edState)return;
+  e.stopPropagation();e.preventDefault();
+  const pid=e.currentTarget.dataset.pid;
+  if(edState.tool==='del'){
+    edState.pos=edState.pos.filter(function(p){return p.id!==pid;});
+    edState.selId=null;edRender();return;
+  }
+  if(edState.tool==='arrow'){
+    const p=edState.pos.find(function(x){return x.id===pid;});if(!p)return;
+    if(!edState.arrowFrom){edState.arrowFrom={x:p.x,y:p.y};edState.selId=pid;}
+    else{const f={id:'f'+Date.now(),x1:edState.arrowFrom.x,y1:edState.arrowFrom.y,x2:p.x,y2:p.y,t:edState.arrowTipo};edState.frecce.push(f);edState.arrowFrom=null;edState.arrowPt=null;edState.selId=null;}
+    edRender();return;
+  }
+  edState.selId=pid;edState.dragging=pid;
+  const svg=document.getElementById('ed_svg');
+  if(svg)svg.setPointerCapture(e.pointerId);
+  edRender();
+}
+function edSvgDown(e){
+  if(!edState)return;
+  const pt=edSvgPt(e);
+  if(edState.tool==='arrow'){
+    if(!edState.arrowFrom){edState.arrowFrom={x:pt.x,y:pt.y};}
+    else{const f={id:'f'+Date.now(),x1:edState.arrowFrom.x,y1:edState.arrowFrom.y,x2:pt.x,y2:pt.y,t:edState.arrowTipo};edState.frecce.push(f);edState.arrowFrom=null;edState.arrowPt=null;edState.selId=null;}
+    edRender();return;
+  }
+  if(!edState.dragging){edState.selId=null;edRender();}
+}
+function edSvgMove(e){
+  if(!edState)return;
+  const pt=edSvgPt(e);
+  if(edState.dragging){
+    const cx=Math.max(22,Math.min(338,pt.x));const cy=Math.max(17,Math.min(523,pt.y));
+    const p=edState.pos.find(function(pl){return pl.id===edState.dragging;});
+    if(p){p.x=Math.round(cx);p.y=Math.round(cy);edRender();}
+    e.preventDefault();
+  }else if(edState.arrowFrom){edState.arrowPt={x:pt.x,y:pt.y};edRender();}
+}
+function edSvgUp(){if(edState)edState.dragging=null;}
+function openEditorSVG(schId){
+  const sch=(state.schemiTattici||[]).find(function(x){return x.id===schId;});if(!sch)return;
+  edState={schId:schId,pos:JSON.parse(JSON.stringify((sch.svgData||{}).pos||[])),frecce:JSON.parse(JSON.stringify((sch.svgData||{}).frecce||[])),tool:'move',arrowTipo:'movement',arrowFrom:null,arrowPt:null,selId:null,dragging:null};
+  const RUOLI=['POR','DC','TC','TD','TS','CC','MC','TRQ','TRD','TRS','ESD','ESS','AC','PC','TR','ES','ED'];
+  const pls=(state.players||[]).filter(function(p){return !p.eliminato;}).sort(function(a,b){return(a.cognome||'').localeCompare(b.cognome||'');});
+  openM('🎨 Editor Tattico — '+esc(sch.nome),`<div style="display:flex;gap:14px;flex-wrap:wrap">
+    <div style="flex:0 0 auto">
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
+        ${['move','arrow','del'].map(function(t){return`<button class="btn btn-sm" id="edt_${t}" onclick="edSetTool('${t}')" style="${t==='move'?'background:#2563eb;color:#fff;border-color:#2563eb':''}">${t==='move'?'↔ Sposta':t==='arrow'?'→ Freccia':'🗑 Elim.'}</button>`;}).join('')}
+        <select id="ed_at" onchange="if(edState)edState.arrowTipo=this.value" style="padding:4px 7px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px">
+          <option value="movement">↗ Movimento</option>
+          <option value="pass">-- Passaggio</option>
+          <option value="run">·· Corsa+palla</option>
+        </select>
+        <button class="btn btn-sm btn-d" onclick="edClearAll()">🗑 Pulisci</button>
+      </div>
+      <svg id="ed_svg" viewBox="0 0 360 540" width="300" height="450" style="display:block;border:2px solid #222;border-radius:4px;touch-action:none"></svg>
+      <div id="ed_status" style="font-size:10px;color:var(--g500);margin-top:4px;text-align:center">🖱 Trascina giocatori</div>
+    </div>
+    <div style="flex:1;min-width:190px;max-width:260px">
+      <div style="font-weight:700;font-size:12px;margin-bottom:4px;border-bottom:1px solid var(--g200);padding-bottom:3px">📐 Carica modulo</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px">
+        ${Object.keys(ED_FORM).map(function(k){return`<button class="btn btn-sm btn-s" onclick="edLoadForm('${k}')">${k}</button>`;}).join('')}
+      </div>
+      <div style="font-weight:700;font-size:12px;margin-bottom:6px;border-bottom:1px solid var(--g200);padding-bottom:3px">➕ Aggiungi giocatore</div>
+      <div style="display:grid;gap:5px;margin-bottom:12px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select id="ed_nr" style="flex:1;padding:4px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px;min-width:60px">
+            ${RUOLI.map(function(r){return`<option value="${r}">${r}</option>`;}).join('')}
+          </select>
+          <label style="font-size:11px"><input type="radio" name="ed_col" value="w" checked> ⬜</label>
+          <label style="font-size:11px"><input type="radio" name="ed_col" value="r"> 🔴</label>
+          <label style="font-size:11px"><input type="radio" name="ed_col" value="y"> 🟡</label>
+        </div>
+        <select id="ed_np" style="width:100%;padding:4px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px">
+          <option value="">— Giocatore (opz.) —</option>
+          ${pls.map(function(p){return`<option value="${p.id}|${esc(p.cognome||'')} ${esc(p.nome||'')}">${esc(p.cognome||'')} ${esc(p.nome||'')}</option>`;}).join('')}
+        </select>
+        <button class="btn btn-p btn-sm" onclick="edAddPlayer()" style="width:100%">+ Aggiungi</button>
+      </div>
+      <div style="font-size:10px;color:var(--g500);line-height:1.7;background:var(--g50);border-radius:var(--rs);padding:8px">
+        <strong>Legenda</strong><br>
+        ⬜ bianco = nostra squadra<br>
+        🔴 rosso = avversario<br>
+        🟡 giallo = jolly / neutro<br><br>
+        <strong>Frecce</strong><br>
+        — bianco = movimento<br>
+        ‐ ‐ giallo = passaggio<br>
+        ·· blu = corsa con palla
+      </div>
+    </div>
+  </div>`,
+  `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="edSave()">💾 Salva schema</button>`);
+  setTimeout(function(){
+    edRender();
+    const svg=document.getElementById('ed_svg');
+    if(svg){
+      svg.addEventListener('pointerdown',edSvgDown,{passive:false});
+      svg.addEventListener('pointermove',edSvgMove,{passive:false});
+      svg.addEventListener('pointerup',edSvgUp,{passive:false});
+    }
+  },60);
+}
+function edSetTool(t){
+  if(!edState)return;
+  edState.tool=t;edState.arrowFrom=null;edState.arrowPt=null;
+  ['move','arrow','del'].forEach(function(tt){const b=document.getElementById('edt_'+tt);if(b)b.style.cssText=tt===t?'background:#2563eb;color:#fff;border-color:#2563eb':'';});
+  edRender();
+}
+function edLoadForm(key){
+  const f=ED_FORM[key];if(!f||!edState)return;
+  if(edState.pos.length>0&&!confirm('Sovrascrivere il posizionamento attuale?'))return;
+  edState.pos=f.map(function(item,i){return{id:'p'+i,x:item[0],y:item[1],r:item[2],c:'w',nm:'',pid:''};});
+  edState.selId=null;edRender();
+}
+function edAddPlayer(){
+  if(!edState)return;
+  const r=document.getElementById('ed_nr')&&document.getElementById('ed_nr').value||'MC';
+  const colEl=document.querySelector('input[name="ed_col"]:checked');
+  const col=colEl?colEl.value:'w';
+  const npEl=document.getElementById('ed_np');
+  let nm='',pid='';
+  if(npEl&&npEl.value){const idx=npEl.value.indexOf('|');pid=npEl.value.substring(0,idx);nm=npEl.value.substring(idx+1);}
+  const id='p'+Date.now();
+  edState.pos.push({id:id,x:180,y:270,r:r,c:col,nm:nm,pid:pid});
+  edState.selId=id;edRender();
+}
+function edClearAll(){
+  if(!edState)return;
+  if(!confirm('Cancellare tutti i giocatori e le frecce?'))return;
+  edState.pos=[];edState.frecce=[];edState.selId=null;edState.arrowFrom=null;edState.arrowPt=null;edRender();
+}
+function edSave(){
+  if(!edState)return;
+  const sch=(state.schemiTattici||[]).find(function(x){return x.id===edState.schId;});if(!sch)return;
+  sch.svgData={pos:edState.pos,frecce:edState.frecce};
+  const svg=document.getElementById('ed_svg');
+  if(svg){try{sch.svgXml='<svg viewBox="0 0 360 540" xmlns="http://www.w3.org/2000/svg">'+svg.innerHTML+'</svg>';}catch(e){}}
+  saveStore();closeM();renderView();toast('Schema salvato','s');
+}
+function openSchemiPartita(matchId){
+  const schemi=(state.schemiTattici||[]).filter(function(s){return(s.matchIds||[]).includes(matchId);});
+  if(!schemi.length){toast('Nessuno schema assegnato a questa partita','i');return;}
+  openM('🧩 Schemi assegnati',`<div style="display:grid;gap:10px">
+    ${schemi.map(function(s){const tCol={modulo:'#2563eb',palla_inattiva:'#d97706',pressing:'#dc2626',offensiva:'#16a34a',difensiva:'#7c3aed',custom:'#64748b'}[s.tipo]||'#64748b';return`<div class="card" style="border-left:4px solid ${tCol}">
+      <div style="font-weight:700;margin-bottom:2px">${esc(s.nome)}</div>
+      <div style="font-size:11px;color:var(--g500);margin-bottom:6px">${TIPO_SCHEMA[s.tipo]||s.tipo} · ${esc(s.modulo||'—')}</div>
+      ${s.svgXml?`<div style="border:1px solid var(--g200);border-radius:4px;overflow:hidden;height:80px;background:#2d6a3f;line-height:0">${s.svgXml}</div>`:'<div style="height:50px;background:var(--g100);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--g400)">Nessun disegno</div>'}
+      ${s.noteTattiche?`<div style="font-size:11px;color:var(--g600);margin-top:5px">${esc(s.noteTattiche.substring(0,150))}${s.noteTattiche.length>150?'…':''}</div>`:''}
+    </div>`;}).join('')}
+  </div>`,`<button class="btn btn-p" onclick="closeM()">Chiudi</button>`);
 }
 
 /* ── EXPORT SCHEDA PDF (v2) — replica template LASCARIS ── */
