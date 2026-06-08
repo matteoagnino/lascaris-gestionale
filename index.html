@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.23
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.24
 ================================================================================
   CHANGELOG
   ----------
@@ -5972,12 +5972,12 @@ function _schemaForm(s){
     <div class="fg" style="margin-bottom:12px">
       <div class="ff" style="flex:2"><label>Nome schema *</label><input id="sh_nm" value="${s?esc(s.nome):''}" placeholder="es. 4-3-3 press alto" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
       <div class="ff"><label>Tipo *</label>
-        <select id="sh_tp" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+        <select id="sh_tp" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)" onchange="const r=document.getElementById('sh_mo_row');if(r)r.style.display=this.value==='modulo'?'':'none'">
           ${Object.entries(TIPO_SCHEMA).map(([k,v])=>`<option value="${k}" ${s&&s.tipo===k?'selected':''}>${v}</option>`).join('')}
         </select></div>
     </div>
     <div class="fg" style="margin-bottom:12px">
-      <div class="ff"><label>Modulo</label>
+      <div class="ff" id="sh_mo_row" style="${s&&s.tipo&&s.tipo!=='modulo'?'display:none':''}"><label>Modulo</label>
         <select id="sh_mo" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
           ${MODULI_PREDEF.map(m=>`<option value="${m}" ${s&&s.modulo===m?'selected':''}>${m}</option>`).join('')}
         </select></div>
@@ -6001,9 +6001,11 @@ function openEditSchema(id){
     `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveSchema('${id}')">Aggiorna</button>`);
 }
 function saveSchema(id){
-  const nm=document.getElementById('sh_nm')?.value.trim();
-  if(!nm){toast('Nome obbligatorio','e');return;}
-  const data={nome:nm,tipo:document.getElementById('sh_tp')?.value||'modulo',modulo:document.getElementById('sh_mo')?.value||'',categoria:document.getElementById('sh_ca')?.value||'',autore:document.getElementById('sh_au')?.value||'',noteTattiche:document.getElementById('sh_nt')?.value||''};
+  const tipo=document.getElementById('sh_tp')?.value||'modulo';
+  const mo=tipo==='modulo'?(document.getElementById('sh_mo')?.value||''):'';
+  let nm=document.getElementById('sh_nm')?.value.trim();
+  if(!nm){if(mo){nm=mo;}else{toast('Nome obbligatorio','e');return;}}
+  const data={nome:nm,tipo:tipo,modulo:mo,categoria:document.getElementById('sh_ca')?.value||'',autore:document.getElementById('sh_au')?.value||'',noteTattiche:document.getElementById('sh_nt')?.value||''};
   if(!state.schemiTattici)state.schemiTattici=[];
   if(id){const idx=state.schemiTattici.findIndex(x=>x.id===id);if(idx>=0)Object.assign(state.schemiTattici[idx],data);}
   else{state.schemiTattici.push({id:uid(),dataCreazione:today(),matchIds:[],...data});}
@@ -6017,14 +6019,17 @@ function delSchema(id){
 function openAssegnaPartita(schId){
   const sch=(state.schemiTattici||[]).find(x=>x.id===schId);if(!sch)return;
   if(!sch.matchIds)sch.matchIds=[];
-  const matches=(state.matches||[]).slice().sort((a,b)=>b.data.localeCompare(a.data)).slice(0,30);
+  const TIPI_P=['Campionato','Torneo','Amichevole','Test match','Partita','Coppa'];
+  const fromMatch=(state.matches||[]).map(function(m){return{id:m.id,data:m.data,avversario:m.avversario||'',categoria:m.categoria||'',badge:'✅'};});
+  const fromAtt=(state.attivita||[]).filter(function(a){return TIPI_P.includes(a.tipo)&&!a.matchId;}).map(function(a){return{id:a.id,data:a.data,avversario:a.avversario||'',categoria:a.categoria||'',badge:'📅'};});
+  const allEntries=[...fromMatch,...fromAtt].sort(function(a,b){return b.data.localeCompare(a.data);}).slice(0,60);
   openM(`⚽ Assegna a partita — ${esc(sch.nome)}`,`
-    <div style="font-size:12px;margin-bottom:12px;color:var(--g500)">Seleziona le partite a cui associare questo schema. Partite già assegnate: <strong>${sch.matchIds.length}</strong></div>
+    <div style="font-size:12px;margin-bottom:12px;color:var(--g500)">Partite già assegnate: <strong>${sch.matchIds.length}</strong> · ✅ archiviate · 📅 da calendario</div>
     <div style="max-height:360px;overflow-y:auto;display:grid;gap:6px">
-      ${!matches.length?'<p style="color:var(--g400)">Nessuna partita disponibile.</p>':matches.map(m=>`
+      ${!allEntries.length?'<p style="color:var(--g400)">Nessuna partita disponibile. Aggiungi partite dal Calendario o dal Match Day Live.</p>':allEntries.map(m=>`
         <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:${sch.matchIds.includes(m.id)?'#dbeafe':'var(--g50)'};border-radius:var(--rs);cursor:pointer;border:1px solid ${sch.matchIds.includes(m.id)?'#93c5fd':'var(--g200)'}">
           <input type="checkbox" value="${m.id}" ${sch.matchIds.includes(m.id)?'checked':''} style="width:16px;height:16px">
-          <div style="flex:1"><div style="font-weight:600">${fmtIt(m.data)} · vs ${esc(m.avversario||'—')}</div><div style="font-size:11px;color:var(--g500)">${esc(m.categoria||'—')}</div></div>
+          <div style="flex:1"><div style="font-weight:600">${m.badge} ${fmtIt(m.data)}${m.avversario?' · vs '+esc(m.avversario):''}</div><div style="font-size:11px;color:var(--g500)">${esc(m.categoria||'—')}</div></div>
         </label>`).join('')}
     </div>`,
     `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveAssegnaPartita('${schId}')">Salva assegnazione</button>`);
@@ -6082,38 +6087,88 @@ function edPlayerSvg(p,sel){
   </g>`;
 }
 function edArrowSvg(f,sel){
+  const fcx=f.cx!==undefined?f.cx:(f.x1+f.x2)/2;
+  const fcy=f.cy!==undefined?f.cy:(f.y1+f.y2)/2;
+  // shorten start (past player circle radius)
   const dx=f.x2-f.x1,dy=f.y2-f.y1,len=Math.sqrt(dx*dx+dy*dy)||1;
   const nx=dx/len,ny=dy/len;
-  const x1=(f.x1+nx*16).toFixed(1);const y1=(f.y1+ny*16).toFixed(1);
-  const x2=(f.x2-nx*18).toFixed(1);const y2=(f.y2-ny*18).toFixed(1);
+  const sx=f.x1+nx*16,sy=f.y1+ny*16;
+  // shorten end (along ctrl→end direction)
+  const dx2=f.x2-fcx,dy2=f.y2-fcy,len2=Math.sqrt(dx2*dx2+dy2*dy2)||1;
+  const nx2=dx2/len2,ny2=dy2/len2;
+  const ex=f.x2-nx2*18,ey=f.y2-ny2*18;
   const mk=f.t==='pass'?'mkr':f.t==='run'?'mkb':'mka';
   const dash=f.t==='pass'?'7,4':f.t==='run'?'3,2':'none';
   const col=sel?'#ffd700':'white';const sw=sel?2.5:1.8;
-  return `<line id="eda_${f.id}" data-fid="${f.id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${sw}" stroke-dasharray="${dash}" marker-end="url(#${mk})" style="cursor:pointer"/>`;
+  const d=`M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${fcx.toFixed(1)} ${fcy.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
+  let out=`<path d="${d}" stroke="transparent" stroke-width="14" fill="none" id="eda_${f.id}" data-fid="${f.id}" style="cursor:pointer"/>`;
+  out+=`<path d="${d}" stroke="${col}" stroke-width="${sw}" stroke-dasharray="${dash}" fill="none" marker-end="url(#${mk})" pointer-events="none"/>`;
+  if(sel){
+    out+=`<circle cx="${f.x1.toFixed(1)}" cy="${f.y1.toFixed(1)}" r="7" fill="#ffd700" stroke="#000" stroke-width="1.5" data-hdl="s:${f.id}" style="cursor:move"/>`;
+    out+=`<circle cx="${f.x2.toFixed(1)}" cy="${f.y2.toFixed(1)}" r="7" fill="#ffd700" stroke="#000" stroke-width="1.5" data-hdl="e:${f.id}" style="cursor:move"/>`;
+    out+=`<rect x="${(fcx-5).toFixed(1)}" y="${(fcy-5).toFixed(1)}" width="10" height="10" fill="#ff6600" stroke="#000" stroke-width="1.5" data-hdl="c:${f.id}" transform="rotate(45,${fcx.toFixed(1)},${fcy.toFixed(1)})" style="cursor:move"/>`;
+  }
+  return out;
+}
+function edPush(){
+  if(!edState)return;
+  if(!edState.history)edState.history=[];
+  edState.history.push({pos:JSON.parse(JSON.stringify(edState.pos)),frecce:JSON.parse(JSON.stringify(edState.frecce))});
+  if(edState.history.length>12)edState.history.shift();
+  const ub=document.getElementById('ed_undo');if(ub)ub.disabled=false;
+}
+function edUndo(){
+  if(!edState||!edState.history||!edState.history.length){toast('Nulla da annullare','i');return;}
+  const snap=edState.history.pop();
+  edState.pos=snap.pos;edState.frecce=snap.frecce;edState.selId=null;edState.dragging=null;edState.draggingHandle=null;
+  edRender();
+}
+function edDelSel(){
+  if(!edState||!edState.selId){toast('Seleziona prima un elemento','i');return;}
+  edPush();
+  const sel=edState.selId;
+  edState.pos=edState.pos.filter(function(p){return p.id!==sel;});
+  edState.frecce=edState.frecce.filter(function(f){return f.id!==sel;});
+  edState.selId=null;edRender();
 }
 function edRender(){
   const svg=document.getElementById('ed_svg');if(!svg||!edState)return;
   let h=edField();
-  edState.frecce.forEach(f=>{h+=edArrowSvg(f,edState.selId===f.id);});
+  edState.frecce.forEach(function(f){h+=edArrowSvg(f,edState.selId===f.id);});
   if(edState.arrowFrom&&edState.arrowPt){
     h+=`<line x1="${edState.arrowFrom.x.toFixed(1)}" y1="${edState.arrowFrom.y.toFixed(1)}" x2="${edState.arrowPt.x.toFixed(1)}" y2="${edState.arrowPt.y.toFixed(1)}" stroke="#ffd700" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.8" pointer-events="none"/>`;
   }
-  edState.pos.forEach(p=>{h+=edPlayerSvg(p,edState.selId===p.id);});
+  edState.pos.forEach(function(p){h+=edPlayerSvg(p,edState.selId===p.id);});
   svg.innerHTML=h;
   edAttach();
   const sb=document.getElementById('ed_status');
-  if(sb)sb.textContent=edState.tool==='arrow'?(edState.arrowFrom?'🎯 Clicca destinazione freccia':'🎯 Clicca punto di partenza freccia'):edState.tool==='del'?'🗑 Clicca su un elemento per eliminarlo':'🖱 Trascina giocatori · clicca frecce per selezionarle';
+  if(sb)sb.textContent=edState.tool==='arrow'?(edState.arrowFrom?'🎯 Clicca destinazione freccia':'🎯 Clicca punto di partenza freccia'):(edState.selId?'✅ Selezionato — trascina handle o premi 🗑 Elim.':'🖱 Trascina giocatori · clicca frecce per selezionarle');
 }
 function edAttach(){
   const svg=document.getElementById('ed_svg');if(!svg)return;
   svg.querySelectorAll('[data-pid]').forEach(function(el){el.addEventListener('pointerdown',edPlayerDown,{passive:false});});
   svg.querySelectorAll('[data-fid]').forEach(function(el){
-    el.addEventListener('click',function(e){
+    el.addEventListener('pointerdown',function(e){
       if(!edState)return;
+      e.stopPropagation();e.preventDefault();
       const fid=e.currentTarget.dataset.fid;
-      if(edState.tool==='del'){edState.frecce=edState.frecce.filter(function(f){return f.id!==fid;});edState.selId=null;edRender();e.stopPropagation();return;}
-      edState.selId=fid;edRender();e.stopPropagation();
-    });
+      edState.selId=fid;
+      edPush();
+      edState.draggingHandle={type:'body',fid:fid,lx:edSvgPt(e).x,ly:edSvgPt(e).y};
+      const sv=document.getElementById('ed_svg');if(sv)sv.setPointerCapture(e.pointerId);
+      edRender();
+    },{passive:false});
+  });
+  svg.querySelectorAll('[data-hdl]').forEach(function(el){
+    el.addEventListener('pointerdown',function(e){
+      if(!edState)return;
+      e.stopPropagation();e.preventDefault();
+      const hdl=e.currentTarget.dataset.hdl;
+      const parts=hdl.split(':');
+      edState.draggingHandle={type:parts[0],fid:parts[1]};
+      const sv=document.getElementById('ed_svg');if(sv)sv.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    },{passive:false});
   });
 }
 function edSvgPt(e){
@@ -6125,17 +6180,14 @@ function edPlayerDown(e){
   if(!edState)return;
   e.stopPropagation();e.preventDefault();
   const pid=e.currentTarget.dataset.pid;
-  if(edState.tool==='del'){
-    edState.pos=edState.pos.filter(function(p){return p.id!==pid;});
-    edState.selId=null;edRender();return;
-  }
   if(edState.tool==='arrow'){
     const p=edState.pos.find(function(x){return x.id===pid;});if(!p)return;
     if(!edState.arrowFrom){edState.arrowFrom={x:p.x,y:p.y};edState.selId=pid;}
-    else{const f={id:'f'+Date.now(),x1:edState.arrowFrom.x,y1:edState.arrowFrom.y,x2:p.x,y2:p.y,t:edState.arrowTipo};edState.frecce.push(f);edState.arrowFrom=null;edState.arrowPt=null;edState.selId=null;}
+    else{edPush();const f={id:'f'+Date.now(),x1:edState.arrowFrom.x,y1:edState.arrowFrom.y,x2:p.x,y2:p.y,t:edState.arrowTipo};edState.frecce.push(f);edState.arrowFrom=null;edState.arrowPt=null;edState.selId=null;}
     edRender();return;
   }
-  edState.selId=pid;edState.dragging=pid;
+  edState.selId=pid;edState.dragging=pid;edState.draggingHandle=null;
+  edPush();
   const svg=document.getElementById('ed_svg');
   if(svg)svg.setPointerCapture(e.pointerId);
   edRender();
@@ -6145,10 +6197,10 @@ function edSvgDown(e){
   const pt=edSvgPt(e);
   if(edState.tool==='arrow'){
     if(!edState.arrowFrom){edState.arrowFrom={x:pt.x,y:pt.y};}
-    else{const f={id:'f'+Date.now(),x1:edState.arrowFrom.x,y1:edState.arrowFrom.y,x2:pt.x,y2:pt.y,t:edState.arrowTipo};edState.frecce.push(f);edState.arrowFrom=null;edState.arrowPt=null;edState.selId=null;}
+    else{edPush();const f={id:'f'+Date.now(),x1:edState.arrowFrom.x,y1:edState.arrowFrom.y,x2:pt.x,y2:pt.y,t:edState.arrowTipo};edState.frecce.push(f);edState.arrowFrom=null;edState.arrowPt=null;edState.selId=null;}
     edRender();return;
   }
-  if(!edState.dragging){edState.selId=null;edRender();}
+  if(!edState.dragging&&!edState.draggingHandle){edState.selId=null;edRender();}
 }
 function edSvgMove(e){
   if(!edState)return;
@@ -6158,23 +6210,37 @@ function edSvgMove(e){
     const p=edState.pos.find(function(pl){return pl.id===edState.dragging;});
     if(p){p.x=Math.round(cx);p.y=Math.round(cy);edRender();}
     e.preventDefault();
+  }else if(edState.draggingHandle){
+    const h=edState.draggingHandle;
+    const f=edState.frecce.find(function(fr){return fr.id===h.fid;});
+    if(f){
+      const cx2=Math.max(20,Math.min(340,pt.x));const cy2=Math.max(15,Math.min(525,pt.y));
+      if(h.type==='s'){f.x1=Math.round(cx2);f.y1=Math.round(cy2);}
+      else if(h.type==='e'){f.x2=Math.round(cx2);f.y2=Math.round(cy2);}
+      else if(h.type==='c'){f.cx=Math.round(cx2);f.cy=Math.round(cy2);}
+      else if(h.type==='body'){const ddx=pt.x-(h.lx||pt.x);const ddy=pt.y-(h.ly||pt.y);f.x1=Math.round(f.x1+ddx);f.y1=Math.round(f.y1+ddy);f.x2=Math.round(f.x2+ddx);f.y2=Math.round(f.y2+ddy);if(f.cx!==undefined){f.cx=Math.round(f.cx+ddx);f.cy=Math.round(f.cy+ddy);}h.lx=pt.x;h.ly=pt.y;}
+      edRender();
+    }
+    e.preventDefault();
   }else if(edState.arrowFrom){edState.arrowPt={x:pt.x,y:pt.y};edRender();}
 }
-function edSvgUp(){if(edState)edState.dragging=null;}
+function edSvgUp(){if(edState){edState.dragging=null;edState.draggingHandle=null;}}
 function openEditorSVG(schId){
   const sch=(state.schemiTattici||[]).find(function(x){return x.id===schId;});if(!sch)return;
-  edState={schId:schId,pos:JSON.parse(JSON.stringify((sch.svgData||{}).pos||[])),frecce:JSON.parse(JSON.stringify((sch.svgData||{}).frecce||[])),tool:'move',arrowTipo:'movement',arrowFrom:null,arrowPt:null,selId:null,dragging:null};
+  edState={schId:schId,pos:JSON.parse(JSON.stringify((sch.svgData||{}).pos||[])),frecce:JSON.parse(JSON.stringify((sch.svgData||{}).frecce||[])),tool:'move',arrowTipo:'movement',arrowFrom:null,arrowPt:null,selId:null,dragging:null,draggingHandle:null,history:[]};
   const RUOLI=['POR','DC','TC','TD','TS','CC','MC','TRQ','TRD','TRS','ESD','ESS','AC','PC','TR','ES','ED'];
   const pls=(state.players||[]).filter(function(p){return !p.eliminato;}).sort(function(a,b){return(a.cognome||'').localeCompare(b.cognome||'');});
   openM('🎨 Editor Tattico — '+esc(sch.nome),`<div style="display:flex;gap:14px;flex-wrap:wrap">
     <div style="flex:0 0 auto">
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
-        ${['move','arrow','del'].map(function(t){return`<button class="btn btn-sm" id="edt_${t}" onclick="edSetTool('${t}')" style="${t==='move'?'background:#2563eb;color:#fff;border-color:#2563eb':''}">${t==='move'?'↔ Sposta':t==='arrow'?'→ Freccia':'🗑 Elim.'}</button>`;}).join('')}
+        ${['move','arrow'].map(function(t){return`<button class="btn btn-sm" id="edt_${t}" onclick="edSetTool('${t}')" style="${t==='move'?'background:#2563eb;color:#fff;border-color:#2563eb':''}">${t==='move'?'↔ Sposta':'→ Freccia'}</button>`;}).join('')}
         <select id="ed_at" onchange="if(edState)edState.arrowTipo=this.value" style="padding:4px 7px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px">
           <option value="movement">↗ Movimento</option>
           <option value="pass">-- Passaggio</option>
           <option value="run">·· Corsa+palla</option>
         </select>
+        <button id="ed_undo" class="btn btn-sm btn-s" onclick="edUndo()" disabled>↩ Undo</button>
+        <button class="btn btn-sm btn-d" onclick="edDelSel()">🗑 Elim.sel.</button>
         <button class="btn btn-sm btn-d" onclick="edClearAll()">🗑 Pulisci</button>
       </div>
       <svg id="ed_svg" viewBox="0 0 360 540" width="300" height="450" style="display:block;border:2px solid #222;border-radius:4px;touch-action:none"></svg>
@@ -6227,12 +6293,13 @@ function openEditorSVG(schId){
 function edSetTool(t){
   if(!edState)return;
   edState.tool=t;edState.arrowFrom=null;edState.arrowPt=null;
-  ['move','arrow','del'].forEach(function(tt){const b=document.getElementById('edt_'+tt);if(b)b.style.cssText=tt===t?'background:#2563eb;color:#fff;border-color:#2563eb':'';});
+  ['move','arrow'].forEach(function(tt){const b=document.getElementById('edt_'+tt);if(b)b.style.cssText=tt===t?'background:#2563eb;color:#fff;border-color:#2563eb':'';});
   edRender();
 }
 function edLoadForm(key){
   const f=ED_FORM[key];if(!f||!edState)return;
   if(edState.pos.length>0&&!confirm('Sovrascrivere il posizionamento attuale?'))return;
+  edPush();
   edState.pos=f.map(function(item,i){return{id:'p'+i,x:item[0],y:item[1],r:item[2],c:'w',nm:'',pid:''};});
   edState.selId=null;edRender();
 }
@@ -6251,7 +6318,8 @@ function edAddPlayer(){
 function edClearAll(){
   if(!edState)return;
   if(!confirm('Cancellare tutti i giocatori e le frecce?'))return;
-  edState.pos=[];edState.frecce=[];edState.selId=null;edState.arrowFrom=null;edState.arrowPt=null;edRender();
+  edPush();
+  edState.pos=[];edState.frecce=[];edState.selId=null;edState.arrowFrom=null;edState.arrowPt=null;edState.draggingHandle=null;edRender();
 }
 function edSave(){
   if(!edState)return;
