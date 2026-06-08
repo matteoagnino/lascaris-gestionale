@@ -1,10 +1,18 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.19
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.20
 ================================================================================
   CHANGELOG
   ----------
+  v2.20 · 2026-06-08 · Obiettivi di Sviluppo Giocatore + Carico & RPE
+    · NEW  Obiettivi Sviluppo: definisci obiettivi tecnici/tattici/fisici/mentali
+           per ogni giocatore con scadenza, % avanzamento e stato (in corso /
+           completato / abbandonato). Filtro per giocatore.
+    · NEW  Carico & RPE: registra RPE 1-10 per uno o più giocatori dopo ogni
+           sessione. KPI (sessioni 28gg, media RPE 7gg, sessioni alta intensità).
+           Grafico trend 14 giorni per giocatore. Filtri per giocatore/categoria.
+
   v2.19 · 2026-06-08 · Report Partita, Fascicolo Giocatore, Report Scout
     · NEW  Report Partita Strutturato: voti collettivi (off/def/tra/p.inattive)
            + voti individuali + note per ogni partita da Minutaggi.
@@ -549,7 +557,7 @@ function loadStore(){
   // Try localStorage first for instant load, then ALWAYS sync from Supabase
   let d=null;
   try{const s=localStorage.getItem(STORE);d=s?JSON.parse(s):null;if(d){
-    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
+    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
     migrateStateV23(d);
     const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(d.users||[]).find(x=>x.id===uref.id);if(u)d.currentUser=u}}
   }catch(e){}
@@ -591,7 +599,7 @@ async function loadFromSupabase(){
       const localTs=localStorage.getItem(STORE+'_ts')||'';
       if(row.updated_at>localTs||!localTs){
         const d=row.data;
-        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
+        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
         if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
         migrateStateV23(d);Object.assign(state,d);
         const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(state.users||[]).find(x=>x.id===uref.id);if(u)state.currentUser=u}
@@ -820,13 +828,15 @@ const DEFAULT_STATE={
   osservazioniInterne:[],
   doppieConv:[],
   reportScout:[],
+  obiettivi:[],
+  rpeLog:[],
   permessiCustom:[],  // Additional permissions created by admin
   incarichiCustom:[],  // Additional staff roles
   profiliPermessi:[
     {id:'prof_admin',nome:'Admin',incarico:'Admin',ruolo:'Amministratore di sistema',descrizione:'Accesso totale al gestionale inclusa gestione utenti',permessi:['all']},
-    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout']},
-    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout']},
-    {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda','doppieConv','confronto','fascicolo']},
+    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe']},
+    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe']},
+    {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda','doppieConv','confronto','fascicolo','obiettivi','rpe']},
     {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','schedeExt','statDesc','rae','confronto','reportScout']}
   ]
 };
@@ -1084,7 +1094,9 @@ const NAV=[
       ['schede','📋','Schede Allenamento'],
       ['osservInterne','📨','Osservazioni Interne'],
       ['doppieConv','🔼','Doppie Convocazioni'],
-      ['fascicolo','📁','Fascicolo Giocatore']
+      ['fascicolo','📁','Fascicolo Giocatore'],
+      ['obiettivi','🎯','Obiettivi Sviluppo'],
+      ['rpe','⚡','Carico & RPE']
     ]},
     {sh:'Area Valutazione',items:[
       ['tippsInt','★','TIPPS Scouting Interno'],
@@ -1669,8 +1681,8 @@ function orgComSendSMS(){const phones=orgComGetPhones();if(!phones.length){toast
 /* =============================================================
    VIEW: UTENTI & PERMESSI
    ============================================================= */
-const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','impianti','parametri','storico','utenti','schedeExt'];
-const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
+const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','impianti','parametri','storico','utenti','schedeExt'];
+const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',obiettivi:'Obiettivi Sviluppo',rpe:'Carico & RPE',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
 function allPerms(){return [...PERMS_BASE,...state.permessiCustom.map(p=>p.code)]}
 function permLabel(code){return PERM_LABELS_BASE[code]||(state.permessiCustom.find(p=>p.code===code)||{}).label||code}
 // Back-compat aliases
@@ -5806,6 +5818,271 @@ function delSchedeExtAll(){
 }
 function toggleAllSchedeExt(checked){
   document.querySelectorAll('.sce-chk').forEach(x=>x.checked=checked);
+}
+
+/* ── OBIETTIVI DI SVILUPPO GIOCATORE ── */
+VIEWS.obiettivi=function(c){
+  const players=state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||''));
+  const filt=state._obFilt||'';
+  const list=(state.obiettivi||[]).slice().sort((a,b)=>b.dataCreazione.localeCompare(a.dataCreazione));
+  const filtList=filt?list.filter(o=>o.playerId===filt):list;
+  const stati={aperto:'🟡 In corso',completato:'🟢 Completato',abbandonato:'🔴 Abbandonato'};
+  const aree={tecnica:'⚙️ Tecnica',tattica:'🧠 Tattica',fisica:'💪 Fisica',mentale:'🎯 Mentale'};
+  c.innerHTML=`
+  <div class="vw">
+    <div class="vh"><div><h1>Obiettivi di Sviluppo</h1><div class="sb2">Definisci e monitora gli obiettivi tecnici, tattici, fisici e mentali per ogni giocatore</div></div>
+      <button class="btn btn-p btn-sm" onclick="openNuovoObiettivo()">+ Nuovo Obiettivo</button></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      <select id="ob_fil" onchange="state._obFilt=this.value;saveStore();renderView()" style="padding:8px 12px;border:1px solid var(--g300);border-radius:var(--rs);font-size:13px;min-width:220px">
+        <option value="">— Tutti i giocatori —</option>
+        ${players.map(p=>`<option value="${p.id}" ${filt===p.id?'selected':''}>${esc(p.cognome)} ${esc(p.nome)}</option>`).join('')}
+      </select>
+      <div class="grid g3" style="margin:0">
+        ${Object.entries(stati).map(([k,v])=>`<span class="bdg" style="font-size:11px">${v}: ${filtList.filter(o=>o.stato===k).length}</span>`).join('')}
+      </div>
+    </div>
+    ${!filtList.length?`<div class="es"><div class="ic">🎯</div><h3>${filt?'Nessun obiettivo per questo giocatore':'Nessun obiettivo definito'}</h3><p>Crea il primo obiettivo con il pulsante "+ Nuovo Obiettivo".</p></div>`:`
+    <div style="display:grid;gap:12px">
+      ${filtList.map(o=>{
+        const p=state.players.find(x=>x.id===o.playerId);
+        const perc=Math.min(100,Math.max(0,parseInt(o.avanzamento)||0));
+        const colore=o.stato==='completato'?'#16a34a':o.stato==='abbandonato'?'#dc2626':'#2563eb';
+        const scaduta=o.scadenza&&o.scadenza<today()&&o.stato==='aperto';
+        return `<div class="card" style="border-left:4px solid ${colore};padding:14px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                <span class="bdg" style="font-size:10px;background:${colore}20;color:${colore}">${aree[o.area]||o.area}</span>
+                <span class="bdg" style="font-size:10px">${stati[o.stato]||o.stato}</span>
+                ${scaduta?'<span class="bdg bdg-r" style="font-size:10px">⚠ Scaduto</span>':''}
+              </div>
+              <div style="font-weight:700;font-size:14px;margin-bottom:2px">${esc(o.titolo)}</div>
+              ${p?`<div style="font-size:11px;color:var(--g500)">${esc(p.cognome)} ${esc(p.nome)} · ${p.categoria}</div>`:''}
+              ${o.descrizione?`<div style="font-size:12px;color:var(--g600);margin-top:6px">${esc(o.descrizione)}</div>`:''}
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:120px">
+              ${o.scadenza?`<div style="font-size:11px;color:${scaduta?'#dc2626':'var(--g500)'}">📅 ${fmtIt(o.scadenza)}</div>`:''}
+              <div style="width:100px">
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--g500);margin-bottom:3px"><span>Avanzamento</span><span>${perc}%</span></div>
+                <div style="height:6px;background:var(--g200);border-radius:3px;overflow:hidden"><div style="height:100%;width:${perc}%;background:${colore};border-radius:3px;transition:width .3s"></div></div>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm btn-s" onclick="openEditObiettivo('${o.id}')">✏️</button>
+                <button class="btn btn-sm btn-d" onclick="delObiettivo('${o.id}')">🗑</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`}
+  </div>`;
+};
+function openNuovoObiettivo(){
+  const players=state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||''));
+  openM('Nuovo Obiettivo di Sviluppo',`
+    <div class="fg">
+      <div class="ff"><label>Giocatore *</label>
+        <select id="ob_pid" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          <option value="">— Seleziona —</option>
+          ${players.map(p=>`<option value="${p.id}" ${(state._obFilt===p.id)?'selected':''}>${esc(p.cognome)} ${esc(p.nome)} · ${p.categoria}</option>`).join('')}
+        </select></div>
+      <div class="ff"><label>Area *</label>
+        <select id="ob_area" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          <option value="tecnica">⚙️ Tecnica</option><option value="tattica">🧠 Tattica</option><option value="fisica">💪 Fisica</option><option value="mentale">🎯 Mentale</option>
+        </select></div>
+    </div>
+    <div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Titolo obiettivo *</label>
+      <input id="ob_tit" placeholder="es. Migliorare il primo controllo orientato" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+    <div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Descrizione / criteri di riuscita</label>
+      <textarea id="ob_desc" rows="2" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs);font:inherit;font-size:12px;resize:vertical" placeholder="Come misuriamo il raggiungimento dell'obiettivo?"></textarea></div>
+    <div class="fg" style="margin-bottom:0">
+      <div class="ff"><label>Scadenza</label><input type="date" id="ob_sc"></div>
+      <div class="ff"><label>Avanzamento %</label><input type="number" id="ob_av" min="0" max="100" value="0" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+      <div class="ff"><label>Stato</label>
+        <select id="ob_st" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          <option value="aperto">🟡 In corso</option><option value="completato">🟢 Completato</option><option value="abbandonato">🔴 Abbandonato</option>
+        </select></div>
+    </div>`,
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveObiettivo()">Salva</button>`);
+}
+function openEditObiettivo(id){
+  const o=(state.obiettivi||[]).find(x=>x.id===id);if(!o)return;
+  openNuovoObiettivo();
+  document.getElementById('ob_pid').value=o.playerId;
+  document.getElementById('ob_area').value=o.area;
+  document.getElementById('ob_tit').value=o.titolo;
+  document.getElementById('ob_desc').value=o.descrizione||'';
+  document.getElementById('ob_sc').value=o.scadenza||'';
+  document.getElementById('ob_av').value=o.avanzamento||0;
+  document.getElementById('ob_st').value=o.stato;
+  // swap save button to update
+  const foot=document.querySelector('.modal-footer')||document.querySelector('[class*="footer"]');
+  const btn=document.querySelector('#modalEl button.btn-p')||document.querySelectorAll('.modal-footer button')[1];
+  if(btn)btn.setAttribute('onclick',`saveObiettivo('${id}')`);
+}
+function saveObiettivo(id){
+  const pid=document.getElementById('ob_pid')?.value;
+  const tit=document.getElementById('ob_tit')?.value.trim();
+  if(!pid||!tit){toast('Giocatore e titolo obbligatori','e');return;}
+  const data={playerId:pid,area:document.getElementById('ob_area')?.value,titolo:tit,descrizione:document.getElementById('ob_desc')?.value||'',scadenza:document.getElementById('ob_sc')?.value||'',avanzamento:parseInt(document.getElementById('ob_av')?.value)||0,stato:document.getElementById('ob_st')?.value};
+  if(!state.obiettivi)state.obiettivi=[];
+  if(id){const idx=state.obiettivi.findIndex(x=>x.id===id);if(idx>=0)Object.assign(state.obiettivi[idx],data);}
+  else{state.obiettivi.push({id:uid(),dataCreazione:today(),...data});}
+  saveStore();closeM();renderView();toast('Obiettivo salvato','s');
+}
+function delObiettivo(id){
+  if(!confirm('Eliminare questo obiettivo?'))return;
+  state.obiettivi=state.obiettivi.filter(x=>x.id!==id);
+  saveStore();renderView();toast('Eliminato','s');
+}
+
+/* ── CARICO DI LAVORO & RPE ── */
+VIEWS.rpe=function(c){
+  const todayIso=today();
+  const players=state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||''));
+  const rpeLog=(state.rpeLog||[]).slice().sort((a,b)=>b.data.localeCompare(a.data));
+  // Filtri
+  const filtP=state._rpeFiltP||'';
+  const filtC=state._rpeFiltC||'';
+  // Periodo: ultimi 28 giorni
+  const d28=new Date();d28.setDate(d28.getDate()-27);
+  const d28iso=d28.toISOString().slice(0,10);
+  const recent=rpeLog.filter(r=>r.data>=d28iso);
+  // Filtra lista
+  let listFilt=rpeLog;
+  if(filtP)listFilt=listFilt.filter(r=>r.playerId===filtP);
+  if(filtC)listFilt=listFilt.filter(r=>r.categoria===filtC);
+  const cats=[...new Set(state.players.filter(p=>!p.eliminato).map(p=>p.categoria))].sort();
+  // Media RPE ultimi 7 giorni
+  const d7=new Date();d7.setDate(d7.getDate()-6);const d7iso=d7.toISOString().slice(0,10);
+  const week=recent.filter(r=>r.data>=d7iso);
+  const avgRpe=week.length?Math.round(week.reduce((s,r)=>s+(r.rpe||0),0)/week.length*10)/10:null;
+  // Colore RPE
+  function rpeColor(v){return v<=3?'#16a34a':v<=5?'#65a30d':v<=7?'#d97706':v<=9?'#ea580c':'#dc2626';}
+  function rpeLabel(v){return v<=3?'Leggero':v<=5?'Moderato':v<=7?'Intenso':v<=9?'Molto intenso':'Max';}
+  c.innerHTML=`
+  <div class="vw">
+    <div class="vh"><div><h1>Carico di Lavoro & RPE</h1><div class="sb2">Monitora il carico percepito (RPE 1-10) sessione per sessione</div></div>
+      <button class="btn btn-p btn-sm" onclick="openNuovoRpe()">+ Registra sessione</button></div>
+    <div class="grid g4" style="margin-bottom:16px">
+      <div class="kpi"><div class="l">Sessioni (28gg)</div><div class="v">${recent.length}</div></div>
+      <div class="kpi d"><div class="l">Media RPE (7gg)</div><div class="v" style="${avgRpe?'color:'+rpeColor(avgRpe):''}">${avgRpe!=null?avgRpe:'—'}</div></div>
+      <div class="kpi w"><div class="l">Sessioni alta int. (28gg)</div><div class="v">${recent.filter(r=>r.rpe>=8).length}</div></div>
+      <div class="kpi o"><div class="l">Giocatori monitorati</div><div class="v">${[...new Set(recent.map(r=>r.playerId))].length}</div></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      <select id="rpe_fp" onchange="state._rpeFiltP=this.value;saveStore();renderView()" style="padding:8px 12px;border:1px solid var(--g300);border-radius:var(--rs);font-size:13px;min-width:200px">
+        <option value="">— Tutti i giocatori —</option>
+        ${players.map(p=>`<option value="${p.id}" ${filtP===p.id?'selected':''}>${esc(p.cognome)} ${esc(p.nome)}</option>`).join('')}
+      </select>
+      <select id="rpe_fc" onchange="state._rpeFiltC=this.value;saveStore();renderView()" style="padding:8px 12px;border:1px solid var(--g300);border-radius:var(--rs);font-size:13px;min-width:140px">
+        <option value="">— Tutte le categorie —</option>
+        ${cats.map(ct=>`<option value="${ct}" ${filtC===ct?'selected':''}>${esc(ct)}</option>`).join('')}
+      </select>
+    </div>
+    ${filtP&&recent.filter(r=>r.playerId===filtP).length>=3?`<div class="card" style="margin-bottom:16px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">Trend RPE — ultimi 14 giorni</div><div class="cw" style="height:160px"><canvas id="rpeChart"></canvas></div></div>`:''}
+    ${!listFilt.length?`<div class="es"><div class="ic">⚡</div><h3>Nessuna sessione registrata</h3><p>Inizia registrando il carico della prossima sessione.</p></div>`:`
+    <div class="card" style="padding:0;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--g50);border-bottom:2px solid var(--g200)">
+          <th style="padding:10px 12px;text-align:left">Data</th>
+          <th style="padding:10px 12px;text-align:left">Giocatore</th>
+          <th style="padding:10px 12px;text-align:left">Categoria</th>
+          <th style="padding:10px 12px;text-align:left">Tipo sessione</th>
+          <th style="padding:10px 12px;text-align:center">RPE</th>
+          <th style="padding:10px 12px;text-align:center">Durata</th>
+          <th style="padding:10px 12px;text-align:left">Note</th>
+          <th style="padding:10px 12px;text-align:center">✕</th>
+        </tr></thead>
+        <tbody>${listFilt.slice(0,80).map(r=>{const p=state.players.find(x=>x.id===r.playerId);const c=rpeColor(r.rpe);return`<tr style="border-bottom:1px solid var(--g100)">
+          <td style="padding:9px 12px"><strong>${fmtIt(r.data)}</strong></td>
+          <td style="padding:9px 12px">${esc(p?p.cognome+' '+p.nome:r.nomeGiocatore||'—')}</td>
+          <td style="padding:9px 12px">${esc(r.categoria||'—')}</td>
+          <td style="padding:9px 12px">${esc(r.tipoSessione||'—')}</td>
+          <td style="padding:9px 12px;text-align:center"><span style="background:${c}20;color:${c};font-weight:700;padding:3px 10px;border-radius:12px;font-size:13px">${r.rpe}</span><div style="font-size:9px;color:${c};text-align:center">${rpeLabel(r.rpe)}</div></td>
+          <td style="padding:9px 12px;text-align:center">${r.durata?r.durata+"'":'—'}</td>
+          <td style="padding:9px 12px;font-size:11px;color:var(--g500)">${esc((r.note||'').substring(0,40))}${(r.note||'').length>40?'…':''}</td>
+          <td style="padding:9px 12px;text-align:center"><button class="btn btn-sm btn-d" onclick="delRpe('${r.id}')">🗑</button></td>
+        </tr>`}).join('')}</tbody>
+      </table>
+    </div>`}
+  </div>`;
+  // Render chart if player filter active
+  if(filtP&&recent.filter(r=>r.playerId===filtP).length>=3){
+    const d14=new Date();d14.setDate(d14.getDate()-13);const d14iso=d14.toISOString().slice(0,10);
+    const pLog=rpeLog.filter(r=>r.playerId===filtP&&r.data>=d14iso).sort((a,b)=>a.data.localeCompare(b.data));
+    const labels=pLog.map(r=>fmtIt(r.data).slice(0,5));
+    const vals=pLog.map(r=>r.rpe);
+    const bgs=vals.map(v=>rpeColor(v)+'99');
+    if(window.Chart){const el=document.getElementById('rpeChart');if(el){const ctx=el.getContext('2d');
+      if(el._chartInst)el._chartInst.destroy();
+      el._chartInst=new Chart(ctx,{type:'bar',data:{labels,datasets:[{data:vals,backgroundColor:bgs,borderWidth:0,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'RPE: '+ctx.raw+' — '+rpeLabel(ctx.raw)}}},scales:{y:{min:0,max:10,ticks:{stepSize:2}}}}});
+    }}
+  }
+};
+function openNuovoRpe(){
+  const players=state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||''));
+  const tipi=['Allenamento','Partita','Partitella','Lavoro atletico','Recupero attivo','Allenamento portieri'];
+  openM('Registra Carico & RPE',`
+    <div class="fg" style="margin-bottom:12px">
+      <div class="ff"><label>Data *</label><input type="date" id="rpe_dt" value="${today()}"></div>
+      <div class="ff"><label>Tipo sessione</label>
+        <select id="rpe_tipo" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          ${tipi.map(t=>`<option>${t}</option>`).join('')}
+        </select></div>
+      <div class="ff"><label>Durata (min)</label><input type="number" id="rpe_dur" min="10" max="200" placeholder="es. 90" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+    </div>
+    <div style="margin-bottom:14px"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Giocatori *</label>
+      <div style="font-size:11px;color:var(--g500);margin-bottom:8px">Seleziona uno o più giocatori con lo stesso RPE, oppure aggiungili individualmente</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <select id="rpe_pid" style="flex:1;min-width:180px;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          <option value="">— Seleziona giocatore —</option>
+          ${players.map(p=>`<option value="${p.id}|${p.categoria}|${p.cognome} ${p.nome}">${esc(p.cognome)} ${esc(p.nome)} · ${p.categoria}</option>`).join('')}
+        </select>
+        <input type="number" id="rpe_val" min="1" max="10" placeholder="RPE" style="width:65px;padding:8px;border:1px solid var(--g300);border-radius:var(--rs);text-align:center;font-weight:700">
+        <button class="btn btn-s btn-sm" onclick="addRpeRow()" style="white-space:nowrap">+ Aggiungi</button>
+      </div>
+      <div id="rpe_rows" style="display:grid;gap:6px"></div>
+    </div>
+    <div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Note</label>
+      <input id="rpe_note" placeholder="Note sulla sessione..." style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>`,
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveRpe()">Salva</button>`);
+}
+function addRpeRow(){
+  const sel=document.getElementById('rpe_pid');const rpeIn=document.getElementById('rpe_val');
+  if(!sel||!sel.value||!rpeIn||!rpeIn.value){toast('Seleziona giocatore e RPE','e');return;}
+  const [pid,cat,nome]=sel.value.split('|');
+  const rpe=parseInt(rpeIn.value);
+  if(rpe<1||rpe>10){toast('RPE deve essere 1-10','e');return;}
+  const cont=document.getElementById('rpe_rows');if(!cont)return;
+  // Evita duplicati
+  if(cont.querySelector(`[data-pid="${pid}"]`)){toast('Giocatore già aggiunto','e');return;}
+  const div=document.createElement('div');
+  div.dataset.pid=pid;div.dataset.cat=cat;div.dataset.nome=nome;div.dataset.rpe=rpe;
+  div.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--g50);border-radius:var(--rs)';
+  const c=rpe<=3?'#16a34a':rpe<=5?'#65a30d':rpe<=7?'#d97706':rpe<=9?'#ea580c':'#dc2626';
+  div.innerHTML=`<span style="flex:1;font-size:12px">${esc(nome)} <span style="color:var(--g400);font-size:10px">${esc(cat)}</span></span><span style="background:${c}20;color:${c};font-weight:700;padding:2px 10px;border-radius:10px">${rpe}</span><button class="btn btn-sm btn-d" onclick="this.closest('[data-pid]').remove()" style="padding:2px 6px">✕</button>`;
+  cont.appendChild(div);
+  rpeIn.value='';sel.value='';
+}
+function saveRpe(){
+  const dt=document.getElementById('rpe_dt')?.value;
+  if(!dt){toast('Data obbligatoria','e');return;}
+  const rows=document.querySelectorAll('#rpe_rows [data-pid]');
+  if(!rows.length){toast('Aggiungi almeno un giocatore','e');return;}
+  const tipo=document.getElementById('rpe_tipo')?.value||'Allenamento';
+  const dur=document.getElementById('rpe_dur')?.value||'';
+  const note=document.getElementById('rpe_note')?.value||'';
+  if(!state.rpeLog)state.rpeLog=[];
+  rows.forEach(div=>{
+    state.rpeLog.push({id:uid(),data:dt,playerId:div.dataset.pid,nomeGiocatore:div.dataset.nome,categoria:div.dataset.cat,tipoSessione:tipo,durata:dur?parseInt(dur):null,rpe:parseInt(div.dataset.rpe),note});
+  });
+  saveStore();closeM();renderView();toast(`${rows.length} registrazioni salvate`,'s');
+}
+function delRpe(id){
+  if(!confirm('Eliminare questa registrazione?'))return;
+  state.rpeLog=state.rpeLog.filter(x=>x.id!==id);
+  saveStore();renderView();toast('Eliminato','s');
 }
 
 /* ── REPORT PARTITA ── */
