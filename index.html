@@ -1,10 +1,21 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.21
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.22
 ================================================================================
   CHANGELOG
   ----------
+  v2.22 · 2026-06-08 · Schemi Tattici + Canvas revamp + PDF scheda
+    · NEW  Schemi Tattici: libreria schemi (modulo/palla inattiva/pressing/
+           offensiva/difensiva) con moduli predefiniti (1-4-3-3 ecc.) +
+           personalizzato, filtro categoria/tipo, assegnazione partite.
+    · UPD  Canvas scheda: selettore 5 sfondi (campo 11v11, mezzo campo,
+           7v7, 5v5, bianco) con pittura corretta per ogni tipo.
+    · UPD  Form scheda: rinominato MdG → Modalità di Gioco, aggiunto Orario.
+    · NEW  Esporta PDF (📄): nuovo layout portrait A4 multi-pagina che replica
+           il template LASCARIS — pagina 1 header+obiettivi, poi una pagina
+           per fase con canvas embedded come PNG + contenuti.
+
   v2.21 · 2026-06-08 · Piano Stagionale (macrocicli + mesocicli)
     · NEW  Piano Stagionale: organizza la stagione per stagioni (es. 2025/26)
            con macrocicli (nome, focus, inizio/fine, obiettivi). Timeline Gantt
@@ -564,7 +575,7 @@ function loadStore(){
   // Try localStorage first for instant load, then ALWAYS sync from Supabase
   let d=null;
   try{const s=localStorage.getItem(STORE);d=s?JSON.parse(s):null;if(d){
-    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','pianoStagionale','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
+    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','pianoStagionale','schemiTattici','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
     migrateStateV23(d);
     const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(d.users||[]).find(x=>x.id===uref.id);if(u)d.currentUser=u}}
   }catch(e){}
@@ -606,7 +617,7 @@ async function loadFromSupabase(){
       const localTs=localStorage.getItem(STORE+'_ts')||'';
       if(row.updated_at>localTs||!localTs){
         const d=row.data;
-        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','pianoStagionale','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
+        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','obiettivi','rpeLog','pianoStagionale','schemiTattici','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
         if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
         migrateStateV23(d);Object.assign(state,d);
         const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(state.users||[]).find(x=>x.id===uref.id);if(u)state.currentUser=u}
@@ -838,12 +849,13 @@ const DEFAULT_STATE={
   obiettivi:[],
   rpeLog:[],
   pianoStagionale:[],
+  schemiTattici:[],
   permessiCustom:[],  // Additional permissions created by admin
   incarichiCustom:[],  // Additional staff roles
   profiliPermessi:[
     {id:'prof_admin',nome:'Admin',incarico:'Admin',ruolo:'Amministratore di sistema',descrizione:'Accesso totale al gestionale inclusa gestione utenti',permessi:['all']},
-    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale']},
-    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale']},
+    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','schemiTattici']},
+    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','schemiTattici']},
     {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda','doppieConv','confronto','fascicolo','obiettivi','rpe','pianoStagionale']},
     {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','schedeExt','statDesc','rae','confronto','reportScout']}
   ]
@@ -1105,7 +1117,8 @@ const NAV=[
       ['fascicolo','📁','Fascicolo Giocatore'],
       ['obiettivi','🎯','Obiettivi Sviluppo'],
       ['rpe','⚡','Carico & RPE'],
-      ['pianoStagionale','🗓','Piano Stagionale']
+      ['pianoStagionale','🗓','Piano Stagionale'],
+      ['schemiTattici','🧩','Schemi Tattici']
     ]},
     {sh:'Area Valutazione',items:[
       ['tippsInt','★','TIPPS Scouting Interno'],
@@ -1690,8 +1703,8 @@ function orgComSendSMS(){const phones=orgComGetPhones();if(!phones.length){toast
 /* =============================================================
    VIEW: UTENTI & PERMESSI
    ============================================================= */
-const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','impianti','parametri','storico','utenti','schedeExt'];
-const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',obiettivi:'Obiettivi Sviluppo',rpe:'Carico & RPE',pianoStagionale:'Piano Stagionale',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
+const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','schemiTattici','impianti','parametri','storico','utenti','schedeExt'];
+const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',obiettivi:'Obiettivi Sviluppo',rpe:'Carico & RPE',pianoStagionale:'Piano Stagionale',schemiTattici:'Schemi Tattici',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
 function allPerms(){return [...PERMS_BASE,...state.permessiCustom.map(p=>p.code)]}
 function permLabel(code){return PERM_LABELS_BASE[code]||(state.permessiCustom.find(p=>p.code===code)||{}).label||code}
 // Back-compat aliases
@@ -4465,8 +4478,9 @@ function renderSchedeCmp(){
             <div style="background:#f0f0f0;padding:5px 8px;font-weight:700;border-bottom:1px solid #ccc">Data</div><div style="padding:4px 6px;border-bottom:1px solid #ccc"><input type="date" id="sc_da" value="${s.data||today()}" style="width:100%;border:none;font-size:11px"></div>
             <div style="background:#f0f0f0;padding:5px 8px;font-weight:700;border-bottom:1px solid #ccc">Giorno</div><div style="padding:4px 6px;border-bottom:1px solid #ccc;font-size:10px">${['L','M','M','G','V','S'].map((g,i)=>`<label style="margin-right:3px"><input type="radio" name="sc_gg" value="${i}" style="margin-right:1px">${g}</label>`).join('')}</div>
             <div style="background:#f0f0f0;padding:5px 8px;font-weight:700;border-bottom:1px solid #ccc">Seduta</div><div style="padding:4px 6px;border-bottom:1px solid #ccc;font-size:10px">${[1,2,3].map(n=>`<label style="margin-right:6px"><input type="radio" name="sc_sed" value="${n}" ${(+(s.seduta||1))===n?'checked':''} style="margin-right:1px">${n}</label>`).join('')}</div>
-            <div style="background:#f0f0f0;padding:5px 8px;font-weight:700;border-bottom:1px solid #ccc">MdG</div><div style="padding:4px 6px;border-bottom:1px solid #ccc"><input id="sc_mdg" value="${esc(s.mdg||'')}" placeholder="Momento del Gioco" style="width:100%;border:none;font-size:11px"></div>
-            <div style="background:#f0f0f0;padding:5px 8px;font-weight:700">Meteo</div><div style="padding:4px 6px;font-size:10px">${['☀️','☁️','🌧️'].map(m=>`<label style="margin-right:4px;cursor:pointer"><input type="radio" name="sc_met" value="${m}" style="margin-right:1px">${m}</label>`).join('')}</div>
+            <div style="background:#f0f0f0;padding:5px 8px;font-weight:700;border-bottom:1px solid #ccc">Mod. Gioco</div><div style="padding:4px 6px;border-bottom:1px solid #ccc"><input id="sc_mdg" value="${esc(s.mdg||'')}" placeholder="es. 11v11, 7v7, 5v5" style="width:100%;border:none;font-size:11px"></div>
+            <div style="background:#f0f0f0;padding:5px 8px;font-weight:700;border-bottom:1px solid #ccc">Orario</div><div style="padding:4px 6px;border-bottom:1px solid #ccc"><input id="sc_orario" value="${esc(s.orario||'')}" placeholder="es. 18:00 – 19:30" style="width:100%;border:none;font-size:11px"></div>
+            <div style="background:#f0f0f0;padding:5px 8px;font-weight:700">Meteo</div><div style="padding:4px 6px;font-size:10px">${['☀️','☁️','🌧️'].map(m=>`<label style="margin-right:4px;cursor:pointer"><input type="radio" name="sc_met" value="${m}" ${s.meteo===m?'checked':''} style="margin-right:1px">${m}</label>`).join('')}</div>
           </div>
         </div>
         <div style="border:2px solid #000;padding:0;overflow:hidden">
@@ -4498,7 +4512,7 @@ function renderSchedeCmp(){
       <div style="background:#000;color:#fff;padding:6px 12px;font-size:11px;font-weight:700;text-transform:uppercase;margin-top:8px">BRIEFING FINALE · CONFRONTO CON LA SQUADRA · 5&#39;</div>
       <div style="padding:6px;border:1px solid #000;background:repeating-linear-gradient(transparent,transparent 22px,#e0e0e0 22px,#e0e0e0 23px);min-height:50px"><textarea id="sc_brF" rows="2" style="width:100%;border:none;background:transparent;resize:none;font-size:11px" placeholder="Confronto conclusivo con la squadra">${esc(s.briefFin||'')}</textarea></div>
       <div class="ff full" style="margin-top:10px"><label>Note</label><textarea id="sc_no" rows="2">${esc(s.note||'')}</textarea></div>
-      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px"><button class="btn btn-s" onclick="schedaForm={};schedaTab='arc';renderView()">Annulla</button><button class="btn btn-p" onclick="saveScheda()">💾 Salva in archivio</button><button class="btn btn-s" onclick="exportSchedaXLSX()">📊 Export Excel</button><button class="btn btn-s" onclick="inviaSchedaDS()" style="background:#059669;color:#fff">📨 Invia al DS</button><label class="btn btn-s" style="cursor:pointer">📷 Carica scheda<input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png" capture="environment" style="display:none" onchange="uploadSchedaFile(event)"></label></div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px"><button class="btn btn-s" onclick="schedaForm={};schedaTab='arc';renderView()">Annulla</button><button class="btn btn-p" onclick="saveScheda()">💾 Salva in archivio</button><button class="btn btn-s" onclick="exportSchedaPDF2()" style="background:#1d4ed8;color:#fff">📄 Esporta PDF</button><button class="btn btn-s" onclick="exportSchedaXLSX()">📊 Export Excel</button><button class="btn btn-s" onclick="inviaSchedaDS()" style="background:#059669;color:#fff">📨 Invia al DS</button><label class="btn btn-s" style="cursor:pointer">📷 Carica scheda<input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png" capture="environment" style="display:none" onchange="uploadSchedaFile(event)"></label></div>
     </div>
   </div>`;
 }
@@ -4508,6 +4522,10 @@ function openCanvasFase(idx){
   // Snapshot current form state
   captureSchedaFormState();
   openM('🎨 Disegna Fase '+(idx+1)+' — '+['ATTIVAZIONE','SVILUPPO INDIVIDUALE','SVILUPPO COLLETTIVO','PARTITA'][idx],`
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;padding:6px;background:#e8f5e9;border-radius:var(--rs);align-items:center">
+      <div style="font-size:10px;font-weight:700;color:#2d6a3f;width:100%;margin-bottom:4px">🌿 SFONDO CAMPO</div>
+      ${[['full11','Campo 11v11'],['half11','Mezzo campo'],['7v7','Campo 7v7'],['5v5','Campo 5v5'],['blank','Bianco']].map(([v,l])=>`<button class="btn btn-sm ${cvState&&cvState.bg===v?'btn-p':'btn-s'}" id="cv_bg_${v}" onclick="cvChangeBg('${v}')">${l}</button>`).join('')}
+    </div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;padding:6px;background:var(--g50);border-radius:var(--rs)">
       <div style="font-size:10px;font-weight:700;color:var(--g500);width:100%">STRUMENTI BASE</div>
       <button class="btn btn-sm btn-s" onclick="cvTool('pen')" id="cv_t_pen">✎ Matita</button>
@@ -4567,7 +4585,7 @@ function openCanvasFase(idx){
 function captureSchedaFormState(){
   const s=schedaForm;
   const get=id=>{const el=document.getElementById(id);return el?el.value:''};
-  s.tecnico=get('sc_te')||s.tecnico;s.data=get('sc_da')||s.data;s.mdg=get('sc_mdg')||s.mdg||'';s.anno=get('sc_an')||s.anno||'';s.briefIni=get('sc_brI')||s.briefIni||'';s.briefFin=get('sc_brF')||s.briefFin||'';s.note=get('sc_no')||s.note||'';
+  s.tecnico=get('sc_te')||s.tecnico;s.data=get('sc_da')||s.data;s.mdg=get('sc_mdg')||s.mdg||'';s.orario=get('sc_orario')||s.orario||'';s.anno=get('sc_an')||s.anno||'';s.briefIni=get('sc_brI')||s.briefIni||'';s.briefFin=get('sc_brF')||s.briefFin||'';s.note=get('sc_no')||s.note||'';
   // Radio buttons
   const catR=document.querySelector('input[name="sc_cat_r"]:checked');if(catR)s.categoria=catR.value;
   const sedR=document.querySelector('input[name="sc_sed"]:checked');if(sedR)s.seduta=+sedR.value;
@@ -4577,16 +4595,61 @@ function captureSchedaFormState(){
   [1,2,3,4].forEach(i=>{const el=document.getElementById('sc_f'+i+'_c');const el2=document.getElementById('sc_f'+i+'_d');if(!s['f'+i])s['f'+i]={};if(el)s['f'+i].contenuti=el.value;if(el2)s['f'+i].durata=+el2.value});
 }
 
-let canvasFaseIdx=0,cvState={tool:'xw',history:[],future:[],drawing:false,startX:0,startY:0,snap:null,rotation:0};
+let canvasFaseIdx=0,cvState={tool:'xw',history:[],future:[],drawing:false,startX:0,startY:0,snap:null,rotation:0,bg:'full11'};
 function cvTool(t){cvState.tool=t;document.querySelectorAll('[id^="cv_t_"]').forEach(el=>el.classList.remove('btn-p'));const b=document.getElementById('cv_t_'+t);if(b)b.classList.add('btn-p')}
-function cvClear(){const cv=document.getElementById('sc_canvas');if(!cv)return;cvPushHist();const ctx=cv.getContext('2d');cvDrawPitch(ctx,cv.width,cv.height)}
-function cvDrawPitch(ctx,W,H){
-  ctx.fillStyle='#2d6a3f';ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.strokeRect(10,10,W-20,H-20);
-  ctx.beginPath();ctx.moveTo(W/2,10);ctx.lineTo(W/2,H-10);ctx.stroke();
-  ctx.beginPath();ctx.arc(W/2,H/2,40,0,Math.PI*2);ctx.stroke();
-  // area di rigore
-  ctx.strokeRect(10,H/2-80,60,160);ctx.strokeRect(W-70,H/2-80,60,160);
+function cvChangeBg(bg){cvState.bg=bg;document.querySelectorAll('[id^="cv_bg_"]').forEach(el=>el.classList.remove('btn-p'));const b=document.getElementById('cv_bg_'+bg);if(b)b.classList.add('btn-p');const cv=document.getElementById('sc_canvas');if(!cv)return;cvPushHist();const ctx=cv.getContext('2d');cvDrawPitch(ctx,cv.width,cv.height,bg)}
+function cvClear(){const cv=document.getElementById('sc_canvas');if(!cv)return;cvPushHist();const ctx=cv.getContext('2d');cvDrawPitch(ctx,cv.width,cv.height,cvState.bg)}
+function cvDrawPitch(ctx,W,H,bg){
+  bg=bg||cvState.bg||'full11';
+  if(bg==='blank'){ctx.fillStyle='#f5f5f0';ctx.fillRect(0,0,W,H);return;}
+  const GREEN='#2d6a3f',WHITE='#fff';
+  ctx.fillStyle=GREEN;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=WHITE;ctx.lineWidth=2.5;
+  if(bg==='full11'){
+    // campo intero orizzontale (vista dall'alto)
+    ctx.strokeRect(12,12,W-24,H-24);
+    ctx.beginPath();ctx.moveTo(W/2,12);ctx.lineTo(W/2,H-12);ctx.stroke();
+    ctx.beginPath();ctx.arc(W/2,H/2,38,0,Math.PI*2);ctx.stroke();
+    // area di rigore sx
+    const aw=56,ah=Math.min(145,H-30);
+    ctx.strokeRect(12,H/2-ah/2,aw,ah);
+    ctx.strokeRect(12,H/2-ah/3.5,aw/2.5,ah/1.75);
+    // area di rigore dx
+    ctx.strokeRect(W-12-aw,H/2-ah/2,aw,ah);
+    ctx.strokeRect(W-12-aw/2.5,H/2-ah/3.5,aw/2.5,ah/1.75);
+    // dischetto
+    ctx.beginPath();ctx.arc(W*0.135,H/2,3,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(W*0.865,H/2,3,0,Math.PI*2);ctx.fill();
+  } else if(bg==='half11'){
+    // mezzo campo (vista dal lato lungo)
+    ctx.strokeRect(12,12,W-24,H-24);
+    ctx.beginPath();ctx.moveTo(12,H-12);ctx.lineTo(W-12,H-12+0);ctx.stroke();
+    ctx.beginPath();ctx.arc(W/2,H-12,38,Math.PI,0);ctx.stroke();
+    const aw2=Math.min(175,W-30),ah2=56;
+    ctx.strokeRect(W/2-aw2/2,H-12-ah2,aw2,ah2);
+    ctx.strokeRect(W/2-aw2/4,H-12-ah2/2.2,aw2/2,ah2/2.2);
+    ctx.beginPath();ctx.arc(W/2,H-12-ah2*1.2,3,0,Math.PI*2);ctx.fill();
+  } else if(bg==='7v7'){
+    // campo 7v7 semplificato
+    ctx.strokeRect(12,12,W-24,H-24);
+    ctx.beginPath();ctx.moveTo(W/2,12);ctx.lineTo(W/2,H-12);ctx.stroke();
+    ctx.beginPath();ctx.arc(W/2,H/2,28,0,Math.PI*2);ctx.stroke();
+    const aw3=40,ah3=Math.min(110,H-30);
+    ctx.strokeRect(12,H/2-ah3/2,aw3,ah3);
+    ctx.strokeRect(W-12-aw3,H/2-ah3/2,aw3,ah3);
+  } else if(bg==='5v5'){
+    // futsal / campo a 5
+    ctx.strokeRect(12,12,W-24,H-24);
+    ctx.beginPath();ctx.moveTo(W/2,12);ctx.lineTo(W/2,H-12);ctx.stroke();
+    ctx.beginPath();ctx.arc(W/2,H/2,20,0,Math.PI*2);ctx.stroke();
+    const aw4=30,ah4=Math.min(75,H-30);
+    ctx.strokeRect(12,H/2-ah4/2,aw4,ah4);
+    ctx.strokeRect(W-12-aw4,H/2-ah4/2,aw4,ah4);
+    // semicerchi area
+    ctx.beginPath();ctx.arc(12+aw4,H/2,aw4,Math.PI/2,-Math.PI/2);ctx.stroke();
+    ctx.beginPath();ctx.arc(W-12-aw4,H/2,aw4,-Math.PI/2,Math.PI/2);ctx.stroke();
+  }
+  ctx.fillStyle=WHITE;
 }
 function cvUndo(){if(!cvState.history.length)return;const cv=document.getElementById('sc_canvas');const ctx=cv.getContext('2d');cvState.future.push(cv.toDataURL());const prev=cvState.history.pop();const img=new Image();img.onload=()=>{ctx.clearRect(0,0,cv.width,cv.height);ctx.drawImage(img,0,0)};img.src=prev}
 function cvRedo(){if(!cvState.future.length)return;const cv=document.getElementById('sc_canvas');const ctx=cv.getContext('2d');cvPushHist(true);const nx=cvState.future.pop();const img=new Image();img.onload=()=>{ctx.clearRect(0,0,cv.width,cv.height);ctx.drawImage(img,0,0)};img.src=nx}
@@ -4674,7 +4737,7 @@ const _origRenderView=renderView;
 renderView=function(){_origRenderView.apply(this,arguments);if(state.currentView==='schede'&&schedaTab==='cmp')setTimeout(scCanvasInit,50)};
 
 function saveScheda(){
-  captureSchedaFormState();const s=schedaForm;const data={id:schedaForm.id||uid(),tecnico:s.tecnico||'',categoria:s.categoria||'',mese:s.mese||'',data:s.data||today(),seduta:+(s.seduta||1),impianto:s.impianto||'',meteo:s.meteo||'',mdg:s.mdg||'',anno:s.anno||'',giorno:s.giorno,obj0:s.obj0||'',obj1:s.obj1||'',obj2:s.obj2||'',obj3:s.obj3||'',obj4:s.obj4||'',obj5:s.obj5||'',objTec:s.obj2||'',objPrincipale:s.obj2||'',objDescrizione:'',briefIni:s.briefIni||'',briefFin:s.briefFin||'',note:s.note||'',disegniFasi:s.disegniFasi||['','','','']};
+  captureSchedaFormState();const s=schedaForm;const data={id:schedaForm.id||uid(),tecnico:s.tecnico||'',categoria:s.categoria||'',mese:s.mese||'',data:s.data||today(),seduta:+(s.seduta||1),impianto:s.impianto||'',meteo:s.meteo||'',mdg:s.mdg||'',orario:s.orario||'',anno:s.anno||'',giorno:s.giorno,obj0:s.obj0||'',obj1:s.obj1||'',obj2:s.obj2||'',obj3:s.obj3||'',obj4:s.obj4||'',obj5:s.obj5||'',objTec:s.obj2||'',objPrincipale:s.obj2||'',objDescrizione:'',briefIni:s.briefIni||'',briefFin:s.briefFin||'',note:s.note||'',disegniFasi:s.disegniFasi||['','','','']};
   [1,2,3,4].forEach(i=>{data['f'+i]=schedaForm['f'+i]||{}});
   if(schedaForm.id){const i=state.schede.findIndex(x=>x.id===schedaForm.id);if(i>=0)state.schede[i]=data}else{state.schede.push(data)}
   schedaForm={};schedaTab='arc';saveStore();renderView();toast('Scheda salvata in archivio','s');
@@ -5827,6 +5890,264 @@ function delSchedeExtAll(){
 }
 function toggleAllSchedeExt(checked){
   document.querySelectorAll('.sce-chk').forEach(x=>x.checked=checked);
+}
+
+/* ── SCHEMI TATTICI ── */
+const MODULI_PREDEF=['1-4-3-3','1-4-4-2','1-3-5-2','1-4-2-3-1','1-4-3-2-1','1-5-3-2','1-3-4-3','1-4-5-1','1-4-1-4-1','1-3-4-2-1','Personalizzato'];
+const TIPO_SCHEMA={modulo:'📐 Modulo',palla_inattiva:'⚽ Palla Inattiva',pressing:'🔴 Pressing',offensiva:'⚡ Offensiva',difensiva:'🛡 Difensiva',custom:'✏️ Custom'};
+VIEWS.schemiTattici=function(c){
+  const cu=state.currentUser;
+  const canEdit=cu&&((cu.permessi||[]).includes('all')||['admin','ds','rsg'].includes(cu.role_key));
+  const all=(state.schemiTattici||[]).slice().sort((a,b)=>b.dataCreazione.localeCompare(a.dataCreazione));
+  const filtCat=state._schFiltCat||'';
+  const filtTipo=state._schFiltTipo||'';
+  let list=all;
+  if(filtCat)list=list.filter(s=>s.categoria===filtCat);
+  if(filtTipo)list=list.filter(s=>s.tipo===filtTipo);
+  const cats=[...new Set(state.players.filter(p=>!p.eliminato).map(p=>p.categoria))].sort();
+  c.innerHTML=`
+  <div class="vw">
+    <div class="vh"><div><h1>Schemi Tattici</h1><div class="sb2">Libreria schemi di gioco — modulo, palla inattiva, pressing, sviluppo manovra</div></div>
+      ${canEdit?`<button class="btn btn-p btn-sm" onclick="openNuovoSchema()">+ Nuovo schema</button>`:''}
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      <select onchange="state._schFiltCat=this.value;saveStore();renderView()" style="padding:8px 12px;border:1px solid var(--g300);border-radius:var(--rs);font-size:13px">
+        <option value="">— Tutte le categorie —</option>
+        ${cats.map(ct=>`<option value="${ct}" ${filtCat===ct?'selected':''}>${esc(ct)}</option>`).join('')}
+      </select>
+      <select onchange="state._schFiltTipo=this.value;saveStore();renderView()" style="padding:8px 12px;border:1px solid var(--g300);border-radius:var(--rs);font-size:13px">
+        <option value="">— Tutti i tipi —</option>
+        ${Object.entries(TIPO_SCHEMA).map(([k,v])=>`<option value="${k}" ${filtTipo===k?'selected':''}>${v}</option>`).join('')}
+      </select>
+      <span class="bdg">${list.length} schemi</span>
+    </div>
+    ${!list.length?`<div class="es"><div class="ic">🧩</div><h3>Nessuno schema in libreria</h3><p>${canEdit?'Crea il primo schema con "+ Nuovo schema".':'Nessuno schema disponibile con i filtri selezionati.'}</p></div>`:`
+    <div style="display:grid;gap:10px">
+      ${list.map(s=>{
+        const tCol={modulo:'#2563eb',palla_inattiva:'#d97706',pressing:'#dc2626',offensiva:'#16a34a',difensiva:'#7c3aed',custom:'#64748b'}[s.tipo]||'#64748b';
+        const matchCount=(s.matchIds||[]).length;
+        return `<div class="card" style="border-left:4px solid ${tCol};padding:14px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+                <span class="bdg" style="background:${tCol}20;color:${tCol};font-size:11px">${TIPO_SCHEMA[s.tipo]||s.tipo}</span>
+                <span class="bdg" style="font-size:11px">📐 ${esc(s.modulo||'—')}</span>
+                ${s.categoria?`<span class="bdg" style="font-size:11px">${esc(s.categoria)}</span>`:''}
+                ${matchCount?`<span class="bdg" style="font-size:11px">⚽ ${matchCount} partite</span>`:''}
+              </div>
+              <div style="font-weight:700;font-size:15px;margin-bottom:4px">${esc(s.nome)}</div>
+              ${s.noteTattiche?`<div style="font-size:12px;color:var(--g600);line-height:1.4">${esc(s.noteTattiche.substring(0,200))}${s.noteTattiche.length>200?'…':''}</div>`:''}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+              <div style="font-size:11px;color:var(--g400)">${fmtIt(s.dataCreazione)}</div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm btn-s" onclick="openAssegnaPartita('${s.id}')" title="Assegna a partita">⚽</button>
+                ${canEdit?`<button class="btn btn-sm btn-s" onclick="openEditSchema('${s.id}')">✏️</button><button class="btn btn-sm btn-d" onclick="delSchema('${s.id}')">🗑</button>`:''}
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`}
+  </div>`;
+};
+function _schemaForm(s){
+  return `
+    <div class="fg" style="margin-bottom:12px">
+      <div class="ff" style="flex:2"><label>Nome schema *</label><input id="sh_nm" value="${s?esc(s.nome):''}" placeholder="es. 4-3-3 press alto" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+      <div class="ff"><label>Tipo *</label>
+        <select id="sh_tp" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          ${Object.entries(TIPO_SCHEMA).map(([k,v])=>`<option value="${k}" ${s&&s.tipo===k?'selected':''}>${v}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="fg" style="margin-bottom:12px">
+      <div class="ff"><label>Modulo</label>
+        <select id="sh_mo" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          ${MODULI_PREDEF.map(m=>`<option value="${m}" ${s&&s.modulo===m?'selected':''}>${m}</option>`).join('')}
+        </select></div>
+      <div class="ff"><label>Categoria</label>
+        <select id="sh_ca" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          <option value="">— Tutte —</option>
+          ${[...new Set(state.players.filter(p=>!p.eliminato).map(p=>p.categoria))].sort().map(ct=>`<option value="${ct}" ${s&&s.categoria===ct?'selected':''}>${esc(ct)}</option>`).join('')}
+        </select></div>
+      <div class="ff"><label>Autore</label><input id="sh_au" value="${s?esc(s.autore||''):esc(state.currentUser?.name||'')}" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+    </div>
+    <div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Note tattiche</label>
+      <textarea id="sh_nt" rows="5" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs);font:inherit;font-size:12px;resize:vertical" placeholder="Descrizione dello schema: posizionamento, movimenti chiave, istruzioni, riferimenti video...">${s?esc(s.noteTattiche||''):''}</textarea></div>`;
+}
+function openNuovoSchema(){
+  openM('Nuovo Schema Tattico',_schemaForm(null),
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveSchema()">Salva</button>`);
+}
+function openEditSchema(id){
+  const s=(state.schemiTattici||[]).find(x=>x.id===id);if(!s)return;
+  openM('Modifica Schema — '+esc(s.nome),_schemaForm(s),
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveSchema('${id}')">Aggiorna</button>`);
+}
+function saveSchema(id){
+  const nm=document.getElementById('sh_nm')?.value.trim();
+  if(!nm){toast('Nome obbligatorio','e');return;}
+  const data={nome:nm,tipo:document.getElementById('sh_tp')?.value||'modulo',modulo:document.getElementById('sh_mo')?.value||'',categoria:document.getElementById('sh_ca')?.value||'',autore:document.getElementById('sh_au')?.value||'',noteTattiche:document.getElementById('sh_nt')?.value||''};
+  if(!state.schemiTattici)state.schemiTattici=[];
+  if(id){const idx=state.schemiTattici.findIndex(x=>x.id===id);if(idx>=0)Object.assign(state.schemiTattici[idx],data);}
+  else{state.schemiTattici.push({id:uid(),dataCreazione:today(),matchIds:[],...data});}
+  saveStore();closeM();renderView();toast('Schema salvato','s');
+}
+function delSchema(id){
+  if(!confirm('Eliminare questo schema?'))return;
+  state.schemiTattici=state.schemiTattici.filter(x=>x.id!==id);
+  saveStore();renderView();toast('Eliminato','s');
+}
+function openAssegnaPartita(schId){
+  const sch=(state.schemiTattici||[]).find(x=>x.id===schId);if(!sch)return;
+  if(!sch.matchIds)sch.matchIds=[];
+  const matches=(state.matches||[]).slice().sort((a,b)=>b.data.localeCompare(a.data)).slice(0,30);
+  openM(`⚽ Assegna a partita — ${esc(sch.nome)}`,`
+    <div style="font-size:12px;margin-bottom:12px;color:var(--g500)">Seleziona le partite a cui associare questo schema. Partite già assegnate: <strong>${sch.matchIds.length}</strong></div>
+    <div style="max-height:360px;overflow-y:auto;display:grid;gap:6px">
+      ${!matches.length?'<p style="color:var(--g400)">Nessuna partita disponibile.</p>':matches.map(m=>`
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:${sch.matchIds.includes(m.id)?'#dbeafe':'var(--g50)'};border-radius:var(--rs);cursor:pointer;border:1px solid ${sch.matchIds.includes(m.id)?'#93c5fd':'var(--g200)'}">
+          <input type="checkbox" value="${m.id}" ${sch.matchIds.includes(m.id)?'checked':''} style="width:16px;height:16px">
+          <div style="flex:1"><div style="font-weight:600">${fmtIt(m.data)} · vs ${esc(m.avversario||'—')}</div><div style="font-size:11px;color:var(--g500)">${esc(m.categoria||'—')}</div></div>
+        </label>`).join('')}
+    </div>`,
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveAssegnaPartita('${schId}')">Salva assegnazione</button>`);
+}
+function saveAssegnaPartita(schId){
+  const sch=(state.schemiTattici||[]).find(x=>x.id===schId);if(!sch)return;
+  const checked=[...document.querySelectorAll('#modalEl input[type=checkbox]:checked')].map(el=>el.value);
+  sch.matchIds=checked;
+  saveStore();closeM();renderView();toast('Assegnazione aggiornata','s');
+}
+
+/* ── EXPORT SCHEDA PDF (v2) — replica template LASCARIS ── */
+function exportSchedaPDF2(){
+  if(!window.jspdf){toast('Libreria PDF non caricata','e');return;}
+  captureSchedaFormState();
+  const s=schedaForm;
+  if(!s.data&&!s.categoria){toast('Salva prima la scheda o compila i campi','e');return;}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+  const PW=210,PH=297,M=10;const W=PW-2*M;
+  const hf=(sz,b)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(sz);};
+  const fmtGiorno=(g)=>['L','M','M','G','V','S','D'][g]||'';
+  // ── PAGE 1: HEADER + DATI + OBIETTIVI ──
+  // Header bar
+  doc.setFillColor(0,0,0);doc.rect(M,M,W,12,'F');
+  hf(13,true);doc.setTextColor(255,255,255);
+  try{doc.addImage(LOGO,'PNG',M+2,M+2,8,8)}catch(e){}
+  doc.text('LASCARIS1954ASD',M+12,M+8.5);
+  hf(10,false);doc.text('|  SCHEDA ALLENAMENTO',M+62,M+8.5);
+  let y=M+14;
+  // 2-colonna: Dati Seduta | Obiettivi
+  const col1W=68,col2W=W-col1W-3,col2X=M+col1W+3;
+  const rowH=7;
+  const sedutaRows=[
+    ['Tecnico',s.tecnico||'—'],
+    ['Stagione',s.stagione||state.societa.stagione||'2025/2026'],
+    ['Data',s.data?fmtIt(s.data):'—'],
+    ['Giorno',fmtGiorno(s.giorno)],
+    ['Seduta',String(s.seduta||1)],
+    ['Mod. Gioco',s.mdg||'—'],
+    ['Orario',s.orario||'—'],
+    ['Meteo',s.meteo||'—'],
+  ];
+  // Header colonne
+  doc.setFillColor(0,0,0);doc.rect(M,y,col1W,6,'F');
+  hf(7,true);doc.setTextColor(255,255,255);doc.text('DATI SEDUTA',M+2,y+4.2);
+  doc.setFillColor(0,0,0);doc.rect(col2X,y,col2W,6,'F');
+  doc.text('OBIETTIVI DELLA SEDUTA',col2X+2,y+4.2);
+  y+=6;
+  // Categoria (riga speciale con checkboxes simulati)
+  const catW1=20,catW2=col1W-catW1;
+  doc.setFillColor(230,230,230);doc.rect(M,y,catW1,rowH,'F');
+  doc.setDrawColor(0);doc.rect(M,y,catW1,rowH);
+  hf(7,true);doc.setTextColor(0);doc.text('Categoria',M+1.5,y+4.5);
+  doc.rect(M+catW1,y,catW2,rowH);
+  hf(7,false);
+  const catStr=['U6','U7','U8','U9','U10','U11','U12','U13','Anno'].map(ct=>ct===(s.categoria||'')?'[✓'+ct+']':ct).join(' ');
+  doc.text(catStr.substring(0,38),M+catW1+1.5,y+4.5);
+  // Obiettivi col right header row
+  const objLabels=['Psicologico–Emotivo','Motorio–Coordinativo','Obiettivo Tecnico','Principio di gioco','Sotto-principio','Sotto-sotto principio'];
+  const objVals=[s.obj0,s.obj1,s.obj2,s.obj3,s.obj4,s.obj5];
+  const objRowH=rowH;
+  // Disegno righe dati seduta (da riga 2 in poi)
+  let yi=y;
+  sedutaRows.forEach((r,i)=>{
+    const ry=i===0?y+rowH:yi+(i>0?i*rowH:0);
+    if(i===0){yi=y;}
+    const actualY=y+rowH+i*rowH;
+    doc.setFillColor(230,230,230);doc.rect(M,actualY,catW1,rowH,'F');
+    doc.setDrawColor(0);doc.rect(M,actualY,catW1,rowH);doc.rect(M+catW1,actualY,catW2,rowH);
+    hf(7,true);doc.setTextColor(0);doc.text(r[0],M+1.5,actualY+4.5);
+    hf(7,false);doc.text(String(r[1]).substring(0,26),M+catW1+1.5,actualY+4.5);
+    // Obiettivi a destra (max 6 righe)
+    if(i<objLabels.length){
+      const oY=i===0?y+rowH:y+rowH+i*objRowH;
+      doc.setFillColor(230,230,230);doc.rect(col2X,oY,52,objRowH,'F');
+      doc.setDrawColor(0);doc.rect(col2X,oY,52,objRowH);doc.rect(col2X+52,oY,col2W-52,objRowH);
+      hf(6.5,true);doc.text(objLabels[i],col2X+1.5,oY+4.2);
+      hf(6.5,false);const ov=String(objVals[i]||'').substring(0,38);doc.text(ov,col2X+53.5,oY+4.2);
+    }
+  });
+  // Se ci sono più righe dati che obiettivi, aggiorno y
+  y=y+rowH+(Math.max(sedutaRows.length,objLabels.length))*rowH+3;
+  // Briefing iniziale
+  doc.setFillColor(0,0,0);doc.rect(M,y,W,6,'F');
+  hf(8,true);doc.setTextColor(255,255,255);
+  doc.text("BRIEFING INIZIALE | CONDIVISIONE DEGLI OBIETTIVI – 5'",PW/2,y+4.2,{align:'center'});
+  y+=8;
+  // ── PAGINE FASI ──
+  const faseNomi=['ATTIVAZIONE','SVILUPPO INDIVIDUALE','SVILUPPO COLLETTIVO','PARTITA'];
+  const faseNomiCustom=s.faseNomi||faseNomi;
+  [1,2,3,4].forEach((fi,idx)=>{
+    doc.addPage();
+    let fy=M;
+    // Header fase
+    doc.setFillColor(0,0,0);doc.rect(M,fy,W,8,'F');
+    hf(10,true);doc.setTextColor(255,255,255);
+    const fn=faseNomiCustom[idx]||faseNomi[idx];
+    const dur=(s['f'+(fi)]||{}).durata||20;
+    doc.text(`FASE ${fi} | ${fn} – ${dur}'`,M+3,fy+5.5);
+    fy+=10;
+    // Due colonne: canvas sx (55%), contenuti dx (45%)
+    const canvW=Math.round(W*0.55),contW=W-canvW-2,contX=M+canvW+2;
+    const boxH=PH-M-fy-10;
+    // Canvas
+    doc.setDrawColor(0);doc.setFillColor(45,106,63);
+    const dis=s.disegniFasi&&s.disegniFasi[idx];
+    if(dis){
+      try{doc.addImage(dis,'PNG',M,fy,canvW,boxH);}
+      catch(e){doc.rect(M,fy,canvW,boxH,'F');}
+    } else {
+      doc.rect(M,fy,canvW,boxH,'F');
+      hf(9,false);doc.setTextColor(180,220,180);
+      doc.text('RAPPRESENTAZIONE',M+canvW/2,fy+boxH/2-5,{align:'center'});
+      doc.text('DELLA PROPOSTA',M+canvW/2,fy+boxH/2+2,{align:'center'});
+    }
+    // Contenuti
+    doc.setDrawColor(0);doc.rect(contX,fy,contW,boxH);
+    hf(7.5,true);doc.setTextColor(0);doc.text('CONTENUTI',contX+2,fy+5);
+    const ct=(s['f'+fi]||{}).contenuti||'';
+    hf(8,false);
+    const ctLines=doc.splitTextToSize(ct,contW-4);
+    ctLines.slice(0,Math.floor((boxH-10)/4.5)).forEach((line,i)=>{
+      doc.text(line,contX+2,fy+10+i*4.5);
+    });
+    // Linee vuote se poco testo
+    const linesShown=ctLines.length;const totalLines=Math.floor((boxH-10)/4.5);
+    for(let i=linesShown;i<totalLines;i++){
+      const lineY=fy+10+i*4.5;
+      doc.setDrawColor(210,210,210);doc.line(contX+2,lineY,contX+contW-2,lineY);
+    }
+  });
+  // Ultima riga Briefing Finale (stessa ultima pagina)
+  const lastY=PH-M-8;
+  doc.setFillColor(0,0,0);doc.rect(M,lastY,W,8,'F');
+  hf(8,true);doc.setTextColor(255,255,255);
+  doc.text("BRIEFING FINALE | CONFRONTO CON LA SQUADRA – 5'",PW/2,lastY+5,{align:'center'});
+  doc.save('scheda_'+((s.categoria||'').replace(/\s/g,'_'))+'_'+(s.data||today())+'.pdf');
+  toast('PDF esportato','s');
 }
 
 /* ── PIANO STAGIONALE ── */
