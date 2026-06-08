@@ -1,10 +1,15 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.15
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.16
 ================================================================================
   CHANGELOG
   ----------
+  v2.16 · 2026-06-08 · Hotfix: SyntaxError in saveRuoloDB (bloccava login)
+    · FIX  Ternario mancante del ramo falso `:''` in saveRuoloDB() riga 1711.
+           L'errore di sintassi JS impediva il parsing dell'intero script,
+           rendendo il pulsante "Accedi" non funzionante.
+
   v2.15 · 2026-06-03 · Hotfix: rimossa CSP (bloccava script inline)
     · FIX  Rimosso meta CSP: 'unsafe-inline' in script-src non funziona
            con app single-file su GitHub Pages (Chrome ignora il tag e
@@ -1708,7 +1713,7 @@ async function saveRuoloDB(userId){
   try{
     const{error}=await sb.rpc('admin_assign_role',{p_user_id:userId,p_ruolo_codice:ruolo,p_cat_codice:cat,p_grp_nome:grp});
     if(error)throw new Error(error.message);
-    closeM();toast('Ruolo assegnato: '+ruolo+(cat?' ('+cat+(grp?'/'+grp:'')+')'),'s');
+    closeM();toast('Ruolo assegnato: '+ruolo+(cat?' ('+cat+(grp?'/'+grp:'')+')':''),'s');
     loadUtentiDB();
   }catch(e){toast('Errore: '+e.message,'e')}
 }
