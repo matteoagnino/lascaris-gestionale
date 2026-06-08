@@ -1,10 +1,26 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.17
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.19
 ================================================================================
   CHANGELOG
   ----------
+  v2.19 · 2026-06-08 · Report Partita, Fascicolo Giocatore, Report Scout
+    · NEW  Report Partita Strutturato: voti collettivi (off/def/tra/p.inattive)
+           + voti individuali + note per ogni partita da Minutaggi.
+    · NEW  Fascicolo Giocatore: profilo tecnico completo con TIPPS, infortuni,
+           presenze%, minutaggi, osservazioni interne, doppie convocazioni.
+    · NEW  Report Scout Settimanale: report con lista giocatori osservati, voti,
+           flag raccomandazione e note generali; notifica automatica al DS.
+
+  v2.18 · 2026-06-08 · Focus tecnico: nuovi moduli e riorganizzazione menu
+    · RIM  Squalifiche & Diffide rimossa dal menu (dati conservati).
+    · NEW  Doppie Convocazioni: traccia giocatori aggregati in categoria sup.
+    · NEW  Confronto Giocatori: radar + tabella comparativa su 2-4 giocatori.
+    · NEW  🔔 Alert & Notifiche: campanella in topbar con infortuni attivi,
+           partite in arrivo e notifiche DS non lette.
+    · UPD  Permessi aggiornati per DS, RSG, Tecnico, Scout.
+
   v2.17 · 2026-06-08 · Archivio Scouting: elimina singola, multipla, tutte
     · NEW  delSchedaExt(id): elimina singola scheda da Supabase (🗑 per riga).
     · NEW  delSchedeExtSelected(): elimina schede spuntate (checkbox per riga).
@@ -453,6 +469,7 @@ tr:hover td{background:var(--g50)}
     <button class="mt" onclick="toggSb()">☰</button>
     <img id="tbLogo" alt="LASCARIS">
     <span class="sp">Stagione 2025/26</span>
+    <button id="alertBtn" onclick="openAlerts()" style="position:relative;background:transparent;border:none;font-size:18px;padding:4px 10px;cursor:pointer;line-height:1" title="Alert & Notifiche">🔔<span id="alertBadge" style="display:none;position:absolute;top:0;right:2px;background:#dc2626;color:#fff;font-size:9px;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;font-weight:700"></span></button>
     <button class="uc" onclick="doLogout()">
       <div class="av" id="uAv">MA</div>
       <div class="ui"><div class="n" id="uNm">Matteo Agnino</div><div class="r" id="uRl">Admin</div></div>
@@ -532,7 +549,7 @@ function loadStore(){
   // Try localStorage first for instant load, then ALWAYS sync from Supabase
   let d=null;
   try{const s=localStorage.getItem(STORE);d=s?JSON.parse(s):null;if(d){
-    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
+    ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
     migrateStateV23(d);
     const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(d.users||[]).find(x=>x.id===uref.id);if(u)d.currentUser=u}}
   }catch(e){}
@@ -574,7 +591,7 @@ async function loadFromSupabase(){
       const localTs=localStorage.getItem(STORE+'_ts')||'';
       if(row.updated_at>localTs||!localTs){
         const d=row.data;
-        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
+        ['matches','schede','obiettiviProg','storicoArchiviato','segnalazioniScout','osservazioniInterne','doppieConv','reportScout','permessiCustom','incarichiCustom','notificheDS','schedeUpload'].forEach(k=>{if(!d[k])d[k]=[]});
         if(!d.profiliPermessi||!d.profiliPermessi.length)d.profiliPermessi=JSON.parse(JSON.stringify(DEFAULT_STATE.profiliPermessi));
         migrateStateV23(d);Object.assign(state,d);
         const su=sessionStorage.getItem(STORE+'_user');if(su){const uref=JSON.parse(su);const u=(state.users||[]).find(x=>x.id===uref.id);if(u)state.currentUser=u}
@@ -801,14 +818,16 @@ const DEFAULT_STATE={
   impiantiEsterni:[],
   // v2.2
   osservazioniInterne:[],
+  doppieConv:[],
+  reportScout:[],
   permessiCustom:[],  // Additional permissions created by admin
   incarichiCustom:[],  // Additional staff roles
   profiliPermessi:[
     {id:'prof_admin',nome:'Admin',incarico:'Admin',ruolo:'Amministratore di sistema',descrizione:'Accesso totale al gestionale inclusa gestione utenti',permessi:['all']},
-    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne']},
-    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne']},
-    {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda']},
-    {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','schedeExt','statDesc','rae']}
+    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout']},
+    {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout']},
+    {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda','doppieConv','confronto','fascicolo']},
+    {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','schedeExt','statDesc','rae','confronto','reportScout']}
   ]
 };
 
@@ -1031,6 +1050,7 @@ function enterApp(u){
   calView={y:new Date().getFullYear(),m:new Date().getMonth()};
   impWk=wkStart(new Date());
   goto('dashboard');
+  refreshAlertBadge();
 }
 async function doLogout(){
   await sb.auth.signOut().catch(()=>{});
@@ -1062,20 +1082,23 @@ const NAV=[
       ['distinta','📝','Distinta & Referto'],
       ['minutaggi','⏱','Minutaggi & Partite'],
       ['schede','📋','Schede Allenamento'],
-      ['osservInterne','📨','Osservazioni Interne']
+      ['osservInterne','📨','Osservazioni Interne'],
+      ['doppieConv','🔼','Doppie Convocazioni'],
+      ['fascicolo','📁','Fascicolo Giocatore']
     ]},
     {sh:'Area Valutazione',items:[
       ['tippsInt','★','TIPPS Scouting Interno'],
       ['tippsIntP','🧤','TIPPS Interno Portieri'],
-      ['infortuni','🩹','Infortuni'],
-      ['disciplina','🟨','Squalifiche & Diffide']
+      ['infortuni','🩹','Infortuni']
     ]},
     {sh:'Area Scouting',items:[
       ['tippsExt','🔍','TIPPS Scouting Esterno'],
       ['tippsExtP','🧤','TIPPS Esterno Portieri'],
-      ['schedeExt','📋','Archivio Schede Scouting']
+      ['schedeExt','📋','Archivio Schede Scouting'],
+      ['reportScout','📡','Report Scout']
     ]},
     {sh:'Area Analisi Statistiche',items:[
+      ['confronto','⚖','Confronto Giocatori'],
       ['statDesc','📊','Statistiche Descrittive'],
       ['statInf','📈','Analisi Inferenziali'],
       ['rae','📅','Effetto Età Relativa']
@@ -1108,6 +1131,7 @@ function goto(v){
   state.currentView=v;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('on',el.dataset.v===v));
   renderView();
+  refreshAlertBadge();
   if(window.innerWidth<=900)document.getElementById('sb').classList.remove('on');
   document.querySelector('.mn').scrollTop=0;
   saveStore();
@@ -1645,8 +1669,8 @@ function orgComSendSMS(){const phones=orgComGetPhones();if(!phones.length){toast
 /* =============================================================
    VIEW: UTENTI & PERMESSI
    ============================================================= */
-const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','disciplina','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','impianti','parametri','storico','utenti','schedeExt'];
-const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',disciplina:'Squalifiche & Diffide',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
+const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','impianti','parametri','storico','utenti','schedeExt'];
+const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
 function allPerms(){return [...PERMS_BASE,...state.permessiCustom.map(p=>p.code)]}
 function permLabel(code){return PERM_LABELS_BASE[code]||(state.permessiCustom.find(p=>p.code===code)||{}).label||code}
 // Back-compat aliases
@@ -4139,7 +4163,7 @@ VIEWS.minutaggi=function(c){
             <td><strong style="color:${m.home>m.away?'var(--green)':m.home<m.away?'var(--red)':'var(--g500)'}">${m.home}-${m.away}</strong></td>
             <td>${totalMin}'</td>
             <td>${m.events.length}</td>
-            <td style="white-space:nowrap"><button class="btn btn-sm btn-s" onclick="showMatchDetail('${m.id}')" title="Dettaglio">📋</button> <button class="btn btn-sm btn-s" onclick="editMatchGrid('${m.id}')" title="Modifica griglia">📊</button> <button class="btn btn-sm btn-s" onclick="reopenMatchLive('${m.id}')" title="Riapri nel Live">▶</button> <button class="btn btn-sm btn-s" onclick="downloadMatchPDF('${m.id}')" title="Scarica PDF">📄</button> <button class="btn btn-sm btn-d" onclick="delMatch('${m.id}')" title="Elimina">🗑</button></td>
+            <td style="white-space:nowrap"><button class="btn btn-sm btn-s" onclick="showMatchDetail('${m.id}')" title="Dettaglio">📋</button> <button class="btn btn-sm btn-s" onclick="openReportPartita('${m.id}')" title="Report partita" style="${m.report?'background:#dcfce7':''}">📝${m.report?'✓':''}</button> <button class="btn btn-sm btn-s" onclick="editMatchGrid('${m.id}')" title="Modifica griglia">📊</button> <button class="btn btn-sm btn-s" onclick="reopenMatchLive('${m.id}')" title="Riapri nel Live">▶</button> <button class="btn btn-sm btn-s" onclick="downloadMatchPDF('${m.id}')" title="Scarica PDF">📄</button> <button class="btn btn-sm btn-d" onclick="delMatch('${m.id}')" title="Elimina">🗑</button></td>
           </tr>`}).join('')}</tbody>
         </table></div></div>
       ${Object.values(byTeam).map(tm=>minutaggiSummary(tm)).join('')}
@@ -5782,6 +5806,418 @@ function delSchedeExtAll(){
 }
 function toggleAllSchedeExt(checked){
   document.querySelectorAll('.sce-chk').forEach(x=>x.checked=checked);
+}
+
+/* ── REPORT PARTITA ── */
+function openReportPartita(id){
+  const m=state.matches.find(x=>x.id===id);if(!m)return;
+  const rep=m.report||{};const col=rep.collettivo||{};
+  const played=m.roster.filter(r=>r.minutes>0).sort((a,b)=>b.minutes-a.minutes);
+  openM(`Report Partita · ${esc(m.avversario||'—')} · ${fmtIt(m.data)}`,`
+    <div style="font-size:12px">
+      <h3 style="font-size:13px;margin-bottom:10px;font-weight:700">Valutazione Collettiva</h3>
+      <div class="grid g4" style="margin-bottom:14px">
+        ${[['off','Offensiva'],['def','Difensiva'],['tra','Transizioni'],['pia','P. Inattive']].map(([k,lbl])=>`
+          <div style="text-align:center;padding:10px;background:var(--g50);border-radius:var(--rs)">
+            <div style="font-size:10px;color:var(--g500);margin-bottom:6px;text-transform:uppercase">${lbl}</div>
+            <select id="rp_${k}" style="width:60px;padding:4px;border:1px solid var(--g300);border-radius:var(--rs);text-align:center;font-weight:700">
+              ${['—','1','2','3','4','5'].map(v=>`<option value="${v}" ${(col[k]||'—')===v?'selected':''}>${v}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>
+      <div style="margin-bottom:14px"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Note generali</label>
+        <textarea id="rp_ng" rows="3" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs);font:inherit;font-size:12px;resize:vertical">${esc(rep.noteGenerali||'')}</textarea>
+      </div>
+      <h3 style="font-size:13px;margin-bottom:8px;font-weight:700">Valutazione Individuale</h3>
+      <div style="max-height:280px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="border-bottom:1px solid var(--g200);font-size:10px;color:var(--g500)"><th style="padding:5px 8px;text-align:left">Giocatore</th><th style="padding:5px 8px">Min.</th><th style="padding:5px 8px;text-align:center">Voto</th><th style="padding:5px 8px">Nota tecnica</th></tr></thead>
+          <tbody>${played.map(r=>{const pr=(rep.giocatori||[]).find(x=>x.pid===r.pid)||{};return `<tr style="border-bottom:1px solid var(--g100)">
+            <td style="padding:5px 8px"><strong>${esc(r.name)}</strong></td>
+            <td style="padding:5px 8px;color:var(--g500)">${r.minutes}'</td>
+            <td style="padding:5px 8px;text-align:center"><select id="rpv_${r.pid}" style="width:55px;padding:3px;border:1px solid var(--g300);border-radius:var(--rs);font-weight:700">
+              ${['—','1','2','3','4','5'].map(v=>`<option value="${v}" ${(pr.voto||'—')===v?'selected':''}>${v}</option>`).join('')}
+            </select></td>
+            <td style="padding:5px 8px"><input id="rpn_${r.pid}" value="${esc(pr.nota||'')}" placeholder="Nota..." style="width:100%;padding:4px;border:1px solid var(--g300);border-radius:var(--rs);font-size:11px"></td>
+          </tr>`;}).join('')}</tbody>
+        </table>
+      </div>
+    </div>`,
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveReportPartita('${id}')">Salva Report</button>`);
+}
+function saveReportPartita(id){
+  const m=state.matches.find(x=>x.id===id);if(!m)return;
+  m.report={
+    collettivo:{off:document.getElementById('rp_off')?.value||'—',def:document.getElementById('rp_def')?.value||'—',tra:document.getElementById('rp_tra')?.value||'—',pia:document.getElementById('rp_pia')?.value||'—'},
+    noteGenerali:document.getElementById('rp_ng')?.value||'',
+    giocatori:m.roster.filter(r=>r.minutes>0).map(r=>({pid:r.pid,nome:r.name,voto:document.getElementById('rpv_'+r.pid)?.value||'—',nota:document.getElementById('rpn_'+r.pid)?.value||''}))
+  };
+  saveStore();closeM();renderView();toast('Report partita salvato','s');
+}
+
+/* ── FASCICOLO GIOCATORE ── */
+VIEWS.fascicolo=function(c){
+  const players=state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||''));
+  c.innerHTML=`
+  <div class="vw">
+    <div class="vh"><div><h1>Fascicolo Giocatore</h1><div class="sb2">Profilo tecnico completo individuale</div></div></div>
+    <div class="card" style="margin-bottom:16px">
+      <select id="fas_pl" onchange="renderFascicolo()" style="width:100%;max-width:400px;padding:10px;border:1px solid var(--g300);border-radius:var(--rs);font-size:14px">
+        <option value="">— Seleziona giocatore —</option>
+        ${players.map(p=>`<option value="${p.id}">${esc(p.cognome)} ${esc(p.nome)} · ${p.categoria}</option>`).join('')}
+      </select>
+    </div>
+    <div id="fas-body"><div class="es"><div class="ic">📁</div><h3>Seleziona un giocatore</h3><p>Scegli dal menu in alto per visualizzare il fascicolo tecnico completo.</p></div></div>
+  </div>`;
+};
+function renderFascicolo(){
+  const pid=document.getElementById('fas_pl')?.value;
+  const body=document.getElementById('fas-body');
+  if(!body)return;
+  if(!pid){body.innerHTML='';return;}
+  const p=state.players.find(x=>x.id===pid);if(!p)return;
+  const todayIso=today();
+  // Presenze
+  const precs=state.presenze.filter(r=>r.cat===p.categoria&&r.grp===(p.gruppo||''));
+  const presP=precs.filter(r=>r.marks&&r.marks[p.id]==='P').length;
+  const presPerc=precs.length?Math.round(presP/precs.length*100):0;
+  // Minutaggi
+  let minTot=0,partite=0,tit=0;
+  (state.matches||[]).forEach(m=>m.roster.forEach(r=>{if(r.pid===pid){minTot+=r.minutes||0;if(r.minutes>0)partite++;if(r.starter)tit++;}}));
+  // TIPPS
+  const tipps=(state.tippsInt||[]).filter(t=>t.playerId===pid).sort((a,b)=>b.data.localeCompare(a.data));
+  // Infortuni
+  const infs=(state.infortuni||[]).filter(i=>i.playerId===pid).sort((a,b)=>b.data.localeCompare(a.data));
+  const infAttivi=infs.filter(i=>!i.dataRientro||i.dataRientro>=todayIso);
+  // Osservazioni interne
+  const osservs=(state.osservazioniInterne||[]).filter(o=>o.playerId===pid).sort((a,b)=>b.data.localeCompare(a.data));
+  // Doppie conv
+  const doppie=(state.doppieConv||[]).filter(d=>d.playerId===pid).sort((a,b)=>b.data.localeCompare(a.data));
+  const eta=calcAge(p.nascita);
+  const lastTipps=tipps.length?parseFloat(tipps[0].media):null;
+  body.innerHTML=`
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div style="width:56px;height:56px;border-radius:50%;background:var(--black);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;flex-shrink:0">${((p.cognome||p.nome||'?')[0]).toUpperCase()}</div>
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:20px;font-weight:700">${esc(p.cognome)} ${esc(p.nome)}</div>
+          <div style="font-size:12px;color:var(--g500);margin-top:2px">${p.ruolo||'—'} · ${p.categoria}${p.gruppo?' · '+p.gruppo:''} · ${eta!=null?eta+' anni':'—'}</div>
+          ${infAttivi.length?'<span class="bdg bdg-r" style="margin-top:6px;display:inline-block">🩹 Infortunato</span>':''}
+        </div>
+        <div class="grid g4">
+          <div class="kpi"><div class="l">Presenze</div><div class="v">${presPerc}%</div></div>
+          <div class="kpi d"><div class="l">Minuti</div><div class="v">${minTot}'</div></div>
+          <div class="kpi w"><div class="l">Partite</div><div class="v">${partite}</div></div>
+          <div class="kpi o"><div class="l">TIPPS</div><div class="v">${lastTipps!=null?lastTipps.toFixed(1):'—'}</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="grid g2">
+      <div class="card">
+        <h3 style="font-size:13px;margin-bottom:10px;font-weight:700">★ Storico TIPPS</h3>
+        ${!tipps.length?'<p style="color:var(--g500);font-size:12px">Nessuna valutazione registrata</p>':`
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--g200)"><th style="padding:5px 8px;text-align:left">Data</th><th style="padding:5px 8px;text-align:left">Osservatore</th><th style="padding:5px 8px;text-align:center">Media</th></tr></thead>
+          <tbody>${tipps.slice(0,6).map(t=>{const mg=parseFloat(t.media||0);const mc=mg>=4?'#16a34a':mg>=3?'#d97706':'#dc2626';return `<tr style="border-bottom:1px solid var(--g100)"><td style="padding:5px 8px">${fmtIt(t.data)}</td><td style="padding:5px 8px">${esc(t.osservatore||'—')}</td><td style="padding:5px 8px;text-align:center"><strong style="color:${mc}">${mg.toFixed(1)}</strong></td></tr>`}).join('')}</tbody>
+        </table>`}
+      </div>
+      <div class="card">
+        <h3 style="font-size:13px;margin-bottom:10px;font-weight:700">🩹 Infortuni (${infs.length})</h3>
+        ${!infs.length?'<p style="color:var(--g500);font-size:12px">Nessun infortunio registrato</p>':`
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--g200)"><th style="padding:5px 8px;text-align:left">Data</th><th style="padding:5px 8px;text-align:left">Tipo</th><th style="padding:5px 8px;text-align:left">Rientro</th></tr></thead>
+          <tbody>${infs.slice(0,5).map(i=>`<tr style="border-bottom:1px solid var(--g100)"><td style="padding:5px 8px">${fmtIt(i.data)}</td><td style="padding:5px 8px">${esc(i.tipoInfortunio||'—')}</td><td style="padding:5px 8px">${i.dataRientro?fmtIt(i.dataRientro):'<span style="color:#dc2626;font-weight:600">In corso</span>'}</td></tr>`).join('')}</tbody>
+        </table>`}
+      </div>
+    </div>
+    ${osservs.length?`<div class="card" style="margin-top:14px">
+      <h3 style="font-size:13px;margin-bottom:10px;font-weight:700">📨 Osservazioni Interne (${osservs.length})</h3>
+      ${osservs.slice(0,5).map(o=>`<div style="padding:10px;border-bottom:1px solid var(--g100)"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--g500);margin-bottom:3px"><span>${esc(o.mittente||'—')}</span><span>${fmtIt(o.data)}</span></div><div style="font-size:12px">${esc(o.motivo||'—')}</div></div>`).join('')}
+    </div>`:''}
+    ${doppie.length?`<div class="card" style="margin-top:14px">
+      <h3 style="font-size:13px;margin-bottom:10px;font-weight:700">🔼 Doppie Convocazioni (${doppie.length})</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${doppie.map(d=>`<span class="bdg bdg-k">${fmtIt(d.data)} → ${esc(d.catDestinazione)} · ${esc(d.tipo)}</span>`).join('')}</div>
+    </div>`:''}
+  `;
+}
+
+/* ── REPORT SCOUT SETTIMANALE ── */
+VIEWS.reportScout=function(c){
+  const cu=state.currentUser;
+  const canAll=cu&&((cu.permessi||[]).includes('all')||cu.role_key==='admin'||cu.role_key==='ds'||cu.role_key==='rsg');
+  const all=(state.reportScout||[]).slice().sort((a,b)=>b.data.localeCompare(a.data));
+  const list=canAll?all:all.filter(r=>r.scoutId===cu.id);
+  c.innerHTML=`
+  <div class="vw">
+    <div class="vh"><div><h1>Report Scout</h1><div class="sb2">Riepilogo settimanale osservazioni scouting</div></div>
+      <button class="btn btn-p btn-sm" onclick="openNewReportScout()">+ Nuovo Report</button></div>
+    ${!list.length?`<div class="es"><div class="ic">📡</div><h3>Nessun report compilato</h3><p>Compila il primo report settimanale con "+ Nuovo Report".</p></div>`:`
+    <div class="card" style="padding:0;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--g50);border-bottom:2px solid var(--g200)">
+          <th style="padding:10px 12px;text-align:left">Data</th>
+          <th style="padding:10px 12px;text-align:left">Scout</th>
+          <th style="padding:10px 12px;text-align:center">Osservati</th>
+          <th style="padding:10px 12px;text-align:center">⭐ Rac.</th>
+          <th style="padding:10px 12px;text-align:left">Note</th>
+          <th style="padding:10px 12px;text-align:center">Azioni</th>
+        </tr></thead>
+        <tbody>${list.map(r=>`<tr style="border-bottom:1px solid var(--g100);cursor:pointer" onclick="viewReportScout('${r.id}')">
+          <td style="padding:10px 12px"><strong>${fmtIt(r.data)}</strong>${r.settimana?`<div style="font-size:10px;color:var(--g500)">${esc(r.settimana)}</div>`:''}
+          </td>
+          <td style="padding:10px 12px">${esc(r.scout)}</td>
+          <td style="padding:10px 12px;text-align:center">${(r.osservati||[]).length}</td>
+          <td style="padding:10px 12px;text-align:center">${(r.osservati||[]).filter(o=>o.raccomandato).length||'—'}</td>
+          <td style="padding:10px 12px;font-size:11px;color:var(--g500)">${esc((r.noteGenerali||'').substring(0,50))}${(r.noteGenerali||'').length>50?'…':''}</td>
+          <td style="padding:10px 12px;text-align:center" onclick="event.stopPropagation()"><button class="btn btn-sm btn-d" onclick="delReportScout('${r.id}')">🗑</button></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`}
+  </div>`;
+};
+function openNewReportScout(){
+  openM('Nuovo Report Scout Settimanale',`
+    <div class="fg" style="margin-bottom:12px">
+      <div class="ff"><label>Data *</label><input type="date" id="rs_dt" value="${today()}"></div>
+      <div class="ff"><label>Settimana</label><input id="rs_sw" placeholder="es. 2-8 giugno 2026"></div>
+    </div>
+    <div style="margin-bottom:8px;font-weight:600;font-size:13px">Giocatori osservati</div>
+    <div style="font-size:10px;color:var(--g500);margin-bottom:8px;display:grid;grid-template-columns:2.5fr 1.2fr 1fr 0.8fr 0.8fr 28px;gap:6px"><span>Nome Cognome</span><span>Squadra</span><span>Cat.</span><span>Voto/5</span><span>⭐ Rac.</span><span></span></div>
+    <div id="rs_rows"></div>
+    <button class="btn btn-s btn-sm" onclick="addRsRow()" style="margin-bottom:12px">+ Aggiungi giocatore</button>
+    <div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px">Note generali</label>
+      <textarea id="rs_ng" rows="3" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs);font:inherit;font-size:12px;resize:vertical" placeholder="Considerazioni generali sulla settimana di osservazione..."></textarea>
+    </div>`,
+    `<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveReportScout()">Salva Report</button>`);
+  addRsRow();
+}
+function addRsRow(){
+  const cont=document.getElementById('rs_rows');if(!cont)return;
+  const div=document.createElement('div');
+  div.style.cssText='display:grid;grid-template-columns:2.5fr 1.2fr 1fr 0.8fr 0.8fr 28px;gap:6px;align-items:center;margin-bottom:6px';
+  div.innerHTML=`
+    <input placeholder="Nome cognome" style="padding:6px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px">
+    <input placeholder="Squadra" style="padding:6px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px">
+    <input placeholder="Cat." style="padding:6px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px">
+    <input type="number" min="1" max="5" step="0.5" placeholder="—" style="padding:6px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px;text-align:center">
+    <label style="display:flex;align-items:center;justify-content:center;cursor:pointer"><input type="checkbox" title="Raccomandato"></label>
+    <button class="btn btn-sm btn-d" onclick="this.closest('div').remove()" style="padding:4px 6px">✕</button>`;
+  cont.appendChild(div);
+}
+function saveReportScout(){
+  const dt=document.getElementById('rs_dt')?.value;
+  if(!dt){toast('Data obbligatoria','e');return;}
+  const osservati=[];
+  document.querySelectorAll('#rs_rows > div').forEach(div=>{
+    const inp=div.querySelectorAll('input');
+    const nome=inp[0]?.value||'';
+    if(nome.trim())osservati.push({nome:nome.trim(),squadra:inp[1]?.value||'',categoria:inp[2]?.value||'',voto:inp[3]?.value||'',raccomandato:inp[4]?.checked||false});
+  });
+  const report={id:uid(),data:dt,settimana:document.getElementById('rs_sw')?.value||'',scout:state.currentUser.name,scoutId:state.currentUser.id,osservati,noteGenerali:document.getElementById('rs_ng')?.value||''};
+  if(!state.reportScout)state.reportScout=[];
+  state.reportScout.unshift(report);
+  // Notifica DS
+  if(!state.notificheDS)state.notificheDS=[];
+  const rac=osservati.filter(o=>o.raccomandato).length;
+  state.notificheDS.unshift({id:uid(),tipo:'report_scout',data:dt,letta:false,timestamp:new Date().toISOString(),riepilogo:'Report scout · '+report.scout+' · '+osservati.length+' osservati'+(rac?' · ⭐ '+rac+' raccomandati':'')});
+  saveStore();closeM();renderView();refreshAlertBadge();toast('Report salvato','s');
+}
+function viewReportScout(id){
+  const r=(state.reportScout||[]).find(x=>x.id===id);if(!r)return;
+  const rac=(r.osservati||[]).filter(o=>o.raccomandato);
+  openM(`Report Scout · ${fmtIt(r.data)}`,`
+    <div style="font-size:12px">
+      <div class="grid g3" style="margin-bottom:12px">
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Scout</div><strong>${esc(r.scout)}</strong></div>
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Settimana</div><strong>${esc(r.settimana||'—')}</strong></div>
+        <div><div style="font-size:10px;color:var(--g400);text-transform:uppercase">Osservati</div><strong>${(r.osservati||[]).length}</strong></div>
+      </div>
+      ${rac.length?`<div style="background:#fef9c3;border-radius:var(--rs);padding:10px;margin-bottom:12px">
+        <div style="font-weight:700;margin-bottom:6px">⭐ Raccomandati (${rac.length})</div>
+        ${rac.map(o=>`<div style="padding:3px 0">${esc(o.nome)} · <span class="bdg">${esc(o.squadra||'—')}</span> · ${esc(o.categoria||'—')}${o.voto?' · <strong>'+o.voto+'/5</strong>':''}</div>`).join('')}
+      </div>`:''}
+      ${(r.osservati||[]).length?`<table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+        <thead><tr style="border-bottom:1px solid var(--g200)"><th style="padding:5px 8px;text-align:left">Giocatore</th><th style="padding:5px 8px;text-align:left">Squadra</th><th style="padding:5px 8px;text-align:left">Cat.</th><th style="padding:5px 8px;text-align:center">Voto</th><th style="padding:5px 8px;text-align:center">⭐</th></tr></thead>
+        <tbody>${(r.osservati||[]).map(o=>`<tr style="border-bottom:1px solid var(--g100)"><td style="padding:5px 8px"><strong>${esc(o.nome)}</strong></td><td style="padding:5px 8px">${esc(o.squadra||'—')}</td><td style="padding:5px 8px">${esc(o.categoria||'—')}</td><td style="padding:5px 8px;text-align:center;font-weight:700">${o.voto||'—'}</td><td style="padding:5px 8px;text-align:center">${o.raccomandato?'⭐':''}</td></tr>`).join('')}</tbody>
+      </table>`:''}
+      ${r.noteGenerali?`<div style="font-size:10px;color:var(--g400);text-transform:uppercase;margin-bottom:4px">Note generali</div><div style="padding:8px;background:var(--g50);border-radius:var(--rs)">${esc(r.noteGenerali)}</div>`:''}
+    </div>`,
+    `<button class="btn btn-p" onclick="closeM()">Chiudi</button>`);
+}
+function delReportScout(id){
+  if(!confirm('Eliminare questo report?'))return;
+  state.reportScout=state.reportScout.filter(x=>x.id!==id);
+  saveStore();renderView();toast('Eliminato','s');
+}
+
+/* ── DOPPIE CONVOCAZIONI ── */
+VIEWS.doppieConv=function(c){
+  const list=(state.doppieConv||[]).slice().sort((a,b)=>b.data.localeCompare(a.data));
+  const byPlayer={};
+  list.forEach(d=>{if(!byPlayer[d.playerId])byPlayer[d.playerId]={nome:d.playerNome,cat:d.catOrigine,tot:0,partite:0,all:0};byPlayer[d.playerId].tot++;if(d.tipo==='Partita')byPlayer[d.playerId].partite++;else byPlayer[d.playerId].all++;});
+  c.innerHTML=`
+  <div class="vw">
+    <div class="vh"><div><h1>Doppie Convocazioni</h1><div class="sb2">Giocatori convocati in categoria superiore</div></div>
+      <button class="btn btn-p btn-sm" onclick="openDoppiaConv()">+ Registra</button></div>
+    ${Object.keys(byPlayer).length?`<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:10px;font-size:14px">Riepilogo stagione</h3>
+      <div class="tw"><table style="font-size:12px"><thead><tr><th>Giocatore</th><th>Cat.</th><th>Tot.</th><th>Partite</th><th>Allenamenti</th></tr></thead>
+      <tbody>${Object.values(byPlayer).sort((a,b)=>b.tot-a.tot).map(s=>`<tr><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.cat)}</td><td><strong>${s.tot}</strong></td><td>${s.partite}</td><td>${s.all}</td></tr>`).join('')}</tbody></table></div></div>`:''}
+    ${!list.length?`<div class="es"><div class="ic">🔼</div><h3>Nessuna doppia convocazione registrata</h3><p>Usa "+ Registra" per tracciare i giocatori convocati in categoria superiore.</p></div>`:`
+    <div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--g50);border-bottom:2px solid var(--g200)">
+        <th style="padding:10px 12px;text-align:left">Data</th><th style="padding:10px 12px;text-align:left">Giocatore</th>
+        <th style="padding:10px 12px;text-align:left">Cat. origine</th><th style="padding:10px 12px;text-align:left">Cat. dest.</th>
+        <th style="padding:10px 12px;text-align:left">Tipo</th><th style="padding:10px 12px;text-align:left">Note</th>
+        <th style="padding:10px 12px;text-align:center">Azioni</th></tr></thead>
+      <tbody>${list.map(d=>`<tr style="border-bottom:1px solid var(--g100)">
+        <td style="padding:10px 12px">${fmtIt(d.data)}</td>
+        <td style="padding:10px 12px"><strong>${esc(d.playerNome)}</strong></td>
+        <td style="padding:10px 12px"><span class="bdg">${esc(d.catOrigine)}</span></td>
+        <td style="padding:10px 12px"><span class="bdg bdg-k">${esc(d.catDestinazione)}</span></td>
+        <td style="padding:10px 12px">${esc(d.tipo)}</td>
+        <td style="padding:10px 12px;font-size:11px;color:var(--g500)">${esc(d.note)||'—'}</td>
+        <td style="padding:10px 12px;text-align:center"><button class="btn btn-sm btn-d" onclick="delDoppiaConv('${d.id}')">🗑</button></td>
+      </tr>`).join('')}</tbody></table></div>`}
+  </div>`;
+};
+function openDoppiaConv(){
+  const players=state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||''));
+  openM('Registra Doppia Convocazione',`<div class="fg">
+    <div class="ff"><label>Giocatore *</label>
+      <select id="dc_pl"><option value="">— seleziona —</option>${players.map(p=>`<option value="${p.id}" data-cat="${esc(p.categoria)}">${esc(p.cognome)} ${esc(p.nome)} · ${p.categoria}</option>`).join('')}</select></div>
+    <div class="ff"><label>Data *</label><input type="date" id="dc_dt" value="${today()}"></div>
+    <div class="ff"><label>Cat. origine</label><input id="dc_co" readonly placeholder="Auto da giocatore" style="background:var(--g50)"></div>
+    <div class="ff"><label>Cat. destinazione *</label>
+      <select id="dc_cd"><option value="">— seleziona —</option>${state.categories.map(cat=>`<option value="${cat}">${esc(categoryDisplay(cat))}</option>`).join('')}</select></div>
+    <div class="ff"><label>Tipo</label><select id="dc_tp"><option>Partita</option><option>Allenamento</option></select></div>
+    <div class="ff full"><label>Note</label><input id="dc_nt" placeholder="Opzionale"></div>
+  </div>`,`<button class="btn btn-s" onclick="closeM()">Annulla</button><button class="btn btn-p" onclick="saveDoppiaConv()">Salva</button>`);
+  setTimeout(()=>{const sel=document.getElementById('dc_pl');if(sel)sel.addEventListener('change',function(){document.getElementById('dc_co').value=this.options[this.selectedIndex]?.dataset?.cat||'';})},50);
+}
+function saveDoppiaConv(){
+  const pid=document.getElementById('dc_pl').value;
+  const dt=document.getElementById('dc_dt').value;
+  const cd=document.getElementById('dc_cd').value;
+  if(!pid||!dt||!cd){toast('Giocatore, data e categoria destinazione obbligatori','e');return;}
+  const p=state.players.find(x=>x.id===pid);
+  if(!p){toast('Giocatore non trovato','e');return;}
+  if(p.categoria===cd){toast('Categoria destinazione uguale a quella di appartenenza','e');return;}
+  if(!state.doppieConv)state.doppieConv=[];
+  state.doppieConv.push({id:uid(),playerId:pid,playerNome:(p.cognome+' '+p.nome).trim(),catOrigine:p.categoria,catDestinazione:cd,data:dt,tipo:document.getElementById('dc_tp').value,note:document.getElementById('dc_nt').value});
+  saveStore();closeM();renderView();toast('Doppia convocazione registrata','s');
+}
+function delDoppiaConv(id){
+  if(!confirm('Eliminare questa registrazione?'))return;
+  state.doppieConv=state.doppieConv.filter(x=>x.id!==id);
+  saveStore();renderView();toast('Eliminata','s');
+}
+
+/* ── CONFRONTO GIOCATORI ── */
+VIEWS.confronto=function(c){
+  const players=state.players.filter(p=>!p.eliminato).sort((a,b)=>(a.cognome||'').localeCompare(b.cognome||''));
+  c.innerHTML=`
+  <div class="vw">
+    <div class="vh"><div><h1>Confronto Giocatori</h1><div class="sb2">Analisi comparativa tra 2-4 giocatori</div></div></div>
+    <div class="card" style="margin-bottom:16px">
+      <div style="margin-bottom:10px;font-size:13px;font-weight:600">Seleziona giocatori (2-4)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${[0,1,2,3].map(i=>`<select id="cf_p${i}" onchange="renderConfronto()" style="flex:1;min-width:200px;padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">
+          <option value="">— giocatore ${i+1} —</option>
+          ${players.map(p=>`<option value="${p.id}">${esc(p.cognome)} ${esc(p.nome)} · ${p.categoria}</option>`).join('')}
+        </select>`).join('')}
+      </div>
+    </div>
+    <div id="cf-body"><div class="es"><div class="ic">⚖</div><h3>Seleziona almeno 2 giocatori</h3><p>Scegli i giocatori dai menu in alto per confrontarne le statistiche.</p></div></div>
+  </div>`;
+};
+function renderConfronto(){
+  const ids=[0,1,2,3].map(i=>{const el=document.getElementById('cf_p'+i);return el?el.value:''}).filter(Boolean);
+  const body=document.getElementById('cf-body');
+  if(!body)return;
+  if(ids.length<2){body.innerHTML='<div class="es"><div class="ic">⚖</div><h3>Seleziona almeno 2 giocatori</h3></div>';return;}
+  const players=ids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
+  const colors=['#000000','#dc2626','#2563eb','#16a34a'];
+  const stats=players.map(p=>{
+    const precs=state.presenze.filter(r=>r.cat===p.categoria&&r.grp===(p.gruppo||''));
+    const presP=precs.filter(r=>r.marks&&r.marks[p.id]==='P').length;
+    const presPerc=precs.length?Math.round(presP/precs.length*100):0;
+    let minTot=0;(state.matches||[]).forEach(m=>(m.roster||[]).forEach(r=>{if(r.pid===p.id)minTot+=r.minutes||0}));
+    const tipps=(state.tippsInt||[]).filter(t=>t.playerId===p.id).sort((a,b)=>b.data.localeCompare(a.data));
+    const tippsM=tipps.length?parseFloat(tipps[0].media||0):null;
+    const infN=(state.infortuni||[]).filter(i=>i.playerId===p.id).length;
+    return {p,presPerc,minTot,tippsM,infN,eta:calcAge(p.nascita)};
+  });
+  const maxMin=Math.max(...stats.map(s=>s.minTot),1);
+  const radarData={
+    labels:['Presenze %','TIPPS (×20)','Minutaggi (rel.)'],
+    datasets:stats.map((s,i)=>({
+      label:(s.p.cognome||'')+' '+(s.p.nome||''),
+      data:[s.presPerc, s.tippsM!=null?Math.round(s.tippsM*20):0, Math.round(s.minTot/maxMin*100)],
+      borderColor:colors[i],backgroundColor:colors[i]+'22',pointBackgroundColor:colors[i],pointRadius:4
+    }))
+  };
+  body.innerHTML=`
+    <div class="grid g2">
+      <div class="card" style="padding:16px"><canvas id="cf-radar" height="300"></canvas></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--g50);border-bottom:2px solid var(--g200)">
+            <th style="padding:10px 12px;text-align:left">Metrica</th>
+            ${stats.map((s,i)=>`<th style="padding:10px 12px;text-align:center;color:${colors[i]}">${esc(s.p.cognome)}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--g100)"><td style="padding:8px 12px;font-weight:600">Categoria</td>${stats.map(s=>`<td style="padding:8px 12px;text-align:center">${s.p.categoria}</td>`).join('')}</tr>
+            <tr style="border-bottom:1px solid var(--g100)"><td style="padding:8px 12px;font-weight:600">Età</td>${stats.map(s=>`<td style="padding:8px 12px;text-align:center">${s.eta!=null?s.eta+'a':'—'}</td>`).join('')}</tr>
+            <tr style="border-bottom:1px solid var(--g100)"><td style="padding:8px 12px;font-weight:600">Presenze %</td>${stats.map(s=>`<td style="padding:8px 12px;text-align:center"><strong>${s.presPerc}%</strong></td>`).join('')}</tr>
+            <tr style="border-bottom:1px solid var(--g100)"><td style="padding:8px 12px;font-weight:600">Minutaggi</td>${stats.map(s=>`<td style="padding:8px 12px;text-align:center">${s.minTot}'</td>`).join('')}</tr>
+            <tr style="border-bottom:1px solid var(--g100)"><td style="padding:8px 12px;font-weight:600">Ultimo TIPPS</td>${stats.map(s=>`<td style="padding:8px 12px;text-align:center"><strong>${s.tippsM!=null?s.tippsM.toFixed(1):'—'}</strong></td>`).join('')}</tr>
+            <tr><td style="padding:8px 12px;font-weight:600">Infortuni</td>${stats.map(s=>`<td style="padding:8px 12px;text-align:center">${s.infN}</td>`).join('')}</tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  requestAnimationFrame(()=>{const el=document.getElementById('cf-radar');if(!el)return;if(el._ch)el._ch.destroy();el._ch=new Chart(el,{type:'radar',data:radarData,options:{scales:{r:{min:0,max:100,ticks:{stepSize:25,font:{size:10}}}},plugins:{legend:{position:'bottom'}}}})});
+}
+
+/* ── ALERT & NOTIFICHE ── */
+function computeAlerts(){
+  const alerts=[];
+  const todayIso=today();
+  // Infortuni attivi
+  (state.infortuni||[]).forEach(inf=>{
+    if(!inf.dataRientro||inf.dataRientro>=todayIso){
+      const p=state.players.find(x=>x.id===inf.playerId);
+      if(p)alerts.push({ico:'🩹',msg:(p.cognome||'')+' '+(p.nome||'')+' — '+(inf.tipoInfortunio||'Infortunio'),sub:inf.dataRientro?'Rientro previsto: '+fmtIt(inf.dataRientro):'Rientro non definito'});
+    }
+  });
+  // Partite nei prossimi 7 giorni
+  const next7=new Date();next7.setDate(next7.getDate()+7);
+  const next7Iso=next7.toISOString().slice(0,10);
+  (state.attivita||[]).filter(a=>a.tipo==='Partita'&&a.data>=todayIso&&a.data<=next7Iso).slice(0,5).forEach(a=>{
+    alerts.push({ico:'⚽',msg:esc(a.descrizione||a.avversario||'Partita'),sub:fmtIt(a.data)+(a.ora?' ore '+a.ora:'')});
+  });
+  // Notifiche DS non lette
+  (state.notificheDS||[]).filter(n=>!n.letta).slice(0,5).forEach(n=>{
+    alerts.push({ico:'🔔',msg:esc(n.riepilogo||'Notifica tecnico'),sub:fmtIt(n.data)});
+  });
+  return alerts;
+}
+function refreshAlertBadge(){
+  const badge=document.getElementById('alertBadge');
+  if(!badge)return;
+  const n=computeAlerts().length;
+  badge.textContent=n>9?'9+':String(n);
+  badge.style.display=n>0?'inline-block':'none';
+}
+function openAlerts(){
+  const alerts=computeAlerts();
+  if(!alerts.length){openM('Notifiche & Alert','<div class="es"><div class="ic">✅</div><h3>Tutto ok</h3><p>Nessun alert attivo al momento.</p></div>','<button class="btn btn-p" onclick="closeM()">Chiudi</button>');return;}
+  openM('Notifiche & Alert',`<div style="max-height:420px;overflow-y:auto">${alerts.map(a=>`
+    <div style="display:flex;gap:12px;padding:12px;border-bottom:1px solid var(--g100);align-items:flex-start">
+      <div style="font-size:22px;line-height:1">${a.ico}</div>
+      <div><div style="font-weight:600;font-size:13px">${a.msg}</div><div style="font-size:11px;color:var(--g500);margin-top:2px">${a.sub||''}</div></div>
+    </div>`).join('')}</div>`,
+  `<button class="btn btn-p" onclick="closeM()">Chiudi</button>`);
 }
 
 /* renderChart helper (missing from v2.2 for compatibility) */
