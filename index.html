@@ -1,10 +1,17 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.16
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.17
 ================================================================================
   CHANGELOG
   ----------
+  v2.17 · 2026-06-08 · Archivio Scouting: elimina singola, multipla, tutte
+    · NEW  delSchedaExt(id): elimina singola scheda da Supabase (🗑 per riga).
+    · NEW  delSchedeExtSelected(): elimina schede spuntate (checkbox per riga).
+    · NEW  delSchedeExtAll(): elimina tutte le schede (con confirm esplicito).
+    · NEW  toggleAllSchedeExt(): checkbox "seleziona tutto" in testata tabella.
+    · SEC  Pulsanti visibili solo ad admin/DS; scout vedono solo la lista.
+
   v2.16 · 2026-06-08 · Hotfix: SyntaxError in saveRuoloDB (bloccava login)
     · FIX  Ternario mancante del ramo falso `:''` in saveRuoloDB() riga 1711.
            L'errore di sintassi JS impediva il parsing dell'intero script,
@@ -5656,7 +5663,9 @@ function docBody(tipo,p){
 
 /* ── ARCHIVIO SCHEDE SCOUTING (TIPPS Esterno → Supabase) ── */
 VIEWS.schedeExt=function(c){
-  c.innerHTML=`<div class="vw"><div class="vh"><div><h1>Archivio Schede Scouting</h1><div class="sb2">Schede inviate dall'app TIPPS Scouting Esterno</div></div><div style="display:flex;gap:8px"><button class="btn btn-p btn-sm" onclick="loadSchedeExt()">↻ Aggiorna</button></div></div><div id="sce-body"><div class="es"><div class="ic">⏳</div><h3>Caricamento...</h3></div></div></div>`;
+  const cu=state.currentUser;
+  const canDel=cu&&((cu.permessi||[]).includes('all')||cu.role_key==='admin'||cu.role_key==='ds');
+  c.innerHTML=`<div class="vw"><div class="vh"><div><h1>Archivio Schede Scouting</h1><div class="sb2">Schede inviate dall'app TIPPS Scouting Esterno</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p btn-sm" onclick="loadSchedeExt()">↻ Aggiorna</button>${canDel?`<button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="delSchedeExtSelected()">🗑 Elimina selezionate</button><button class="btn btn-sm" style="background:#7f1d1d;color:#fff" onclick="delSchedeExtAll()">🗑 Elimina tutte</button>`:''}</div></div><div id="sce-body"><div class="es"><div class="ic">⏳</div><h3>Caricamento...</h3></div></div></div>`;
   loadSchedeExt();
 };
 window._schedeExtData=[];
@@ -5670,6 +5679,7 @@ function loadSchedeExt(){
     if(error||!data){b.innerHTML=`<div class="es"><div class="ic">❌</div><h3>Errore caricamento</h3><p>${esc((error||{}).message||'Riprova')}</p></div>`;return;}
     if(!data.length){b.innerHTML=`<div class="es"><div class="ic">🔍</div><h3>Nessuna scheda ancora</h3><p>Le schede arrivano qui quando un osservatore usa l'app TIPPS Scouting ed esporta una valutazione.</p></div>`;return;}
     window._schedeExtData=data;
+    const canDel=state.currentUser&&((state.currentUser.permessi||[]).includes('all')||state.currentUser.role_key==='admin'||state.currentUser.role_key==='ds');
     const cats=new Set(data.map(s=>s.categoria).filter(Boolean));
     const ossv=new Set(data.map(s=>s.osservatore).filter(Boolean));
     b.innerHTML=`
@@ -5682,6 +5692,7 @@ function loadSchedeExt(){
       <div class="card" style="padding:0;overflow:hidden">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="background:var(--g50);border-bottom:2px solid var(--g200)">
+            ${canDel?'<th style="padding:10px 12px;text-align:center"><input type="checkbox" id="sce-all" onchange="toggleAllSchedeExt(this.checked)" title="Seleziona tutto"></th>':''}
             <th style="padding:10px 12px;text-align:left">GIOCATORE</th>
             <th style="padding:10px 12px;text-align:left">CAT.</th>
             <th style="padding:10px 12px;text-align:left">OSSERVATORE</th>
@@ -5694,11 +5705,13 @@ function loadSchedeExt(){
             <th style="padding:10px 12px;text-align:center">S</th>
             <th style="padding:10px 12px;text-align:center">V</th>
             <th style="padding:10px 12px;text-align:center">MEDIA</th>
+            ${canDel?'<th style="padding:10px 12px;text-align:center">AZIONI</th>':''}
           </tr></thead>
           <tbody>${data.map((s,i)=>{
             const m=s.medie||{};const mg=parseFloat(s.media_globale)||null;
             const mc=!mg?'var(--g400)':mg>=4?'#16a34a':mg>=3?'#d97706':'#dc2626';
             return `<tr style="border-bottom:1px solid var(--g100);cursor:pointer" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''" onclick="openSchedaExt(${i})">
+              ${canDel?`<td style="padding:10px 12px;text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="sce-chk" data-id="${s.id}"></td>`:''}
               <td style="padding:10px 12px"><strong>${esc((s.cognome||'')+' '+(s.nome||''))}</strong><div style="font-size:10px;color:var(--g400)">${esc(s.anno_nascita||'')}</div></td>
               <td style="padding:10px 12px">${esc(s.categoria||'—')}</td>
               <td style="padding:10px 12px">${esc(s.osservatore||'—')}</td>
@@ -5711,6 +5724,7 @@ function loadSchedeExt(){
               <td style="padding:10px 12px;text-align:center;color:var(--g500)">${m.S!=null?parseFloat(m.S).toFixed(1):'—'}</td>
               <td style="padding:10px 12px;text-align:center;color:var(--g500)">${m.V!=null?parseFloat(m.V).toFixed(1):'—'}</td>
               <td style="padding:10px 12px;text-align:center"><strong style="color:${mc};font-size:14px">${mg?mg.toFixed(2):'—'}</strong></td>
+              ${canDel?`<td style="padding:10px 12px;text-align:center" onclick="event.stopPropagation()"><button class="btn btn-sm btn-d" onclick="delSchedaExt('${s.id}')">🗑</button></td>`:''}
             </tr>`;
           }).join('')}</tbody>
         </table>
@@ -5740,6 +5754,34 @@ function openSchedaExt(i){
       <div style="font-size:10px;color:var(--g400);text-align:right;margin-top:8px">Archiviata: ${new Date(s.created_at||'').toLocaleString('it-IT')} · Club: ${esc(s.club||'—')}</div>
     </div>
   `,`<button class="btn btn-p" onclick="closeM()">Chiudi</button>`);
+}
+function delSchedaExt(id){
+  if(!confirm('Eliminare questa scheda?'))return;
+  sb.from('schede_scouting').delete().eq('id',id).then(({error})=>{
+    if(error){toast('Errore: '+error.message,'e');return;}
+    toast('Scheda eliminata','s');loadSchedeExt();
+  });
+}
+function delSchedeExtSelected(){
+  const ids=[...document.querySelectorAll('.sce-chk:checked')].map(x=>x.dataset.id);
+  if(!ids.length){toast('Nessuna scheda selezionata','w');return;}
+  if(!confirm('Eliminare '+ids.length+' scheda'+(ids.length>1?'e?':'?')))return;
+  sb.from('schede_scouting').delete().in('id',ids).then(({error})=>{
+    if(error){toast('Errore: '+error.message,'e');return;}
+    toast(ids.length+' scheda'+(ids.length>1?'e eliminate':' eliminata'),'s');loadSchedeExt();
+  });
+}
+function delSchedeExtAll(){
+  const ids=(window._schedeExtData||[]).map(s=>s.id);
+  if(!ids.length){toast('Nessuna scheda presente','w');return;}
+  if(!confirm('ATTENZIONE: eliminare tutte le '+ids.length+' schede? Operazione irreversibile.'))return;
+  sb.from('schede_scouting').delete().in('id',ids).then(({error})=>{
+    if(error){toast('Errore: '+error.message,'e');return;}
+    toast('Tutte le schede eliminate','s');loadSchedeExt();
+  });
+}
+function toggleAllSchedeExt(checked){
+  document.querySelectorAll('.sce-chk').forEach(x=>x.checked=checked);
 }
 
 /* renderChart helper (missing from v2.2 for compatibility) */
