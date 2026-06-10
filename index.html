@@ -1,10 +1,30 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.24
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.25
 ================================================================================
   CHANGELOG
   ----------
+  v2.25 · 2026-06-10 · Hardening sicurezza pre-beta multi-utente
+    · SEC  [CRIT] Rimossa chiamata sb.rpc('exec_sql') in saveToSupabase che
+           ricreava la policy insicura "Allow all for anon". Su tabella
+           mancante ora si rimanda al file SQL di hardening.
+    · SEC  [HIGH] doLogin: rimosso il fallback di login locale con password
+           in chiaro (state.users[].password). Login solo via Supabase Auth.
+    · SEC  [HIGH] _buildCurrentUser fail-closed: se il DB risponde ma l'account
+           non ha un ruolo attivo in utenti_ruoli, l'accesso è negato (niente
+           più default automatico a "Tecnico"). Su errore di rete resta
+           permissivo per evitare lockout da problemi transitori.
+    · SEC  [MED] esc() ora neutralizza anche apice singolo (') e backtick (`).
+           Nuovo helper escJ() per testo libero dentro onclick inline; applicato
+           a delPerm e delIncCustom (JS-injection chiusa).
+    · SEC  [MED] Reintrodotta Content-Security-Policy: connect-src limitato a
+           Supabase + CDN noti + tessdata (blocca esfiltrazione token verso
+           domini esterni), object-src none, base-uri/form-action self.
+    · DOC  Nuovo file lascaris_supabase_hardening_v2.sql: blinda le policy RLS
+           (solo authenticated), verifica/rimuove exec_sql, query di audit.
+           DA ESEGUIRE dalla dashboard Supabase.
+
   v2.23 · 2026-06-08 · Editor SVG Schemi Tattici
     · NEW  Editor tattico interattivo (🎨) nei Schemi Tattici: campo SVG
            portrait 11v11 con linee accurate (area, centrocampo, porte).
@@ -298,6 +318,7 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#000000">
 <meta name="mobile-web-app-capable" content="yes">
@@ -307,7 +328,7 @@
 <!-- CSP rimossa: incompatibile con app single-file (blocca inline script nonostante unsafe-inline). -->
 <!-- Per app single-file su GitHub Pages la protezione è garantita da Supabase RLS lato DB. -->
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.13</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.25</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -492,14 +513,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Sportivo · v2.8</div>
+    <div class="sub">Gestionale Sportivo · v2.25</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.8</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.25</div>
   </div>
 </div>
 
@@ -616,8 +637,7 @@ async function saveToSupabase(){
     const{error:blobErr}=await sb.from('app_state').upsert(payload,{onConflict:'id'});
     if(!blobErr){localStorage.setItem(STORE+'_ts',now);console.log('[SUPABASE] Blob salvato')}
     else if(blobErr.message?.includes('does not exist')||blobErr.code==='42P01'){
-      try{await sb.rpc('exec_sql',{sql:"CREATE TABLE IF NOT EXISTS app_state (id text PRIMARY KEY, data jsonb, updated_at timestamptz DEFAULT now()); ALTER TABLE app_state ENABLE ROW LEVEL SECURITY; CREATE POLICY IF NOT EXISTS \"Allow all for anon\" ON app_state FOR ALL TO anon USING (true) WITH CHECK (true);"})}catch(e){}
-      try{await sb.from('app_state').upsert(payload,{onConflict:'id'})}catch(e){}
+      console.error('[SUPABASE] Tabella app_state mancante: esegui lascaris_supabase_hardening_v2.sql dalla dashboard Supabase per crearla con le policy corrette.');
     }else console.error('[SUPABASE] Errore blob:',blobErr.message,blobErr.code);
     await _syncRelational().catch(e=>console.error('[SUPABASE] Sync tabelle fallito:',e));
   }catch(e){console.error('[SUPABASE] Salvataggio fallito:',e)}
@@ -931,7 +951,9 @@ function groupSigla(cat,gid){
 function groupChip(cat,gid){
   return `<span class="gc" title="${groupLong(cat,gid)}">${cat} ${groupLabel(cat,gid)}</span>`;
 }
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;')}
+/* escJ: rende una stringa sicura DENTRO una stringa JS in attributi inline (es. onclick="f('${esc(escJ(x))}')") */
+function escJ(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 
 /* ---------- AGE HELPERS (v2.5) ---------- */
 function calcAge(iso){
@@ -1047,7 +1069,7 @@ async function _buildCurrentUser(sbUser){
     DIRIGENTE:{label:'Dirigente',key:'ds'},
     PRESIDENTE:{label:'Presidente',key:'admin'}
   };
-  let nome=sbUser.email.split('@')[0],cognome='',ruoloCodice='';
+  let nome=sbUser.email.split('@')[0],cognome='',ruoloCodice='',dbOk=true;
   try{
     const[rPro,rRuoli]=await Promise.all([
       sb.from('profili').select('nome,cognome').eq('id',sbUser.id).single(),
@@ -1055,7 +1077,10 @@ async function _buildCurrentUser(sbUser){
     ]);
     if(rPro.data){nome=rPro.data.nome||nome;cognome=rPro.data.cognome||''}
     ruoloCodice=(rRuoli.data?.[0]?.ruoli?.codice)||'';
-  }catch(e){console.warn('[AUTH] Errore DB profilo:',e)}
+  }catch(e){console.warn('[AUTH] Errore DB profilo:',e);dbOk=false}
+  // Fail-closed: se il DB risponde ma l'account non ha un ruolo attivo, nega l'accesso.
+  // Su errore DB (dbOk=false) NON blocchiamo, per non escludere per un problema transitorio di rete.
+  if(dbOk&&!ruoloCodice){console.warn('[AUTH] Accesso negato: nessun ruolo attivo per',sbUser.email);return null}
   const rInfo=RUOLO_MAP[ruoloCodice]||{label:'Staff',key:'tec'};
   const profPerm=(state.profiliPermessi||[]).find(p=>p.id==='prof_'+rInfo.key)||{permessi:[]};
   const fullName=[nome,cognome].filter(Boolean).join(' ').trim()||nome;
@@ -1074,13 +1099,11 @@ async function doLogin(){
     if(error)console.error('[AUTH] Errore login:',error.message);
   }catch(ex){console.error('[AUTH] Eccezione rete:',ex);error={message:'Errore di connessione a Supabase: '+ex.message}}
   if(error){
-    // Fallback: login locale per utenti non migrati a Supabase Auth
-    const u=state.users.find(x=>x.email.toLowerCase()===em&&x.password===pw&&x.attivo);
-    if(!u){err.textContent=error.message==='Invalid login credentials'?'Credenziali non valide':error.message;err.classList.add('on');btn.disabled=false;btn.textContent='Accedi';return}
-    err.classList.remove('on');state.currentUser=u;saveStore();enterApp(u);btn.disabled=false;btn.textContent='Accedi';return;
+    err.textContent=error.message==='Invalid login credentials'?'Credenziali non valide':error.message;err.classList.add('on');btn.disabled=false;btn.textContent='Accedi';return;
   }
   err.classList.remove('on');
   const cu=await _buildCurrentUser(data.user);
+  if(!cu){err.textContent='Account senza ruolo attivo. Contatta l\'amministratore.';err.classList.add('on');await sb.auth.signOut().catch(()=>{});btn.disabled=false;btn.textContent='Accedi';return}
   state.currentUser=cu;saveStore();enterApp(cu);
   btn.disabled=false;btn.textContent='Accedi';
 }
@@ -1215,6 +1238,7 @@ async function doLoginAuto(){
   if(session?.user){
     // Sessione Supabase valida: ricostruisce currentUser dal DB
     const cu=await _buildCurrentUser(session.user);
+    if(!cu){await sb.auth.signOut().catch(()=>{});state.currentUser=null;saveStore();return}
     state.currentUser=cu;enterApp(cu);return;
   }
   // Nessuna sessione Supabase: prova utente locale (fallback)
@@ -1812,12 +1836,12 @@ function renderUtTabPerms(){return `
   </div>
   <div class="card">
     <h3 style="font-size:13px;margin-bottom:8px">Permessi custom (${state.permessiCustom.length})</h3>
-    ${state.permessiCustom.length?`<div class="tw"><table><thead><tr><th>Codice</th><th>Etichetta</th><th>Descrizione</th><th>Azioni</th></tr></thead><tbody>${state.permessiCustom.map(p=>`<tr><td style="font-family:monospace;font-size:11px">${esc(p.code)}</td><td><strong>${esc(p.label)}</strong></td><td style="font-size:11px">${esc(p.descrizione)||'—'}</td><td><button class="btn btn-sm btn-d" onclick="delPerm('${p.code}')">🗑</button></td></tr>`).join('')}</tbody></table></div>`:'<p style="color:var(--g500);font-size:12px">Nessun permesso custom aggiunto. Usa "+ Nuovo permesso custom" per crearne uno.</p>'}
+    ${state.permessiCustom.length?`<div class="tw"><table><thead><tr><th>Codice</th><th>Etichetta</th><th>Descrizione</th><th>Azioni</th></tr></thead><tbody>${state.permessiCustom.map(p=>`<tr><td style="font-family:monospace;font-size:11px">${esc(p.code)}</td><td><strong>${esc(p.label)}</strong></td><td style="font-size:11px">${esc(p.descrizione)||'—'}</td><td><button class="btn btn-sm btn-d" onclick="delPerm('${esc(escJ(p.code))}')">🗑</button></td></tr>`).join('')}</tbody></table></div>`:'<p style="color:var(--g500);font-size:12px">Nessun permesso custom aggiunto. Usa "+ Nuovo permesso custom" per crearne uno.</p>'}
   </div>
   <div class="card">
     <h3 style="font-size:13px;margin-bottom:8px">Incarichi custom (${state.incarichiCustom.length})</h3>
     <p style="color:var(--g500);font-size:12px;margin-bottom:6px">Ruoli aggiuntivi disponibili nel menu a tendina del form Staff Tecnico (oltre ai predefiniti).</p>
-    ${state.incarichiCustom.length?`<div style="display:flex;flex-wrap:wrap;gap:4px">${state.incarichiCustom.map(i=>`<span class="pl">${esc(i)} <button style="background:transparent;color:var(--red);font-weight:700;margin-left:4px" onclick="delIncCustom('${esc(i)}')">×</button></span>`).join('')}</div>`:'<p style="color:var(--g500);font-size:12px">Nessun incarico custom</p>'}
+    ${state.incarichiCustom.length?`<div style="display:flex;flex-wrap:wrap;gap:4px">${state.incarichiCustom.map(i=>`<span class="pl">${esc(i)} <button style="background:transparent;color:var(--red);font-weight:700;margin-left:4px" onclick="delIncCustom('${esc(escJ(i))}')">×</button></span>`).join('')}</div>`:'<p style="color:var(--g500);font-size:12px">Nessun incarico custom</p>'}
     <div style="margin-top:8px;display:flex;gap:6px"><input id="nic_in" placeholder="Es. Team Manager, Coordinatore logistico..." style="flex:1;padding:6px 10px;border:1px solid var(--g300);border-radius:var(--rs);font-size:12px"><button class="btn btn-p btn-sm" onclick="addIncCustom()">+ Aggiungi</button></div>
   </div>
 `}
