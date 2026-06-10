@@ -952,7 +952,7 @@ function groupChip(cat,gid){
   return `<span class="gc" title="${groupLong(cat,gid)}">${cat} ${groupLabel(cat,gid)}</span>`;
 }
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;')}
-/* escJ: rende una stringa sicura DENTRO una stringa JS in attributi inline (es. onclick="f('${esc(escJ(x))}')") */
+/* escJ: rende una stringa sicura dentro una stringa JS negli handler inline; usare esc(escJ(x)) per il testo libero passato a funzioni come delPerm/delIncCustom */
 function escJ(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 
 /* ---------- AGE HELPERS (v2.5) ---------- */
