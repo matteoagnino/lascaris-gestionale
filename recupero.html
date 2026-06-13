@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recupero dati · LASCARIS 1954</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:18px;line-height:1.5}
+  .box{max-width:560px;margin:0 auto;background:#1e293b;border-radius:16px;padding:22px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+  h1{font-size:21px;margin:0 0 6px}
+  .muted{color:#94a3b8;font-size:14px}
+  .ok{color:#4ade80;font-weight:700;font-size:17px}
+  .bad{color:#f87171;font-weight:700;font-size:17px}
+  table{width:100%;border-collapse:collapse;margin:14px 0}
+  td{padding:9px 10px;border-bottom:1px solid #334155;font-size:15px}
+  td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+  .hl{background:#422006}
+  button{width:100%;padding:16px;font-size:17px;font-weight:700;border:0;border-radius:12px;background:#2563eb;color:#fff;cursor:pointer;margin-top:8px}
+  button:active{background:#1d4ed8}
+  .note{background:#0b1220;border:1px solid #334155;border-radius:10px;padding:12px;font-size:13px;color:#cbd5e1;margin-top:14px}
+  code{background:#0b1220;padding:2px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🛟 Recupero dati · LASCARIS 1954</h1>
+  <p class="muted">Questa pagina <b>non avvia il gestionale</b>: legge soltanto la copia di sicurezza salvata in <b>questo</b> browser e ti permette di scaricarla. Aprirla è sicuro.</p>
+  <div id="out">Lettura in corso…</div>
+  <button id="dl" style="display:none">⬇️ Scarica copia di sicurezza</button>
+  <div id="hint"></div>
+  <div class="note">Apri questa stessa pagina su <b>ogni dispositivo</b> dove hai usato il gestionale (telefono, altro computer). Dove i numeri sono più alti, c'è la copia buona: scaricala e inviala a chi ti sta aiutando.</div>
+</div>
+<script>
+(function(){
+  var out=document.getElementById('out');
+  var raw=null; try{ raw=localStorage.getItem('lascaris_v1'); }catch(e){}
+  if(!raw){ out.innerHTML='<p class="bad">❌ Nessun dato del gestionale in questo browser.</p><p class="muted">Su questo dispositivo/browser non risulta salvato nulla. Prova su un altro dei tuoi dispositivi.</p>'; return; }
+  var kb=Math.round(raw.length/1024);
+  var d={}; try{ d=JSON.parse(raw); }catch(e){ out.innerHTML='<p class="bad">⚠️ Copia trovata ('+kb+' KB) ma illeggibile.</p><p class="muted">Scaricala lo stesso col pulsante e inviala.</p>'; document.getElementById('dl').style.display='block'; }
+  function n(k){ return Array.isArray(d[k]) ? d[k].length : 0; }
+  var rows=[['Giocatori','players'],['Staff','staff'],['Attività / Calendario','attivita'],['Presenze','presenze'],['Infortuni','infortuni'],['Partite archiviate','matches'],['Schede allenamento','schede'],['Schemi tattici','schemiTattici'],['Report scout','reportScout'],['Obiettivi','obiettivi'],['Carico / RPE','rpeLog'],['Osservazioni interne','osservazioniInterne'],['Doppie convocazioni','doppieConv'],['Disciplina','disciplina']];
+  var html='<p class="ok">✅ Trovata una copia ('+kb+' KB)</p><table>';
+  rows.forEach(function(r){ var c=n(r[1]); html+='<tr'+(c>0?' class="hl"':'')+'><td>'+r[0]+'</td><td><b>'+c+'</b></td></tr>'; });
+  html+='</table>';
+  out.innerHTML=html;
+  var btn=document.getElementById('dl');
+  btn.style.display='block';
+  btn.onclick=function(){
+    var t=new Date(), p=function(x){return (x<10?'0':'')+x;};
+    var name='lascaris_backup_'+t.getFullYear()+p(t.getMonth()+1)+p(t.getDate())+'_'+p(t.getHours())+p(t.getMinutes())+'.json';
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([raw],{type:'application/json'}));
+    a.download=name; document.body.appendChild(a); a.click();
+    document.getElementById('hint').innerHTML='<p class="ok" style="margin-top:14px">⬇️ Scaricato: '+name+'</p><p class="muted">Lo trovi nei Download / file scaricati. Invialo a chi ti sta aiutando (AirDrop, email o messaggio).</p>';
+  };
+})();
+</script>
+</body>
+</html>
