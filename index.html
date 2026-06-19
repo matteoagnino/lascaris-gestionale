@@ -1,10 +1,25 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.25
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.26
 ================================================================================
   CHANGELOG
   ----------
+  v2.26 · 2026-06-19 · Batch A — Fix tecnici stabilità demo
+    · FIX  [Supabase] Rimossi 5 console.log di debug rimasti in produzione
+           (saveToSupabase, loadFromSupabase, _syncRelational).
+    · FIX  [Categorie] U18 aggiunta a DEFAULT_STATE.categories e a
+           migrateStateV23: ora allineata a categoriesAvailable e categoryLabels.
+    · FIX  [Supabase] players e staff re-inclusi nel blob Supabase: campi non
+           relazionali (docIdentita, genitore1, visitaMedica, matricola, numero
+           maglia) ora persistono sul cloud e non si perdono su dispositivo nuovo.
+    · FIX  [Distinta] dsGenPDF: nascita giocatori ora usa nascitaISO (YYYY-MM-DD)
+           con fallback a nascita — giorno/mese/anno compilati correttamente nel
+           template XLSX LND.
+    · FIX  [Helpers] calcAge: aggiunto parsing DD/MM/YYYY prima di new Date();
+           età, badge minore/adulto e calcoli diffide ora corretti per tutti i
+           giocatori caricati da Supabase.
+
   v2.25 · 2026-06-10 · Hardening sicurezza pre-beta multi-utente
     · SEC  [CRIT] Rimossa chiamata sb.rpc('exec_sql') in saveToSupabase che
            ricreava la policy insicura "Allow all for anon". Su tabella
@@ -577,7 +592,7 @@ function migrateStateV23(d){
   // 1) categorie + label FIGC + struttura campionati
   if(!d.categoryLabels) d.categoryLabels=JSON.parse(JSON.stringify(DEFAULT_STATE.categoryLabels));
   if(!d.categoriesAvailable) d.categoriesAvailable=JSON.parse(JSON.stringify(DEFAULT_STATE.categoriesAvailable));
-  ['U14','U15','U16','U17','U19','PrimaSquadra'].forEach(c=>{
+  ['U14','U15','U16','U17','U18','U19','PrimaSquadra'].forEach(c=>{
     if(Array.isArray(d.categories) && !d.categories.includes(c)) d.categories.push(c);
     if(d.modalitaGioco && !d.modalitaGioco[c]) d.modalitaGioco[c]=DEFAULT_STATE.modalitaGioco[c];
     if(d.maxPerTeam && !d.maxPerTeam[c]) d.maxPerTeam[c]=DEFAULT_STATE.maxPerTeam[c];
@@ -629,13 +644,13 @@ let _sbMap={giocatori:{},attivita:{}};
 async function saveToSupabase(){
   try{
     // Escludi dal blob: dati operativi (ora in tabelle relazionali) + password utenti locali
-    const{currentUser,players,staff,attivita,presenze,infortuni,...rest}=state;
+    // players/staff inclusi nel blob per preservare campi non relazionali (docIdentita, genitore1, ecc.)
+    const{currentUser,attivita,presenze,infortuni,...rest}=state;
     const usersBlob=(rest.users||[]).map(({password,...u})=>u);
     const now=new Date().toISOString();
     const payload={id:STORE,data:{...rest,users:usersBlob},updated_at:now};
-    console.log('[SUPABASE] Salvataggio blob+tabelle...');
     const{error:blobErr}=await sb.from('app_state').upsert(payload,{onConflict:'id'});
-    if(!blobErr){localStorage.setItem(STORE+'_ts',now);console.log('[SUPABASE] Blob salvato')}
+    if(!blobErr){localStorage.setItem(STORE+'_ts',now);}
     else if(blobErr.message?.includes('does not exist')||blobErr.code==='42P01'){
       console.error('[SUPABASE] Tabella app_state mancante: esegui lascaris_supabase_hardening_v2.sql dalla dashboard Supabase per crearla con le policy corrette.');
     }else console.error('[SUPABASE] Errore blob:',blobErr.message,blobErr.code);
@@ -644,7 +659,6 @@ async function saveToSupabase(){
 }
 async function loadFromSupabase(){
   try{
-    console.log('[SUPABASE] Caricamento blob+tabelle...');
     /* 1. Blob: carica config + campi extra non ancora nelle tabelle relazionali */
     const{data:row,error:blobErr}=await sb.from('app_state').select('data,updated_at').eq('id',STORE).single();
     if(!blobErr&&row){
@@ -717,7 +731,7 @@ async function loadFromSupabase(){
       });
       if(Object.keys(sess).length)state.presenze=Object.values(sess);
     }
-    renderView();console.log('[SUPABASE] Sync completato (blob+tabelle)');
+    renderView();
   }catch(e){console.error('[SUPABASE] Caricamento fallito:',e)}
 }
 async function _syncRelational(){
@@ -779,7 +793,6 @@ async function _syncRelational(){
     }
     if(prRows.length){const{error:pe}=await sb.from('presenze').upsert(prRows,{onConflict:'attivita_id,giocatore_id'});if(pe)console.error('[SYNC] presenze:',pe.message);}
   }
-  console.log('[SUPABASE] Sync relazionale OK');
 }
 async function forceSyncSupabase(){
   toast('Sincronizzazione in corso...','i');
@@ -810,7 +823,7 @@ async function testSupabaseConnection(){
 const DEFAULT_STATE={
   currentView:'dashboard',
   sidebarOpen:false,
-  categories:['U6','U7','U8','U9','U10','U11','U12','U13','U14','U15','U16','U17','U19','PrimaSquadra'],
+  categories:['U6','U7','U8','U9','U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','PrimaSquadra'],
   categoryLabels:{'U6':'Piccoli Amici','U7':'Piccoli Amici','U8':'Primi Calci','U9':'Primi Calci','U10':'Pulcini','U11':'Pulcini','U12':'Esordienti','U13':'Esordienti','U14':'Giovanissimi FB','U15':'Giovanissimi','U16':'Allievi FB','U17':'Allievi','U18':'Allievi II anno','U19':'Juniores','PrimaSquadra':'Prima Squadra'},
   categoriesAvailable:['U6','U7','U8','U9','U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','PrimaSquadra'],
   groups:['A','B','C','D'],
@@ -958,7 +971,10 @@ function escJ(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,
 /* ---------- AGE HELPERS (v2.5) ---------- */
 function calcAge(iso){
   if(!iso)return null;
-  const d=new Date(iso);if(isNaN(d.getTime()))return null;
+  let d;
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(iso)){const p=iso.split('/');d=new Date(p[2]+'-'+p[1]+'-'+p[0]);}
+  else d=new Date(iso);
+  if(isNaN(d.getTime()))return null;
   const t=new Date();
   let a=t.getFullYear()-d.getFullYear();
   const m=t.getMonth()-d.getMonth();
@@ -3638,7 +3654,7 @@ function dsGenPDF(force){
     const c=dsS.convocati[i];
     if(c){
       const p=state.players.find(x=>x.id===c.pid)||{};
-      const nas=(p.nascita||'').split('-');
+      const nas=(p.nascitaISO||p.nascita||'').split('-');
       setCell('C'+row,nas[2]||'');
       setCell('D'+row,nas[1]||'');
       setCell('E'+row,nas[0]||'');
