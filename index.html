@@ -1,10 +1,14 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.28
+  LASCARIS 1954 ASD · Gestionale Sportivo · 2.2.5
 ================================================================================
   CHANGELOG
   ----------
+  2.2.5 · 2026-06-20 · Batch 4 + fix login
+    · NEW  Modulo Accordi Economici (CRUD rimborsi, premi gara, quote
+           iscrizione, ingaggi), versione semver 2.2.5.
+    · FIX  Login: fallback a state.users quando utenti_ruoli vuoto in Supabase.
   v2.28 · 2026-06-19 · Batch C — Dataset demo
     · NEW  [Demo] 46 giocatori in DEFAULT_STATE: U14 (15), U16 (15), Prima
            Squadra (16). Nomi verosimili area torinese, date/ruoli coerenti,
@@ -377,7 +381,7 @@
 <!-- CSP rimossa: incompatibile con app single-file (blocca inline script nonostante unsafe-inline). -->
 <!-- Per app single-file su GitHub Pages la protezione è garantita da Supabase RLS lato DB. -->
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.28</title>
+<title>LASCARIS 1954 ASD — Gestionale 2.2.5</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -575,14 +579,14 @@ tr:hover td{background:var(--g50)}
   <div class="lc">
     <img id="lcLogo" alt="LASCARIS">
     <h1>LASCARIS 1954 ASD</h1>
-    <div class="sub">Gestionale Sportivo · v2.25</div>
+    <div class="sub">Gestionale Sportivo · 2.2.5</div>
     <form onsubmit="event.preventDefault();doLogin().catch(e=>console.error(e))">
       <div class="ff"><label>Email</label><input type="email" id="em" required autocomplete="username"></div>
       <div class="ff"><label>Password</label><input type="password" id="pw" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-p">Accedi</button>
       <div id="le" class="err">Credenziali non valide</div>
     </form>
-    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · v2.25</div>
+    <div class="ft"><strong>PRODUZIONE</strong> · Stagione 2025/2026 · 2.2.5</div>
   </div>
 </div>
 
@@ -591,7 +595,7 @@ tr:hover td{background:var(--g50)}
   <header class="tb">
     <button class="mt" onclick="toggSb()">☰</button>
     <img id="tbLogo" alt="LASCARIS">
-    <span class="tb-ver" style="font-size:10px;opacity:.45;font-weight:700;letter-spacing:.5px;margin-left:6px">v2.28</span>
+    <span class="tb-ver" style="font-size:10px;opacity:.45;font-weight:700;letter-spacing:.5px;margin-left:6px">2.2.5</span>
     <span class="sp">Stagione 2025/26</span>
     <button id="alertBtn" onclick="openAlerts()" style="position:relative;background:transparent;border:none;font-size:18px;padding:4px 10px;cursor:pointer;line-height:1" title="Alert & Notifiche">🔔<span id="alertBadge" style="display:none;position:absolute;top:0;right:2px;background:#dc2626;color:#fff;font-size:9px;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;font-weight:700"></span></button>
     <button class="uc" onclick="doLogout()">
@@ -669,6 +673,7 @@ function migrateStateV23(d){
   // 5) v2.8: disciplina (squalifiche e diffide)
   if(!Array.isArray(d.disciplina))d.disciplina=[];
   if(!d.disciplinaSettings||typeof d.disciplinaSettings!=='object')d.disciplinaSettings=JSON.parse(JSON.stringify(DEFAULT_STATE.disciplinaSettings));
+  if(!d.accordiEconomici)d.accordiEconomici=[];
 }
 
 function loadStore(){
@@ -994,6 +999,7 @@ const DEFAULT_STATE={
     {id:'dte03',nome:'Russo Emiliano',societa:'Torino FC Academy',ruolo:'Centrocampista',anno:'2008',data:'2026-03-15',osservatore:'Matteo Agnino',context:'Torneo Regionale U16 - Settimo Torinese',ratings:{TTECNICA0:5,TTECNICA1:4,TTECNICA2:3,TTECNICA3:4,IINTELLIGENZA0:5,IINTELLIGENZA1:5,IINTELLIGENZA2:4,IINTELLIGENZA3:5,PPERSONALIT0:4,PPERSONALIT1:4,PPERSONALIT2:5,PPERSONALIT3:4,SSTRUTTURAFISICA0:4,SSTRUTTURAFISICA1:4,SSTRUTTURAFISICA2:5,SSTRUTTURAFISICA3:4,SSTRUTTURAFISICA4:4,SVELOCITRAPIDIT0:5,SVELOCITRAPIDIT1:5,SVELOCITRAPIDIT2:4,SVELOCITRAPIDIT3:5},media:'4.4',gk:false,forze:'Visione di gioco eccellente, tecnica di alto livello, leadership naturale',migl:'Costanza nelle gare di basso profilo',azioni:'Follow-up nella sessione estiva - profilo top per rinforzo U16'},
     {id:'dte04',nome:'Pagani Kevin',societa:'Venaria Reale',ruolo:'Difensore Centrale',anno:'2010',data:'2026-03-08',osservatore:'Matteo Agnino',context:'Campionato U14 - LASCARIS vs Venaria',ratings:{TTECNICA0:3,TTECNICA1:2,TTECNICA2:3,TTECNICA3:4,IINTELLIGENZA0:3,IINTELLIGENZA1:3,IINTELLIGENZA2:4,IINTELLIGENZA3:3,PPERSONALIT0:4,PPERSONALIT1:3,PPERSONALIT2:4,PPERSONALIT3:3,SSTRUTTURAFISICA0:4,SSTRUTTURAFISICA1:4,SSTRUTTURAFISICA2:3,SSTRUTTURAFISICA3:4,SSTRUTTURAFISICA4:4,SVELOCITRAPIDIT0:3,SVELOCITRAPIDIT1:3,SVELOCITRAPIDIT2:4,SVELOCITRAPIDIT3:3},media:'3.3',gk:false,forze:'Fisicita e presenza nei duelli aerei',migl:'Gioco coi piedi da migliorare',azioni:'Da rivalutare nella prima fase della stagione 2026-27'}],
   scadenze:[],
+  accordiEconomici:[],
   // Parametri società
   societa:{nome:'LASCARIS 1954 ASD',piva:'',matricolaFigc:'',sede:'Via Claviere 16, 10044 Pianezza (TO)',tel:'',email:'',pec:'',rappresentanteLegale:'',cfRappresentante:'',sito:'',stagione:'2025/2026',inizio:'2025-07-01',fine:'2026-06-30'},
   // Users
@@ -1025,7 +1031,7 @@ const DEFAULT_STATE={
   incarichiCustom:[],  // Additional staff roles
   profiliPermessi:[
     {id:'prof_admin',nome:'Admin',incarico:'Admin',ruolo:'Amministratore di sistema',descrizione:'Accesso totale al gestionale inclusa gestione utenti',permessi:['all']},
-    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','schemiTattici']},
+    {id:'prof_ds',nome:'Direttore Sportivo',incarico:'Direttore Sportivo',ruolo:'Direttore Sportivo',descrizione:'Accesso completo tranne gestione utenti di sistema',permessi:['dashboard','calendario','scadenze','accordi','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','schedeExt','statDesc','statInf','rae','programma','agenda','impianti','parametri','storico','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','schemiTattici']},
     {id:'prof_rsg',nome:'Responsabile Settore Giovanile',incarico:'Responsabile SGS',ruolo:'Responsabile Settore Giovanile',descrizione:'Area tecnica e valutativa, non amministrazione',permessi:['dashboard','calendario','scadenze','organigramma','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','schemiTattici']},
     {id:'prof_tec',nome:'Tecnico',incarico:'Tecnico',ruolo:'Tecnico',descrizione:'Accesso a dati della propria categoria',permessi:['dashboard','calendario','scadenze','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','programma','agenda','doppieConv','confronto','fascicolo','obiettivi','rpe','pianoStagionale']},
     {id:'prof_scout',nome:'Scout',incarico:'Scout',ruolo:'Osservatore/Scout',descrizione:'Valutazioni esterne e archivio osservati',permessi:['dashboard','calendario','tippsExt','tippsExtP','schedeExt','statDesc','rae','confronto','reportScout']}
@@ -1221,7 +1227,11 @@ async function _buildCurrentUser(sbUser){
   }catch(e){console.warn('[AUTH] Errore DB profilo:',e);dbOk=false}
   // Fail-closed: se il DB risponde ma l'account non ha un ruolo attivo, nega l'accesso.
   // Su errore DB (dbOk=false) NON blocchiamo, per non escludere per un problema transitorio di rete.
-  if(dbOk&&!ruoloCodice){console.warn('[AUTH] Accesso negato: nessun ruolo attivo per',sbUser.email);return null}
+  if(dbOk&&!ruoloCodice){
+    const localU=(state.users||[]).find(u=>u.email===sbUser.email&&u.attivo);
+    if(localU)return{...localU,supabase:true,sb_id:sbUser.id};
+    console.warn('[AUTH] Accesso negato: nessun ruolo in DB né utente locale per',sbUser.email);return null;
+  }
   const rInfo=RUOLO_MAP[ruoloCodice]||{label:'Staff',key:'tec'};
   const profPerm=(state.profiliPermessi||[]).find(p=>p.id==='prof_'+rInfo.key)||{permessi:[]};
   const fullName=[nome,cognome].filter(Boolean).join(' ').trim()||nome;
@@ -1274,6 +1284,7 @@ const NAV=[
     ['dashboard','⌂','Dashboard'],
     ['calendario','📅','Calendario'],
     ['scadenze','⏰','Scadenze'],
+    ['accordi','💰','Accordi Economici'],
     ['organigramma','🏛','Organigramma']
   ]},
   {g:'Area Gestione Organizzativa',items:[
@@ -1423,6 +1434,8 @@ VIEWS.dashboard=function(c){
     if(p.scadenzaTessera&&p.scadenzaTessera<=soon30Iso&&p.scadenzaTessera>=todIso)docScad.push({tipo:'Tessera',nome:(p.cognome||'')+' '+(p.nome||''),data:p.scadenzaTessera});
   });
   docScad.sort((a,b)=>a.data.localeCompare(b.data));
+  const _now30=new Date(tod);_now30.setDate(_now30.getDate()+30);const _now30Iso=isoL(_now30);
+  const accordiAlert=(state.accordiEconomici||[]).filter(a=>a.stato==='attivo'&&a.dataFine&&a.dataFine<=_now30Iso).sort((a,b)=>a.dataFine.localeCompare(b.dataFine));
   // Day names for week view
   const giorniSett=[];for(let d=0;d<7;d++){const dt=new Date(tod);dt.setDate(dt.getDate()+d);giorniSett.push({iso:isoL(dt),label:dt.toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'}),isToday:d===0})}
   c.innerHTML=`
@@ -1469,6 +1482,10 @@ VIEWS.dashboard=function(c){
             ${docScad.length?`<div>
               <div style="font-size:11px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Scadenze prossime 30gg</div>
               ${docScad.slice(0,5).map(d=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;font-size:11px;border-left:3px solid #d97706;margin-bottom:3px"><strong>${esc(d.nome)}</strong><span style="color:var(--g500)">${esc(d.tipo)}</span><span style="margin-left:auto;font-size:10px">${fmtIt(d.data)}</span></div>`).join('')}
+            </div>`:''}
+            ${accordiAlert.length?`<div style="margin-top:8px">
+              <div style="font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Accordi in scadenza</div>
+              ${accordiAlert.slice(0,4).map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;font-size:11px;border-left:3px solid #7c3aed;margin-bottom:3px"><strong>${esc(a.nomeSoggetto)}</strong><span style="color:var(--g500)">${esc(a.tipo)}</span><span style="margin-left:auto;font-size:10px">${fmtIt(a.dataFine)}</span></div>`).join('')}
             </div>`:''}
           </div>
         </div>
@@ -1884,8 +1901,8 @@ function orgComSendSMS(){const phones=orgComGetPhones();if(!phones.length){toast
 /* =============================================================
    VIEW: UTENTI & PERMESSI
    ============================================================= */
-const PERMS_BASE=['dashboard','calendario','scadenze','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','schemiTattici','impianti','parametri','storico','utenti','schedeExt'];
-const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',obiettivi:'Obiettivi Sviluppo',rpe:'Carico & RPE',pianoStagionale:'Piano Stagionale',schemiTattici:'Schemi Tattici',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
+const PERMS_BASE=['dashboard','calendario','scadenze','accordi','organigramma','anagrafica','staff','rose','presenze','matchday','distinta','minutaggi','schede','tippsInt','tippsIntP','infortuni','tippsExt','tippsExtP','statDesc','statInf','rae','programma','agenda','osservInterne','doppieConv','confronto','fascicolo','reportScout','obiettivi','rpe','pianoStagionale','schemiTattici','impianti','parametri','storico','utenti','schedeExt'];
+const PERM_LABELS_BASE={dashboard:'Dashboard',calendario:'Calendario',scadenze:'Scadenze',accordi:'Accordi Economici',organigramma:'Organigramma',anagrafica:'Anagrafica',staff:'Staff Tecnico',rose:'Rose & Giocatori',presenze:'Presenze',matchday:'Match Day Live',minutaggi:'Minutaggi & Partite',schede:'Schede Allenamento',tippsInt:'TIPPS Interno',tippsIntP:'TIPPS Int.Portieri',infortuni:'Infortuni',tippsExt:'TIPPS Esterno',tippsExtP:'TIPPS Est.Portieri',statDesc:'Stat. Descrittive',statInf:'Analisi Inferenziali',rae:'Effetto Età Relativa',programma:'Programma Settimanale',agenda:'Agenda Partite',osservInterne:'Osservazioni Interne',doppieConv:'Doppie Convocazioni',confronto:'Confronto Giocatori',fascicolo:'Fascicolo Giocatore',reportScout:'Report Scout',obiettivi:'Obiettivi Sviluppo',rpe:'Carico & RPE',pianoStagionale:'Piano Stagionale',schemiTattici:'Schemi Tattici',impianti:'Impianti',parametri:'Parametri Società',storico:'Storico Stagioni',utenti:'Utenti & Permessi',schedeExt:'Archivio Schede Scouting'};
 function allPerms(){return [...PERMS_BASE,...state.permessiCustom.map(p=>p.code)]}
 function permLabel(code){return PERM_LABELS_BASE[code]||(state.permessiCustom.find(p=>p.code===code)||{}).label||code}
 // Back-compat aliases
@@ -2818,6 +2835,104 @@ function delAttivita(id){if(!confirm('Eliminare?'))return;state.attivita=state.a
 /* =============================================================
    VIEW: SCADENZE
    ============================================================= */
+/* =============================================================
+   VIEW: ACCORDI ECONOMICI
+   ============================================================= */
+VIEWS.accordi=function(c){
+  const cu=state.currentUser;
+  const canEdit=cu&&((cu.permessi||[]).includes('all')||['admin','ds'].includes(cu.role_key));
+  const all=(state.accordiEconomici||[]).slice().sort((a,b)=>(a.nomeSoggetto||'').localeCompare(b.nomeSoggetto||''));
+  const fTipo=state._accFiltTipo||'';const fStato=state._accFiltStato||'';
+  const list=all.filter(a=>(!fTipo||a.tipo===fTipo)&&(!fStato||a.stato===fStato));
+  const today_s=today();
+  const attivi=all.filter(a=>a.stato==='attivo');
+  const scaduti=all.filter(a=>a.stato==='attivo'&&a.dataFine&&a.dataFine<today_s);
+  const tipi=['Rimborso spese','Premio gara','Quota iscrizione','Ingaggio','Contributo mensile','Altro'];
+  const statiAcc=['attivo','sospeso','chiuso'];
+  const periodi=['mensile','a partita','annuale','una tantum'];
+  const statoColor={attivo:'var(--green)',sospeso:'#d97706',chiuso:'var(--g400)'};
+  const subjOpts=[...state.players.filter(p=>!p.eliminato).map(p=>({v:`player|${p.id}|${p.cognome} ${p.nome}`,l:`[G] ${p.cognome} ${p.nome}`})),...state.staff.map(s=>({v:`staff|${s.id}|${s.cognome} ${s.nome}`,l:`[S] ${s.cognome} ${s.nome}`}))];
+  c.innerHTML=`<div class="vw"><div class="vh"><div><h1>Accordi Economici</h1><div class="sb2">Rimborsi, premi gara, quote iscrizione e ingaggi</div></div>${canEdit?`<button class="btn btn-p btn-sm" onclick="openAccordioModal()">+ Nuovo accordo</button>`:''}</div>
+  <div class="g4" style="margin-bottom:16px">
+    <div class="card"><div class="kv">${attivi.length}</div><div class="kl">Accordi attivi</div></div>
+    <div class="card"><div class="kv" style="color:var(--red)">${scaduti.length}</div><div class="kl">Scaduti/in scadenza</div></div>
+    <div class="card"><div class="kv">€${attivi.filter(a=>a.periodicita==='mensile').reduce((s,a)=>s+Number(a.importo||0),0).toLocaleString('it-IT')}</div><div class="kl">Mensile totale</div></div>
+    <div class="card"><div class="kv">${all.length}</div><div class="kl">Tot. accordi</div></div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+    <select onchange="state._accFiltTipo=this.value;saveStore();renderView()" style="padding:8px 12px;border:1px solid var(--g300);border-radius:var(--rs);font-size:13px"><option value="">— Tutti i tipi —</option>${tipi.map(t=>`<option value="${t}" ${fTipo===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
+    <select onchange="state._accFiltStato=this.value;saveStore();renderView()" style="padding:8px 12px;border:1px solid var(--g300);border-radius:var(--rs);font-size:13px"><option value="">— Tutti gli stati —</option>${statiAcc.map(s=>`<option value="${s}" ${fStato===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+    <span class="bdg">${list.length} accordi</span>
+  </div>
+  ${!list.length?`<div class="es"><div class="ic">💰</div><h3>Nessun accordo</h3><p>${canEdit?'Crea il primo accordo con "+ Nuovo accordo".':'Nessun accordo con i filtri selezionati.'}</p></div>`:`
+  <div style="overflow-x:auto"><table class="tb"><thead><tr><th>Soggetto</th><th>Tipo</th><th>Importo</th><th>Periodicità</th><th>Inizio</th><th>Fine</th><th>Stato</th>${canEdit?'<th></th>':''}</tr></thead><tbody>
+  ${list.map(a=>{const scad=a.stato==='attivo'&&a.dataFine&&a.dataFine<today_s;return `<tr><td><strong>${esc(a.nomeSoggetto)}</strong></td><td>${esc(a.tipo)}</td><td>${a.importo?'€'+Number(a.importo).toLocaleString('it-IT'):'-'}</td><td><span style="color:var(--g500);font-size:12px">${esc(a.periodicita||'-')}</span></td><td>${a.dataInizio?fmtIt(a.dataInizio):'-'}</td><td style="color:${scad?'var(--red)':'inherit'}">${a.dataFine?fmtIt(a.dataFine)+' '+(scad?'⚠️':''):'-'}</td><td><span class="bdg" style="background:${statoColor[a.stato]||'var(--g200)'};color:#fff">${esc(a.stato)}</span></td>${canEdit?`<td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAccordioModal('${a.id}')">✏️</button> <button class="btn btn-sm btn-d" onclick="delAccordio('${a.id}')">🗑</button></td>`:''}</tr>`;}).join('')}
+  </tbody></table></div>`}
+  <div id="accModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+    <div class="card" style="width:min(520px,95vw);max-height:90vh;overflow-y:auto">
+      <h2 id="accModalTitle" style="margin-bottom:16px">Accordo</h2>
+      <div class="fb" style="gap:10px">
+        <div class="ff"><label>Soggetto</label><select id="accSubj" style="padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"><option value="">— Seleziona —</option>${subjOpts.map(o=>`<option value="${o.v}">${esc(o.l)}</option>`).join('')}<option value="ente||Ente/Società">Ente/Società</option></select></div>
+        <div class="ff"><label>Tipo</label><select id="accTipo" style="padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">${tipi.map(t=>`<option>${esc(t)}</option>`).join('')}</select></div>
+        <div class="ff"><label>Importo (€)</label><input id="accImporto" type="number" min="0" step="0.01" style="padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+        <div class="ff"><label>Periodicità</label><select id="accPeriodo" style="padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">${periodi.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div>
+        <div class="ff"><label>Data inizio</label><input id="accInizio" type="date" style="padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+        <div class="ff"><label>Data fine</label><input id="accFine" type="date" style="padding:8px;border:1px solid var(--g300);border-radius:var(--rs)"></div>
+        <div class="ff"><label>Stato</label><select id="accStato" style="padding:8px;border:1px solid var(--g300);border-radius:var(--rs)">${statiAcc.map(s=>`<option>${esc(s)}</option>`).join('')}</select></div>
+        <div style="flex:1 1 100%"><label>Note</label><textarea id="accNote" rows="2" style="width:100%;padding:8px;border:1px solid var(--g300);border-radius:var(--rs);resize:vertical"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end"><button class="btn" onclick="closeAccordioModal()">Annulla</button><button class="btn btn-p" onclick="saveAccordio()">Salva</button></div>
+    </div>
+  </div>
+  </div>`;
+};
+function openAccordioModal(id){
+  const modal=document.getElementById('accModal');if(!modal)return;
+  const a=id?(state.accordiEconomici||[]).find(x=>x.id===id):null;
+  document.getElementById('accModalTitle').textContent=a?'Modifica accordo':'Nuovo accordo';
+  const subjOpts=[...state.players.filter(p=>!p.eliminato).map(p=>({v:`player|${p.id}|${p.cognome} ${p.nome}`,l:`[G] ${p.cognome} ${p.nome}`})),...state.staff.map(s=>({v:`staff|${s.id}|${s.cognome} ${s.nome}`,l:`[S] ${s.cognome} ${s.nome}`}))];
+  const subj=document.getElementById('accSubj');
+  subj.innerHTML='<option value="">— Seleziona —</option>'+subjOpts.map(o=>`<option value="${o.v}">${esc(o.l)}</option>`).join('')+'<option value="ente||Ente/Società">Ente/Società</option>';
+  if(a){
+    subj.value=`${a.soggetto}|${a.refId||''}|${a.nomeSoggetto}`;
+    document.getElementById('accTipo').value=a.tipo||'Rimborso spese';
+    document.getElementById('accImporto').value=a.importo||'';
+    document.getElementById('accPeriodo').value=a.periodicita||'mensile';
+    document.getElementById('accInizio').value=a.dataInizio||'';
+    document.getElementById('accFine').value=a.dataFine||'';
+    document.getElementById('accStato').value=a.stato||'attivo';
+    document.getElementById('accNote').value=a.note||'';
+  } else {
+    subj.value='';document.getElementById('accTipo').value='Rimborso spese';document.getElementById('accImporto').value='';
+    document.getElementById('accPeriodo').value='mensile';document.getElementById('accInizio').value='';
+    document.getElementById('accFine').value='';document.getElementById('accStato').value='attivo';document.getElementById('accNote').value='';
+  }
+  modal._editId=id||null;modal.style.display='flex';
+}
+function closeAccordioModal(){const m=document.getElementById('accModal');if(m)m.style.display='none';}
+function saveAccordio(){
+  const modal=document.getElementById('accModal');
+  const subjVal=document.getElementById('accSubj').value;
+  if(!subjVal){alert('Seleziona un soggetto');return;}
+  const [soggetto,refId,nomeSoggetto]=subjVal.split('|');
+  const rec={id:modal._editId||uid(),soggetto,refId:refId||'',nomeSoggetto,
+    tipo:document.getElementById('accTipo').value,
+    importo:parseFloat(document.getElementById('accImporto').value)||0,
+    periodicita:document.getElementById('accPeriodo').value,
+    dataInizio:document.getElementById('accInizio').value||'',
+    dataFine:document.getElementById('accFine').value||'',
+    stato:document.getElementById('accStato').value,
+    note:document.getElementById('accNote').value||''};
+  if(modal._editId){state.accordiEconomici=(state.accordiEconomici||[]).map(a=>a.id===modal._editId?rec:a);}
+  else{state.accordiEconomici=[...(state.accordiEconomici||[]),rec];}
+  saveStore();closeAccordioModal();renderView();
+}
+function delAccordio(id){
+  if(!confirm('Eliminare questo accordo?'))return;
+  state.accordiEconomici=(state.accordiEconomici||[]).filter(a=>a.id!==id);
+  saveStore();renderView();
+}
+
 VIEWS.scadenze=function(c){
   const items=[];const now=new Date();
   state.players.filter(p=>!p.eliminato).forEach(p=>{
@@ -2847,6 +2962,8 @@ VIEWS.scadenze=function(c){
           </tr>`}).join('')}</tbody>
         </table></div></div>`}
     </div>
+    <!-- Accordi in scadenza -->
+    ${(()=>{const _t=today();const _t90=new Date(_t);_t90.setDate(_t90.getDate()+90);const _t90s=isoL(_t90);const accs=(state.accordiEconomici||[]).filter(a=>a.stato==='attivo'&&a.dataFine&&a.dataFine<=_t90s).sort((a,b)=>a.dataFine.localeCompare(b.dataFine));return accs.length?`<div class="card" style="margin-top:16px"><h2 style="font-size:14px;font-weight:700;margin-bottom:12px">💰 Accordi in scadenza (90 gg)</h2><table class="tb"><thead><tr><th>Soggetto</th><th>Tipo</th><th>Importo</th><th>Scadenza</th><th>Stato</th></tr></thead><tbody>${accs.map(a=>{const scad=a.dataFine<_t;return `<tr><td><strong>${esc(a.nomeSoggetto)}</strong></td><td>${esc(a.tipo)}</td><td>${a.importo?'€'+Number(a.importo).toLocaleString('it-IT'):'-'} <span style="color:var(--g500);font-size:11px">${esc(a.periodicita||'')}</span></td><td style="color:${scad?'var(--red)':'#d97706'}">${fmtIt(a.dataFine)}${scad?' ⚠️':''}</td><td><span class="bdg">${esc(a.stato)}</span></td></tr>`}).join('')}</tbody></table></div>`:'';})()}
   `;
 };
 
