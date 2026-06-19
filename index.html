@@ -5,7 +5,7 @@
 ================================================================================
   CHANGELOG
   ----------
-  2.2.5 · 2026-06-20 · Batch 4 + fix login
+  2.2.5 · 2026-06-20 · Batch 4 + fix login v2
     · NEW  Modulo Accordi Economici (CRUD rimborsi, premi gara, quote
            iscrizione, ingaggi), versione semver 2.2.5.
     · FIX  Login: fallback a state.users quando utenti_ruoli vuoto in Supabase.
@@ -1250,7 +1250,20 @@ async function doLogin(){
     if(error)console.error('[AUTH] Errore login:',error.message);
   }catch(ex){console.error('[AUTH] Eccezione rete:',ex);error={message:'Errore di connessione a Supabase: '+ex.message}}
   if(error){
-    err.textContent=error.message==='Invalid login credentials'?'Credenziali non valide':error.message;err.classList.add('on');btn.disabled=false;btn.textContent='Accedi';return;
+    const isNetErr=error.message&&(error.message.includes('fetch')||error.message.includes('network')||error.message.includes('ERR_'));
+    if(isNetErr){
+      // Supabase irraggiungibile: rientro con cache se stessa email
+      const cached=state.currentUser;
+      if(cached&&cached.supabase&&cached.email===em){
+        state.currentUser=cached;enterApp(cached);
+        document.querySelector('.ft').textContent='⚠️ Modalità offline — dati locali, Supabase non raggiungibile';
+        btn.disabled=false;btn.textContent='Accedi';return;
+      }
+      err.textContent='Connessione a Supabase non riuscita. Verifica la connessione o che il progetto non sia in pausa sul dashboard Supabase.';
+    } else {
+      err.textContent=error.message==='Invalid login credentials'?'Credenziali non valide':error.message;
+    }
+    err.classList.add('on');btn.disabled=false;btn.textContent='Accedi';return;
   }
   err.classList.remove('on');
   const cu=await _buildCurrentUser(data.user);
