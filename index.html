@@ -1,10 +1,27 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-  LASCARIS 1954 ASD · Gestionale Sportivo · v2.26
+  LASCARIS 1954 ASD · Gestionale Sportivo · v2.27
 ================================================================================
   CHANGELOG
   ----------
+  v2.27 · 2026-06-19 · Batch B — Fix visivi + UX demo
+    · FIX  [Mobile] Sidebar: aggiunto backdrop semitrasparente; tap fuori chiude
+           il menu. Refactoring in closeSb() usato anche da goto().
+    · FIX  [Mobile 480px] Nasconde badge "Stagione 2025/26" in topbar; riduce
+           padding .mn a 14px; KPI grid 2 colonne; filtri .fb a 2 colonne.
+    · FIX  [Badge] tipoBadge(tipo): helper centralizzato per colori badge
+           attività. Allineati Minutaggi e Programma Settimanale (Torneo era
+           rosso in Programma, grigio in Minutaggi; ora giallo ovunque).
+    · UPD  [Contrasto] --g500: #6d6d6d → #595959 (contrasto 5.1:1 su bianco,
+           WCAG AA). Applicato a label, sottotitoli, pill in tutto l'app.
+    · UPD  [KPI] .kpi .v font-size 24px → 28px per migliore leggibilità
+           su proiettore e smartphone.
+    · NEW  [UX] Pulsante ↑ scroll-to-top fisso bottom-right; appare dopo
+           300px di scroll nel pannello principale.
+    · NEW  [UX] Versione v2.27 visibile in topbar accanto al logo (nascosta
+           su mobile ≤480px).
+
   v2.26 · 2026-06-19 · Batch A — Fix tecnici stabilità demo
     · FIX  [Supabase] Rimossi 5 console.log di debug rimasti in produzione
            (saveToSupabase, loadFromSupabase, _syncRelational).
@@ -343,7 +360,7 @@
 <!-- CSP rimossa: incompatibile con app single-file (blocca inline script nonostante unsafe-inline). -->
 <!-- Per app single-file su GitHub Pages la protezione è garantita da Supabase RLS lato DB. -->
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22LASCARIS%201954%20Gestionale%22%2C%22short_name%22%3A%22Lascaris%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
-<title>LASCARIS 1954 ASD — Gestionale v2.25</title>
+<title>LASCARIS 1954 ASD — Gestionale v2.27</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -353,7 +370,7 @@
 <script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.45.0/build/docxtemplater.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
-:root{--black:#0a0a0a;--white:#fff;--g50:#f7f7f7;--g100:#ececec;--g200:#d9d9d9;--g300:#b8b8b8;--g500:#6d6d6d;--g700:#3a3a3a;--green:#16a34a;--red:#dc2626;--yellow:#eab308;--blue:#2563eb;--orange:#ea580c;--pitch:#2d6a3f;--r:12px;--rs:6px;--sh:0 4px 20px rgba(0,0,0,.08);--shl:0 12px 40px rgba(0,0,0,.18);--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+:root{--black:#0a0a0a;--white:#fff;--g50:#f7f7f7;--g100:#ececec;--g200:#d9d9d9;--g300:#b8b8b8;--g500:#595959;--g700:#3a3a3a;--green:#16a34a;--red:#dc2626;--yellow:#eab308;--blue:#2563eb;--orange:#ea580c;--pitch:#2d6a3f;--r:12px;--rs:6px;--sh:0 4px 20px rgba(0,0,0,.08);--shl:0 12px 40px rgba(0,0,0,.18);--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;font-family:var(--font);color:var(--black);background:var(--g50);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
@@ -389,7 +406,7 @@ img,svg{max-width:100%;display:block}
 .kpi.d{border-left-color:var(--red)}
 .kpi.o{border-left-color:var(--green)}
 .kpi .l{font-size:11px;color:var(--g500);text-transform:uppercase;font-weight:700;letter-spacing:.5px}
-.kpi .v{font-size:24px;font-weight:800;line-height:1;margin-top:4px}
+.kpi .v{font-size:28px;font-weight:800;line-height:1;margin-top:4px}
 .kpi .t{font-size:11px;color:var(--g500);margin-top:3px}
 /* BADGES */
 .bdg{display:inline-block;padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
@@ -473,6 +490,19 @@ tr:hover td{background:var(--g50)}
   .sb.on{left:0}
   .tb .mt{display:block}
   .tb .uc .ui{display:none}
+  #sbBd.on{display:block}
+}
+/* Sidebar backdrop */
+#sbBd{position:fixed;inset:0;top:56px;background:rgba(0,0,0,.45);z-index:49;display:none}
+/* Scroll-to-top */
+.stt{position:fixed;bottom:20px;right:16px;z-index:500;display:none;background:var(--black);color:white;border-radius:50%;width:40px;height:40px;font-size:18px;box-shadow:var(--shl);align-items:center;justify-content:center;cursor:pointer;border:none}
+.stt.on{display:flex}
+@media(max-width:480px){
+  .tb .sp{display:none}
+  .mn{padding:14px}
+  .g4{grid-template-columns:repeat(2,1fr)}
+  .fb select,.fb input{flex:1 1 calc(50% - 3px);min-width:0}
+  .tb-ver{display:none}
 }
 /* EMPTY STATE */
 .es{padding:50px 30px;text-align:center;background:white;border-radius:var(--r);border:2px dashed var(--g200)}
@@ -544,6 +574,7 @@ tr:hover td{background:var(--g50)}
   <header class="tb">
     <button class="mt" onclick="toggSb()">☰</button>
     <img id="tbLogo" alt="LASCARIS">
+    <span class="tb-ver" style="font-size:10px;opacity:.45;font-weight:700;letter-spacing:.5px;margin-left:6px">v2.27</span>
     <span class="sp">Stagione 2025/26</span>
     <button id="alertBtn" onclick="openAlerts()" style="position:relative;background:transparent;border:none;font-size:18px;padding:4px 10px;cursor:pointer;line-height:1" title="Alert & Notifiche">🔔<span id="alertBadge" style="display:none;position:absolute;top:0;right:2px;background:#dc2626;color:#fff;font-size:9px;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;font-weight:700"></span></button>
     <button class="uc" onclick="doLogout()">
@@ -551,10 +582,12 @@ tr:hover td{background:var(--g50)}
       <div class="ui"><div class="n" id="uNm">Matteo Agnino</div><div class="r" id="uRl">Admin</div></div>
     </button>
   </header>
+  <div id="sbBd" onclick="toggSb()"></div>
   <div class="lay">
     <nav class="sb" id="sb"></nav>
-    <main class="mn"><div id="vc"></div></main>
+    <main class="mn" id="mn"><div id="vc"></div></main>
   </div>
+  <button class="stt" id="sttBtn" onclick="document.getElementById('mn').scrollTop=0" title="Torna su">↑</button>
 </div>
 
 <!-- MODAL -->
@@ -1037,6 +1070,7 @@ function dispBadgePlayer(pid){
   if(dispIsDiffidato(pid))return '<span class="bdg bdg-y" title="Diffidato (alla prossima ammonizione 1 giornata)">⚠ DIFFIDATO</span>';
   return '';
 }
+function tipoBadge(tipo){if(tipo==='Allenamento')return 'bdg-b';if(tipo==='Campionato'||tipo==='Partita')return 'bdg-r';if(tipo==='Torneo')return 'bdg-y';if(tipo==='Amichevole'||tipo==='Test match')return 'bdg-gray';return 'bdg-gray';}
 function categoryDisplay(cat){const lab=categoryLabel(cat);if(!cat)return '';if(cat==='PrimaSquadra')return 'Prima Squadra';return lab?cat+' · '+lab:cat}
 function categoryShort(cat){return cat==='PrimaSquadra'?'1ª Sq.':cat}
 function categoryUsesMultiGroup(cat){return ['U6','U7','U8','U9','U10','U11','U12','U13'].includes(cat)}
@@ -1134,12 +1168,14 @@ function enterApp(u){
   impWk=wkStart(new Date());
   goto('dashboard');
   refreshAlertBadge();
+  const mn=document.getElementById('mn');if(mn){const b=document.getElementById('sttBtn');mn.addEventListener('scroll',()=>{if(b)b.classList.toggle('on',mn.scrollTop>300)});}
 }
 async function doLogout(){
   await sb.auth.signOut().catch(()=>{});
   state.currentUser=null;sessionStorage.removeItem(STORE+'_user');saveStore();document.getElementById('app').classList.add('hide');document.getElementById('login').classList.remove('hide');document.getElementById('em').value='';document.getElementById('pw').value='';
 }
-function toggSb(){document.getElementById('sb').classList.toggle('on')}
+function toggSb(){const sb=document.getElementById('sb');const bd=document.getElementById('sbBd');const on=sb.classList.toggle('on');if(bd)bd.classList.toggle('on',on);}
+function closeSb(){const sb=document.getElementById('sb');const bd=document.getElementById('sbBd');sb.classList.remove('on');if(bd)bd.classList.remove('on');}
 
 /* ---------- SIDEBAR (built dynamically) ---------- */
 const NAV=[
@@ -1219,7 +1255,7 @@ function goto(v){
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('on',el.dataset.v===v));
   renderView();
   refreshAlertBadge();
-  if(window.innerWidth<=900)document.getElementById('sb').classList.remove('on');
+  if(window.innerWidth<=900)closeSb();
   document.querySelector('.mn').scrollTop=0;
   saveStore();
 }
@@ -4244,7 +4280,7 @@ VIEWS.minutaggi=function(c){
           <tbody>${ms.map(m=>{const totalMin=m.roster.reduce((s,r)=>s+r.minutes,0);const impN=m.impiantoEsterno||(state.impianti.find(i=>i.id===m.impiantoId)||{}).nome||m.impiantoLibero||'—';const schNc=(state.schemiTattici||[]).filter(s=>(s.matchIds||[]).includes(m.id)).length;return `<tr>
             <td>${fmtIt(m.data)}</td>
             <td>${groupChip(m.categoria,m.gruppo)}</td>
-            <td><span class="bdg bdg-gray">${esc(m.tipo)}</span></td>
+            <td><span class="bdg ${tipoBadge(m.tipo)}">${esc(m.tipo)}</span></td>
             <td><span class="bdg ${m.sede==='trasferta'?'bdg-r':'bdg-b'}" style="font-size:10px">${m.sede==='trasferta'?'🚌':'🏠'}</span></td>
             <td>${esc(m.avversario)||'—'}</td>
             <td style="font-size:11px">${esc(impN)}</td>
@@ -4428,7 +4464,7 @@ VIEWS.agenda=function(c){
             <td>${esc(m.ora)||'—'}</td>
             <td style="font-size:11px">${esc(m.fascia)||'—'}</td>
             <td>${groupChip(m.categoria,m.gruppo)}</td>
-            <td><span class="bdg ${m.tipo==='Campionato'?'bdg-r':m.tipo==='Torneo'?'bdg-y':'bdg-b'}">${esc(m.tipo)}</span></td>
+            <td><span class="bdg ${tipoBadge(m.tipo)}">${esc(m.tipo)}</span></td>
             <td><span class="bdg ${m.sede==='trasferta'?'bdg-r':'bdg-b'}" style="font-size:10px">${m.sede==='trasferta'?'🚌 Trasf.':'🏠 Casa'}</span></td>
             <td><strong>${esc(m.avversario)||'—'}</strong></td>
             <td style="font-size:11px">${luogo}${luogoDet}</td>
@@ -4482,7 +4518,7 @@ VIEWS.programma=function(c){
       ${!teams.length?`<div class="es"><div class="ic">📆</div><h3>Nessuna attività / squadra</h3><p>Aggiungi giocatori e attività per popolare il programma.</p></div>`:teams.map(t=>{
         const ft2=state._progFt||"";const weekAct=state.attivita.filter(a=>a.categoria===t.cat&&a.gruppo===t.g&&isoDays.includes(a.data)&&(!ft2||a.tipo===ft2));
         if(!weekAct.length)return '';
-        return `<div class="card" style="margin-bottom:10px"><div class="card-h"><h3 style="font-size:13px">${groupChip(t.cat,t.g)} <span style="color:var(--g500);font-size:11px;margin-left:6px">${state.modalitaGioco[t.cat]}</span></h3></div><div class="tw"><table><thead><tr><th>Giorno</th><th>Tipo</th><th>Sede</th><th>Ora</th><th>Fascia</th><th>Durata/Fine</th><th>Impianto/Luogo</th><th>Avversario</th><th>Note</th></tr></thead><tbody>${weekAct.sort((a,b)=>a.data.localeCompare(b.data)).map(a=>{const imp=state.impianti.find(i=>i.id===a.impiantoId);const d=new Date(a.data);const ora=a.ora||'';let fine='—';if(ora&&a.durata){const[h,m]=ora.split(':').map(Number);const end=new Date(d);end.setHours(h,m+a.durata);fine=pad(end.getHours())+':'+pad(end.getMinutes())}const luogo=a.sede==='trasferta'?(a.impiantoEsterno||a.luogoLibero||'Trasferta'):(imp?esc(imp.nome):'—');const luogoDet=a.sede==='trasferta'?(a.luogoLibero?'<br><span style=\"color:var(--g500);font-size:10px\">'+esc(a.luogoLibero)+'</span>':''):(imp?'<br><span style=\"color:var(--g500);font-size:10px\">'+esc(imp.indirizzo)+'</span>':'');return `<tr onclick="openAttivita('${a.id}')" style="cursor:pointer"><td><strong>${d.toLocaleDateString('it-IT',{weekday:'short',day:'numeric'})}</strong></td><td><span class="bdg ${a.tipo==='Allenamento'?'bdg-b':'bdg-r'}">${esc(a.tipo)}</span></td><td><span class="bdg ${a.sede==='trasferta'?'bdg-r':'bdg-b'}" style="font-size:10px">${a.sede==='trasferta'?'🚌 Trasf.':'🏠 Casa'}</span></td><td>${esc(ora)||'—'}</td><td style="font-size:11px">${esc(a.fascia)||'—'}</td><td>${fine}</td><td style="font-size:11px">${luogo}${luogoDet}</td><td>${esc(a.avversario)||'—'}</td><td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.note||'')}">${esc(a.note)||'—'}</td></tr>`}).join('')}</tbody></table></div></div>`;
+        return `<div class="card" style="margin-bottom:10px"><div class="card-h"><h3 style="font-size:13px">${groupChip(t.cat,t.g)} <span style="color:var(--g500);font-size:11px;margin-left:6px">${state.modalitaGioco[t.cat]}</span></h3></div><div class="tw"><table><thead><tr><th>Giorno</th><th>Tipo</th><th>Sede</th><th>Ora</th><th>Fascia</th><th>Durata/Fine</th><th>Impianto/Luogo</th><th>Avversario</th><th>Note</th></tr></thead><tbody>${weekAct.sort((a,b)=>a.data.localeCompare(b.data)).map(a=>{const imp=state.impianti.find(i=>i.id===a.impiantoId);const d=new Date(a.data);const ora=a.ora||'';let fine='—';if(ora&&a.durata){const[h,m]=ora.split(':').map(Number);const end=new Date(d);end.setHours(h,m+a.durata);fine=pad(end.getHours())+':'+pad(end.getMinutes())}const luogo=a.sede==='trasferta'?(a.impiantoEsterno||a.luogoLibero||'Trasferta'):(imp?esc(imp.nome):'—');const luogoDet=a.sede==='trasferta'?(a.luogoLibero?'<br><span style=\"color:var(--g500);font-size:10px\">'+esc(a.luogoLibero)+'</span>':''):(imp?'<br><span style=\"color:var(--g500);font-size:10px\">'+esc(imp.indirizzo)+'</span>':'');return `<tr onclick="openAttivita('${a.id}')" style="cursor:pointer"><td><strong>${d.toLocaleDateString('it-IT',{weekday:'short',day:'numeric'})}</strong></td><td><span class="bdg ${tipoBadge(a.tipo)}">${esc(a.tipo)}</span></td><td><span class="bdg ${a.sede==='trasferta'?'bdg-r':'bdg-b'}" style="font-size:10px">${a.sede==='trasferta'?'🚌 Trasf.':'🏠 Casa'}</span></td><td>${esc(ora)||'—'}</td><td style="font-size:11px">${esc(a.fascia)||'—'}</td><td>${fine}</td><td style="font-size:11px">${luogo}${luogoDet}</td><td>${esc(a.avversario)||'—'}</td><td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.note||'')}">${esc(a.note)||'—'}</td></tr>`}).join('')}</tbody></table></div></div>`;
       }).join('')||'<div class="es"><div class="ic">📆</div><h3>Nessuna attività nella settimana selezionata</h3></div>'}
     </div>
   `;
